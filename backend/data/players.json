@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Matthias",
+    "type": "trainer"
+  },
+  {
+    "name": "Lina",
+    "type": "spieler"
+  },
+  {
+    "name": "Emma",
+    "type": "spieler"
+  }
+]
