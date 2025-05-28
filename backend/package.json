@@ -1,16 +1,14 @@
 {
-  "name": "frontend",
-  "version": "0.0.0",
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "Fußball-Anwesenheits-API",
+  "main": "server.js",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "devDependencies": {
-    "vite": "^6.3.5"
+    "start": "node server.js"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "body-parser": "^1.20.2"
   }
 }
