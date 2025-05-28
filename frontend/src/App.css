@@ -1,0 +1,102 @@
+/* Grundlayout */
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background-color: #f2f2f2;
+  color: #333;
+}
+
+h1, h2 {
+  text-align: center;
+  color: #2c3e50;
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+/* Buttons */
+button {
+  padding: 0.5rem 1rem;
+  margin: 0.2rem;
+  border: none;
+  border-radius: 5px;
+  background-color: #3498db;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+button:hover {
+  background-color: #2980b9;
+}
+
+button.delete {
+  background-color: #e74c3c;
+}
+
+button.delete:hover {
+  background-color: #c0392b;
+}
+
+/* Input & Form */
+input, select {
+  padding: 0.5rem;
+  margin: 0.2rem;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  width: 100%;
+  max-width: 300px;
+}
+
+/* Tabellen */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+th, td {
+  border: 1px solid #ccc;
+  padding: 0.5rem;
+  text-align: center;
+}
+
+th {
+  background-color: #ecf0f1;
+}
+
+/* Spieler & Trainer listen */
+.person-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.person-card {
+  background-color: white;
+  padding: 0.8rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  width: 100%;
+  max-width: 250px;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  h1, h2 {
+    font-size: 1.2rem;
+  }
+
+  button {
+    width: 100%;
+  }
+
+  input, select {
+    width: 100%;
+  }
+}
