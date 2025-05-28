@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import './App.css';
 
-const API = 'https://fussball-app.onrender.com';
+const API = 'https://fussball-api.onrender.com';
 
 export default function App() {
   const [players, setPlayers] = useState([]);
