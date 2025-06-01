@@ -1,102 +1,304 @@
-/* Grundlayout */
+/* === Allgemeines Dark Theme === */
+
 body {
   margin: 0;
-  font-family: Arial, sans-serif;
-  background-color: #f2f2f2;
-  color: #333;
+  padding: 0;
+  background-color: #121212;
+  color: #e0e0e0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-h1, h2 {
+.App {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Header */
+header {
+  background-color: #1f1f1f;
+  padding: 1rem 0;
   text-align: center;
-  color: #2c3e50;
+  border-bottom: 1px solid #333;
 }
 
-.container {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 1rem;
+header h1 {
+  margin: 0;
+  font-size: 1.8rem;
+  color: #ffffff;
 }
 
-/* Buttons */
-button {
-  padding: 0.5rem 1rem;
-  margin: 0.2rem;
-  border: none;
-  border-radius: 5px;
-  background-color: #3498db;
-  color: white;
-  font-weight: bold;
-  cursor: pointer;
-  transition: background-color 0.3s;
-}
-
-button:hover {
-  background-color: #2980b9;
-}
-
-button.delete {
-  background-color: #e74c3c;
-}
-
-button.delete:hover {
-  background-color: #c0392b;
-}
-
-/* Input & Form */
-input, select {
-  padding: 0.5rem;
-  margin: 0.2rem;
-  border-radius: 5px;
-  border: 1px solid #ccc;
-  width: 100%;
-  max-width: 300px;
-}
-
-/* Tabellen */
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 1rem;
-}
-
-th, td {
-  border: 1px solid #ccc;
-  padding: 0.5rem;
-  text-align: center;
-}
-
-th {
-  background-color: #ecf0f1;
-}
-
-/* Spieler & Trainer listen */
-.person-list {
+/* Controls (oben) */
+.controls {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   justify-content: center;
+  margin: 1rem 0;
 }
 
-.person-card {
-  background-color: white;
-  padding: 0.8rem;
+.controls button {
+  background-color: #2a2a2a;
+  color: #f1f1f1;
+  border: 1px solid #444;
+  border-radius: 5px;
+  padding: 0.6rem 1.2rem;
+  font-size: 1rem;
+  transition: background-color 0.2s;
+}
+
+.controls button:hover {
+  background-color: #3a3a3a;
+}
+
+.controls button:active {
+  background-color: #555;
+}
+
+/* Nutzer-Verwaltung */
+.player-management {
+  background-color: #1a1a1a;
+  margin: 0 auto;
+  max-width: 800px;
+  padding: 1rem;
+  border: 1px solid #333;
   border-radius: 8px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-  width: 100%;
-  max-width: 250px;
 }
 
-/* Responsive */
+.player-management h2 {
+  margin-top: 0;
+  text-align: center;
+  color: #ffffff;
+}
+
+/* Formular zum Hinzufügen */
+.add-player-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.add-player-form input,
+.add-player-form select {
+  background-color: #2a2a2a;
+  color: #f1f1f1;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 0.5rem;
+  font-size: 1rem;
+  min-width: 150px;
+}
+
+.add-player-form input::placeholder {
+  color: #888;
+}
+
+.add-player-form button {
+  background-color: #1976d2;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+}
+
+.add-player-form button:hover {
+  background-color: #1565c0;
+}
+
+/* Liste der Spieler/Trainer */
+.player-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.player-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #222;
+  border: 1px solid #333;
+  border-radius: 6px;
+  margin: 0.3rem 0;
+  padding: 0.5rem 1rem;
+}
+
+.player-list li span {
+  font-size: 1rem;
+}
+
+.role-trainer {
+  color: #ffd54f; /* Gelb für Trainer */
+}
+
+.role-player {
+  color: #90caf9; /* Blau für Spieler */
+}
+
+/* Buttons in der Liste */
+.btn-toggle,
+.btn-delete {
+  background-color: #3a3a3a;
+  color: #e0e0e0;
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.9rem;
+  margin-left: 0.3rem;
+  transition: background-color 0.2s;
+}
+
+.btn-toggle:hover,
+.btn-delete:hover {
+  background-color: #4a4a4a;
+}
+
+.btn-delete {
+  background-color: #c62828;
+}
+
+.btn-delete:hover {
+  background-color: #b71c1c;
+}
+
+/* Trainings‐Liste */
+.trainings-list {
+  flex-grow: 1;
+  width: 100%;
+  max-width: 800px;
+  margin: 1rem auto;
+}
+
+.training {
+  background-color: #1f1f1f;
+  border: 1px solid #333;
+  border-radius: 6px;
+  margin-bottom: 0.8rem;
+  overflow: hidden;
+}
+
+.training-header {
+  background-color: #2a2a2a;
+  color: #ffffff;
+  margin: 0;
+  padding: 0.7rem 1rem;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 1rem;
+  user-select: none;
+}
+
+.training-details {
+  background-color: #292929;
+  padding: 0.8rem 1rem;
+}
+
+.participant {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid #333;
+}
+
+.participant:last-child {
+  border-bottom: none;
+}
+
+.participant span {
+  flex: 1;
+  color: #e0e0e0;
+}
+
+.btn-part-trainer {
+  background-color: #3a3a3a;
+  color: #ffd54f; /* gelbes Icon */
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.9rem;
+  margin-left: 0.5rem;
+}
+
+.btn-part-trainer.active {
+  background-color: #ffd54f;
+  color: #1a1a1a;
+}
+
+.btn-part-status button {
+  background-color: #3a3a3a;
+  color: #e0e0e0;
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 0.2rem 0.6rem;
+  margin: 0 0.2rem;
+  cursor: pointer;
+}
+
+.btn-part-status button.active {
+  background-color: #1565c0;
+  color: #ffffff;
+}
+
+.btn-delete-training {
+  background-color: #c62828;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.4rem 0.8rem;
+  margin-top: 0.5rem;
+  width: 100%;
+  cursor: pointer;
+}
+
+.btn-delete-training:hover {
+  background-color: #b71c1c;
+}
+
+/* Footer */
+footer {
+  background-color: #1f1f1f;
+  padding: 0.8rem 0;
+  text-align: center;
+  border-top: 1px solid #333;
+}
+
+footer p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #aaa;
+}
+
+footer a {
+  color: #90caf9;
+  text-decoration: none;
+}
+
+footer a:hover {
+  text-decoration: underline;
+}
+
+/* Responsive Anpassungen */
 @media (max-width: 600px) {
-  h1, h2 {
-    font-size: 1.2rem;
+  .controls,
+  .add-player-form {
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  button {
-    width: 100%;
+  .player-list li,
+  .participant {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
-  input, select {
-    width: 100%;
+  .btn-part-status button {
+    margin: 0.2rem 0 0.2rem 0;
   }
 }
