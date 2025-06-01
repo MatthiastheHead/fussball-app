@@ -130,12 +130,13 @@ header h1 {
   font-size: 1rem;
 }
 
+/* Farbliche Hervorhebung: Trainer = Gelb, Spieler = Blau */
 .role-trainer {
-  color: #ffd54f; /* Gelb für Trainer */
+  color: #ffd54f;
 }
 
 .role-player {
-  color: #90caf9; /* Blau für Spieler */
+  color: #90caf9;
 }
 
 /* Buttons in der Liste */
@@ -216,9 +217,16 @@ header h1 {
   color: #e0e0e0;
 }
 
+/* Status-Text hinter dem Namen */
+.status-text {
+  font-style: italic;
+  color: #90caf9;
+}
+
+/* Trainer-Button in Training */
 .btn-part-trainer {
   background-color: #3a3a3a;
-  color: #ffd54f; /* gelbes Icon */
+  color: #ffd54f; /* gelber Trainer-Icon-Farbhintergrund */
   border: 1px solid #555;
   border-radius: 4px;
   padding: 0.2rem 0.6rem;
@@ -231,6 +239,7 @@ header h1 {
   color: #1a1a1a;
 }
 
+/* Spieler-Status-Buttons in Training */
 .btn-part-status button {
   background-color: #3a3a3a;
   color: #e0e0e0;
@@ -246,6 +255,7 @@ header h1 {
   color: #ffffff;
 }
 
+/* Löschen-Button im Training */
 .btn-delete-training {
   background-color: #c62828;
   color: white;
@@ -261,12 +271,34 @@ header h1 {
   background-color: #b71c1c;
 }
 
+/* Dropdown mit Ersteller-Info */
+.creator-dropdown {
+  margin: 1rem auto;
+  padding: 0.5rem;
+  max-width: 800px;
+  text-align: center;
+}
+
+.creator-dropdown label {
+  margin-right: 0.5rem;
+  color: #bbb;
+}
+
+.creator-dropdown select {
+  background-color: #2a2a2a;
+  color: #e0e0e0;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 0.4rem 0.8rem;
+}
+
 /* Footer */
 footer {
   background-color: #1f1f1f;
   padding: 0.8rem 0;
   text-align: center;
   border-top: 1px solid #333;
+  margin-top: auto;
 }
 
 footer p {
