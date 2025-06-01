@@ -1,1 +1,8 @@
+# Ignoriere den Build-Ordner
 /frontend/dist
+
+# Ignoriere Node‐Modules im Frontend
+/frontend/node_modules
+
+# Und sicherheitshalber auch im Backend
+/backend/node_modules
