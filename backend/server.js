@@ -1,148 +1,277 @@
-// ===========================================
-// Datei: backend/server.js
-// Beschreibung: Node/Express-Server mit Verbindung zu MongoDB Atlas über Mongoose
-// Version: 1.0
-// ===========================================
+// backend/server.js
 
-// 1. Module importieren
+require('dotenv').config();                // Liest .env-Datei ein
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const mongoose = require('mongoose');
 
-// 2. Express-App initialisieren
 const app = express();
-
-// 3. Middleware setup
-//    CORS aktivieren, damit das Frontend auf den Server zugreifen darf
 app.use(cors());
-//    body-parser, damit req.body bei JSON-Inhalten funktioniert
 app.use(bodyParser.json());
 
-// 4. Atlas-Connection-String (bitte VORFELDIG hier eintragen)
-//    - Ersetze <db_password> durch dein tatsächliches Passwort.
-//    - Füge nach dem Hostnamen direkt den Datenbanknamen ein, z.B. "/fussballDB".
-//
-//    Original von Atlas: 
-//    mongodb+srv://matthias:<db_password>@cluster0.03d5din.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0
-//
-//    Hier ersetzen wir "<db_password>" durch "NBpxpd74ARRV5Ln8" 
-//    und fügen "/fussballDB" als DB-Namen hinzu:
-const atlasConnectionString =
-  "mongodb+srv://matthias:NBpxpd74ARRV5Ln8@cluster0.03d5din.mongodb.net/fussballDB?retryWrites=true&w=majority&appName=Cluster0";
+// === 0) Verbindung zu MongoDB über Mongoose ===
+const mongoURI = process.env.MONGODB_URI || '';  
+if (!mongoURI) {
+  console.error('❌ Keine MONGODB_URI in .env gefunden!');
+  process.exit(1);
+}
 
-// 5. Mit MongoDB Atlas verbinden
 mongoose
-  .connect(atlasConnectionString, {
+  .connect(mongoURI, {
     useNewUrlParser: true,
-    useUnifiedTopology: true,
+    useUnifiedTopology: true
   })
-  .then(() => console.log("✅ Mit MongoDB Atlas verbunden"))
-  .catch((err) => console.error("❌ Verbindung zu MongoDB Atlas fehlgeschlagen:", err));
+  .then(() => console.log('✅ Mit MongoDB verbunden'))
+  .catch(err => {
+    console.error('❌ MongoDB-Verbindungsfehler:', err);
+    process.exit(1);
+  });
 
-// 6. Mongoose-Schemas und -Modelle definieren
-//    Beispiel: Einfache "Player"-Collection mit Feldern "name" und "isTrainer".
+// === 0.1) OPTIONAL: Sobald wir verbunden sind, können wir prüfen, ob Collections existieren oder initial Daten anlegen. 
+//             Wir gehen aber davon aus, dass die Collections bei Bedarf dynamisch gefüllt werden.
+
+// --------------------------------------------------------------------------------
+// === 1) Mongoose‐Schemen und -Modelle ===
+
+// 1.1) User‐Schema
+const userSchema = new mongoose.Schema({
+  name:      { type: String, required: true, unique: true },
+  password:  { type: String, required: true },
+  isAdmin:   { type: Boolean, default: false }
+});
+const User = mongoose.model('User', userSchema);
+
+// 1.2) Player‐Schema (Spieler & Trainer)
 const playerSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  isTrainer: { type: Boolean, default: false },
+  name:      { type: String, required: true, unique: true },
+  isTrainer: { type: Boolean, default: false }
 });
-//    Sammlung "players" (Plural automatisch verwendet)
-const Player = mongoose.model("Player", playerSchema);
+const Player = mongoose.model('Player', playerSchema);
 
-//    Beispiel: Einfache "Training"-Collection mit Datum und Teilnehmerstatus
+// 1.3) Training‐Schema
 const trainingSchema = new mongoose.Schema({
-  date: { type: String, required: true }, // z.B. "2025-06-10" oder "10.06.2025"
-  participants: { type: Map, of: String, default: {} }, // Map<Name→Status>
-  trainer: { type: [String], default: [] },              // Array der Trainer-Namen
+  date: {
+    type: String, required: true  // z. B. "Mo, 12.05.2025"
+  },
+  participants: {
+    // Schlüssel: Spieler-Name, Wert: Icon als String ("✅", "❌", "⏳" oder "—")
+    type: Map,
+    of: String,
+    default: {}
+  },
+  trainerStatus: {
+    // Schlüssel: Trainer-Name, Wert: Status-String ("Zugesagt" oder "Abgemeldet")
+    type: Map,
+    of: String,
+    default: {}
+  },
+  createdBy: {
+    type: String, required: true // Benutzername, der das Training angelegt hat
+  },
+  lastEdited: {
+    by: { type: String },
+    at: { type: String }         // z. B. "14.05.2025 16:30"
+  }
 });
-const Training = mongoose.model("Training", trainingSchema);
+const Training = mongoose.model('Training', trainingSchema);
 
-// 7. Beispiel-Endpunkte (CRUD) für "players" und "trainings"
+// --------------------------------------------------------------------------------
+// === 2) USER‐Routen ===
 
-// --- Spieler (Players) ---
-// GET  /players    → Alle Spieler aus der DB auslesen
-app.get("/players", async (req, res) => {
+// 2.1) GET /users → Liefere alle Benutzer (Name, Passwort, isAdmin)
+app.get('/users', async (req, res) => {
   try {
-    const alleSpieler = await Player.find({});
-    res.json(alleSpieler);
+    const all = await User.find({}, { __v: 0 }).lean();
+    return res.json(all);
   } catch (err) {
-    res.status(500).json({ error: "Fehler beim Abrufen der Spieler" });
+    console.error('Fehler in GET /users:', err);
+    return res.status(500).json({ error: 'Interner Serverfehler' });
   }
 });
 
-// POST /players    → Liste von Spielern überschreiben oder neue hinzufügen
-// Annahme: Nutzer sendet { reset: true, list: [ { name, isTrainer }, … ] }
-app.post("/players", async (req, res) => {
+// 2.2) POST /users → Neuen Benutzer erstellen
+//       Body: { name: String, password: String, isAdmin: Boolean }
+app.post('/users', async (req, res) => {
+  const { name, password, isAdmin } = req.body;
+  if (!name || !password) {
+    return res.status(400).json({ error: 'name und password erforderlich' });
+  }
   try {
-    const { reset, list } = req.body;
-    if (reset) {
-      // Alte Daten löschen
-      await Player.deleteMany({});
-      // Neue Spieler anlegen
-      await Player.insertMany(list);
-      return res.json({ message: "Spieler‐Liste neu gesetzt" });
-    } else {
-      return res.status(400).json({ error: "Ungültige Anfrage" });
+    // Prüfe, ob Benutzername existiert
+    const exists = await User.findOne({ name }).lean();
+    if (exists) {
+      return res.status(409).json({ error: 'Benutzer existiert bereits' });
     }
+    const neu = new User({ name, password, isAdmin: !!isAdmin });
+    await neu.save();
+    return res.status(201).json({ message: 'Benutzer angelegt' });
   } catch (err) {
-    res.status(500).json({ error: "Fehler beim Speichern der Spieler" });
+    console.error('Fehler in POST /users:', err);
+    return res.status(500).json({ error: 'Interner Serverfehler' });
   }
 });
 
-// DELETE /players/:id  → Einzelnen Spieler anhand der _id löschen
-app.delete("/players/:id", async (req, res) => {
+// 2.3) PUT /users/:name → Passwort oder isAdmin ändern
+//       Body kann eines oder beide Felder enthalten: { password?: String, isAdmin?: Boolean }
+app.put('/users/:name', async (req, res) => {
+  const username = req.params.name;
+  const { password, isAdmin } = req.body;
   try {
-    await Player.findByIdAndDelete(req.params.id);
-    res.json({ message: "Spieler gelöscht" });
-  } catch (err) {
-    res.status(500).json({ error: "Fehler beim Löschen des Spielers" });
-  }
-});
-
-// --- Trainings (Trainings) ---
-// GET  /trainings → Alle Trainings abrufen
-app.get("/trainings", async (req, res) => {
-  try {
-    const alleTrainings = await Training.find({});
-    res.json(alleTrainings);
-  } catch (err) {
-    res.status(500).json({ error: "Fehler beim Abrufen der Trainings" });
-  }
-});
-
-// POST /trainings → Liste von Trainings überschreiben (mit reset:true) oder neue anlegen
-app.post("/trainings", async (req, res) => {
-  try {
-    const { reset, list } = req.body;
-    if (reset) {
-      await Training.deleteMany({});
-      await Training.insertMany(list);
-      return res.json({ message: "Trainings‐Liste neu gesetzt" });
-    } else {
-      return res.status(400).json({ error: "Ungültige Anfrage" });
+    const user = await User.findOne({ name: username });
+    if (!user) {
+      return res.status(404).json({ error: 'Benutzer nicht gefunden' });
     }
+    if (password !== undefined) user.password = password;
+    if (isAdmin !== undefined) user.isAdmin = isAdmin;
+    await user.save();
+    return res.json({ message: 'Benutzer aktualisiert' });
   } catch (err) {
-    res.status(500).json({ error: "Fehler beim Speichern der Trainings" });
+    console.error(`Fehler in PUT /users/${username}:`, err);
+    return res.status(500).json({ error: 'Interner Serverfehler' });
   }
 });
 
-// DELETE /trainings/:id → Einzelnes Training anhand der _id löschen
-app.delete("/trainings/:id", async (req, res) => {
+// 2.4) DELETE /users/:name → Benutzer löschen (außer Adminngabe optional)
+//       Falls man Administrator nicht löschen möchte, müsste man hier extra prüfen.
+//       Wir lassen es dem Frontend überlassen, dass Admins sich selbst nicht löschen.
+app.delete('/users/:name', async (req, res) => {
+  const username = req.params.name;
   try {
-    await Training.findByIdAndDelete(req.params.id);
-    res.json({ message: "Training gelöscht" });
+    const result = await User.deleteOne({ name: username });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'Benutzer nicht gefunden' });
+    }
+    return res.json({ message: 'Benutzer gelöscht' });
   } catch (err) {
-    res.status(500).json({ error: "Fehler beim Löschen des Trainings" });
+    console.error(`Fehler in DELETE /users/${username}:`, err);
+    return res.status(500).json({ error: 'Interner Serverfehler' });
   }
 });
 
-// 8. Einen einfachen Test‐Endpunkt anlegen, um zu prüfen, ob der Server läuft
-app.get("/", (req, res) => {
-  res.send("⚽ Backend ist live und MongoDB Atlas ist verbunden!");
+// --------------------------------------------------------------------------------
+// === 3) PLAYER‐Routen ===
+
+// 3.1) GET /players → Liefere alle Spieler/Trainer
+app.get('/players', async (req, res) => {
+  try {
+    const all = await Player.find({}, { __v: 0 }).lean();
+    return res.json(all);
+  } catch (err) {
+    console.error('Fehler in GET /players:', err);
+    return res.status(500).json({ error: 'Interner Serverfehler' });
+  }
 });
 
-// 9. Server starten auf dem Port, den Render/Vercel vorgibt, oder lokal 3001
+// 3.2) POST /players → Komplette Liste von Spielern/Trainern neu setzen
+//       Body: { reset: true, list: [ { name: String, isTrainer: Boolean }, … ] }
+app.post('/players', async (req, res) => {
+  const { reset, list } = req.body;
+  if (!reset || !Array.isArray(list)) {
+    return res.status(400).json({ error: 'Ungültiger Body: reset + list erwartet' });
+  }
+  try {
+    // 1) Leere Collection
+    await Player.deleteMany({});
+    // 2) Setze die übergebene Liste ein
+    if (list.length > 0) {
+      // Wir ziehen Bulk‐Insert vor, statt einzelne saves
+      await Player.insertMany(list.map(p => ({ name: p.name, isTrainer: p.isTrainer })));
+    }
+    return res.json({ message: 'Spielerliste gespeichert' });
+  } catch (err) {
+    console.error('Fehler in POST /players:', err);
+    return res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// 3.3) DELETE /players/:name → Einzelnen Spieler/Trainer löschen
+app.delete('/players/:name', async (req, res) => {
+  const nm = req.params.name;
+  try {
+    const result = await Player.deleteOne({ name: nm });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'Spieler/Trainer nicht gefunden' });
+    }
+    return res.json({ message: 'Spieler/Trainer gelöscht' });
+  } catch (err) {
+    console.error(`Fehler in DELETE /players/${nm}:`, err);
+    return res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// --------------------------------------------------------------------------------
+// === 4) TRAINING‐Routen ===
+
+// 4.1) GET /trainings → Liefere alle Trainings
+app.get('/trainings', async (req, res) => {
+  try {
+    const all = await Training.find({}, { __v: 0 }).lean();
+    return res.json(all);
+  } catch (err) {
+    console.error('Fehler in GET /trainings:', err);
+    return res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// 4.2) POST /trainings → Komplette Trainings‐Liste neu setzen
+//       Body: { reset: true, list: [ <TrainingObjekt>, … ] }
+//       Ein TrainingObjekt muss alle Felder enthalten, z. B.:
+//       {
+//         date: String,
+//         participants: { "Max Mustermann": "✅", … },
+//         trainerStatus: { "Julia Schmidt": "Abgemeldet", … },
+//         createdBy: String,
+//         lastEdited: { by: String, at: String }
+//       }
+app.post('/trainings', async (req, res) => {
+  const { reset, list } = req.body;
+  if (!reset || !Array.isArray(list)) {
+    return res.status(400).json({ error: 'Ungültiger Body: reset + list erwartet' });
+  }
+  try {
+    // 1) Lösche alle Trainings
+    await Training.deleteMany({});
+    // 2) Füge alle aus dem Body ein
+    if (list.length > 0) {
+      // Mongoose‐inserts setzen die Maps korrekt um
+      await Training.insertMany(list.map(t => ({
+        date: t.date,
+        participants: t.participants || {},
+        trainerStatus: t.trainerStatus || {},
+        createdBy: t.createdBy,
+        lastEdited: t.lastEdited
+      })));
+    }
+    return res.json({ message: 'Trainingsliste gespeichert' });
+  } catch (err) {
+    console.error('Fehler in POST /trainings:', err);
+    return res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// 4.3) DELETE /trainings/:id → Einzelnes Training löschen
+//       Hier verwenden wir die Trainings‐ID aus MongoDB, nicht das Datum
+//       Restrukturierung: Statt nur über `date` zu löschen, ist es zuverlässiger, 
+//       über die _id zu gehen. Das Frontend muss also `training._id` übergeben.
+app.delete('/trainings/:id', async (req, res) => {
+  const id = req.params.id;
+  try {
+    const result = await Training.deleteOne({ _id: id });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: 'Training nicht gefunden' });
+    }
+    return res.json({ message: 'Training gelöscht' });
+  } catch (err) {
+    console.error(`Fehler in DELETE /trainings/${id}:`, err);
+    return res.status(500).json({ error: 'Interner Serverfehler' });
+  }
+});
+
+// --------------------------------------------------------------------------------
+// === 5) In Produktion (Render, Heroku o. Ä.) oder lokal – Server starten ===
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`🚀 Server läuft auf Port ${PORT}`);
+  console.log(`✅ Server läuft unter http://localhost:${PORT}`);
 });
