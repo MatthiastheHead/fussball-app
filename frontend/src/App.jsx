@@ -1,10 +1,9 @@
-// frontend/src/App.jsx
 import React, { useEffect, useState } from 'react';
 import './App.css';
 
-const API = 'https://fussball-api.onrender.com'; // Achte darauf, hier deine Live‐API‐URL einzutragen
+const API = 'https://fussball-api.onrender.com'; // Deine live‐Backend‐URL
 
-// Hilfsfunktion: Deutsche Wochentags‐Abkürzung
+// Deutsche Wochentags-Abkürzung
 const getGermanWeekday = (dateObj) => {
   switch (dateObj.getDay()) {
     case 1:
@@ -38,7 +37,7 @@ const iconToText = (icon) => {
   }
 };
 
-// Datum und Uhrzeit formatiert (DD.MM.YYYY HH:MM)
+// Datum + Uhrzeit (DD.MM.YYYY HH:MM)
 const formatDateTime = (dateObj) => {
   const day = String(dateObj.getDate()).padStart(2, '0');
   const month = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -49,7 +48,7 @@ const formatDateTime = (dateObj) => {
 };
 
 export default function App() {
-  // === Login‐States ===
+  // === Login-States ===
   const [loggedInUser, setLoggedInUser] = useState(null);
   const [loginName, setLoginName] = useState('');
   const [loginPass, setLoginPass] = useState('');
@@ -60,21 +59,21 @@ export default function App() {
   const [newUserName, setNewUserName] = useState('');
   const [newUserPass, setNewUserPass] = useState('');
 
-  // === Team‐Verwaltung (Players) ===
+  // === Team-Verwaltung (Players) ===
   const [players, setPlayers] = useState([]); // { name, isTrainer, joinDate, note }
   const [showTeam, setShowTeam] = useState(false);
 
-  // Neue Felder für Player (Team)
+  // Neue Felder, um Spieler/Trainer hinzufügen zu können
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState('Spieler');
   const [newJoinDate, setNewJoinDate] = useState('');
   const [newNote, setNewNote] = useState('');
 
-  // === Trainings‐Zustände (Trainings) ===
-  const [trainings, setTrainings] = useState([]); // { date, participants, trainerStatus, createdBy, lastEdited }
+  // === Trainings-Zustände (Trainings) ===
+  const [trainings, setTrainings] = useState([]); // { date, participants, trainerStatus, createdBy, lastEdited, isEditing }
   const [showAdmin, setShowAdmin] = useState(false);
 
-  // Filter‐Datum in Trainings‐Liste
+  // Filter-Datum für Trainings
   const [filterDate, setFilterDate] = useState('');
 
   // === Auswertung (Report) ===
@@ -82,37 +81,31 @@ export default function App() {
   const [toDate, setToDate] = useState('');
   const [reportData, setReportData] = useState(null);
 
-  // === Versionsnummer (wird in Footer oder Header angezeigt) ===
+  // === Versionsnummer ===
   const version = '1.7';
 
-  // === Beim Start: Lade Users, Players & Trainings aus MongoDB ===
+  // === Beim Start: Users, Players & Trainings aus MongoDB laden ===
   useEffect(() => {
-    // 1) Lade alle Benutzer
+    // 1) Alle Benutzer laden
     fetch(API + '/users')
       .then((res) => res.json())
-      .then((data) => {
-        setUsers(data);
-      })
+      .then((data) => setUsers(data))
       .catch((err) => console.error('Fehler beim Laden der Users:', err));
 
-    // 2) Lade alle Spieler/Trainer
+    // 2) Alle Spieler/Trainer laden
     fetch(API + '/players')
       .then((res) => res.json())
-      .then((data) => {
-        setPlayers(data);
-      })
+      .then((data) => setPlayers(data))
       .catch((err) => console.error('Fehler beim Laden der Players:', err));
 
-    // 3) Lade alle Trainings
+    // 3) Alle Trainings laden
     fetch(API + '/trainings')
       .then((res) => res.json())
-      .then((data) => {
-        setTrainings(data);
-      })
+      .then((data) => setTrainings(data))
       .catch((err) => console.error('Fehler beim Laden der Trainings:', err));
   }, []);
 
-  // === Login‐Handler ===
+  // === Login-Handler ===
   const handleLogin = () => {
     const trimmedName = loginName.trim();
     const user = users.find((u) => u.name === trimmedName && u.password === loginPass);
@@ -134,7 +127,7 @@ export default function App() {
     setLoginError('');
   };
 
-  // === Admin‐Funktionen: Benutzer anlegen / Passwort ändern / löschen ===
+  // === Admin-Funktionen: Benutzer anlegen, Passwort ändern, löschen ===
   const addNewUser = () => {
     const name = newUserName.trim();
     if (!name || !newUserPass) {
@@ -146,7 +139,6 @@ export default function App() {
       return;
     }
     const updated = [...users, { name, password: newUserPass }];
-    // → MongoDB aktualisieren:
     fetch(API + '/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -217,7 +209,7 @@ export default function App() {
       alert('Bitte einen Namen eingeben.');
       return;
     }
-    // Falls kein Join‐Date ausgewählt wurde, setzen wir automatisch das heutige Datum:
+    // Falls kein Join-Date ausgewählt, heutiges Datum nehmen
     let joinDateValue = newJoinDate;
     if (!joinDateValue) {
       const today = new Date();
@@ -226,7 +218,7 @@ export default function App() {
       const yyyy = today.getFullYear();
       joinDateValue = `${dd}.${mm}.${yyyy}`;
     } else {
-      // Dropdown liefert YYYY-MM-DD → Umwandeln in DD.MM.YYYY
+      // date input liefert YYYY-MM-DD → umwandeln in DD.MM.YYYY
       const [y, m, d] = newJoinDate.split('-');
       joinDateValue = `${d}.${m}.${y}`;
     }
@@ -247,37 +239,54 @@ export default function App() {
         setNewRole('Spieler');
         setNewJoinDate('');
         setNewNote('');
-        alert('Team‐Mitglied hinzugefügt.');
+        alert('Team-Mitglied hinzugefügt.');
       })
       .catch((err) => {
         console.error('Fehler POST /players (add):', err);
-        alert('Fehler beim Hinzufügen des Team‐Mitglieds.');
+        alert('Fehler beim Hinzufügen des Team-Mitglieds.');
       });
   };
 
-  // === Rolle ändern im Team (= Spieler/Trainer) ===
-  const changeRole = (index, role) => {
+  // === Spieler/Trainer in der Liste bearbeiten (Name, Rolle, JoinDate, Note) ===
+  const updatePlayerField = (index, field, value) => {
     const updated = [...players];
-    updated[index].isTrainer = role === 'Trainer';
+    updated[index][field] = value;
+    setPlayers(updated);
+    // Änderungen merken, aber erst beim Speichern endgültig in MongoDB übertragen
+  };
+
+  // === Allgemeiner Button: Speichern aller Änderungen in Teamverwaltung ===
+  const saveAllPlayers = () => {
+    // Stelle sicher, dass jedes joinDate‐Feld im Format DD.MM.YYYY vorliegt.
+    const validated = players.map((p) => {
+      let jd = p.joinDate;
+      // Falls aus Datumsauswahl in HTML, könnte es als YYYY-MM-DD stehen → umwandeln:
+      if (/^\d{4}-\d{2}-\d{2}$/.test(jd)) {
+        const [y, m, d] = jd.split('-');
+        jd = `${d}.${m}.${y}`;
+      }
+      return { ...p, joinDate: jd };
+    });
     fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reset: true, list: updated }),
+      body: JSON.stringify({ reset: true, list: validated }),
     })
       .then((res) => res.json())
       .then((saved) => {
         setPlayers(saved);
+        alert('Alle Änderungen im Team wurden gespeichert.');
       })
       .catch((err) => {
-        console.error('Fehler POST /players (changeRole):', err);
-        alert('Fehler beim Ändern der Rolle.');
+        console.error('Fehler POST /players (saveAll):', err);
+        alert('Fehler beim Speichern der Team-Daten.');
       });
   };
 
   // === Spieler/Trainer löschen ===
   const deletePlayer = (index) => {
     const playerToDelete = players[index];
-    if (window.confirm(`Team‐Mitglied "${playerToDelete.name}" wirklich löschen?`)) {
+    if (window.confirm(`Team-Mitglied "${playerToDelete.name}" wirklich löschen?`)) {
       const updated = [...players];
       updated.splice(index, 1);
       fetch(API + '/players', {
@@ -288,11 +297,11 @@ export default function App() {
         .then((res) => res.json())
         .then((saved) => {
           setPlayers(saved);
-          alert('Team‐Mitglied gelöscht.');
+          alert('Team-Mitglied gelöscht.');
         })
         .catch((err) => {
           console.error('Fehler POST /players (delete):', err);
-          alert('Fehler beim Löschen des Team‐Mitglieds.');
+          alert('Fehler beim Löschen des Team-Mitglieds.');
         });
     }
   };
@@ -397,7 +406,7 @@ export default function App() {
       });
   };
 
-  // === Teilnahme‐Status (Spieler) aktualisieren ===
+  // === Teilnahme-Status (Spieler) aktualisieren ===
   const updateParticipation = (tIndex, name, statusIcon) => {
     const now = new Date();
     const timestamp = formatDateTime(now);
@@ -414,18 +423,17 @@ export default function App() {
       .then((res) => res.json())
       .then((saved) => {
         setTrainings(saved);
-        // Zusätzliche Bestätigung:
         alert(
-          `Teilnahme‐Status von "${name}" im Training vom "${saved[tIndex].date}" wurde auf "${iconToText(statusIcon).trim()}" gesetzt.`
+          `Teilnahme-Status von "${name}" im Training vom "${saved[tIndex].date}" wurde auf "${iconToText(statusIcon).trim()}" gesetzt.`
         );
       })
       .catch((err) => {
         console.error('Fehler POST /trainings (updateParticipation):', err);
-        alert('Fehler beim Aktualisieren des Teilnahme‐Status.');
+        alert('Fehler beim Aktualisieren des Teilnahme-Status.');
       });
   };
 
-  // === Status‐Update (Trainer) per Dropdown ===
+  // === Status-Update (Trainer) per Dropdown ===
   const updateTrainerStatus = (tIndex, name, newStatus) => {
     const now = new Date();
     const timestamp = formatDateTime(now);
@@ -444,14 +452,13 @@ export default function App() {
       .then((res) => res.json())
       .then((saved) => {
         setTrainings(saved);
-        // Bestätigung:
         alert(
-          `Trainer‐Status von "${name}" im Training vom "${saved[tIndex].date}" wurde auf "${newStatus}" gesetzt.`
+          `Trainer-Status von "${name}" im Training vom "${saved[tIndex].date}" wurde auf "${newStatus}" gesetzt.`
         );
       })
       .catch((err) => {
         console.error('Fehler POST /trainings (updateTrainerStatus):', err);
-        alert('Fehler beim Aktualisieren des Trainer‐Status.');
+        alert('Fehler beim Aktualisieren des Trainer-Status.');
       });
   };
 
@@ -459,22 +466,19 @@ export default function App() {
   const sortedPlayers = [...players].sort((a, b) => a.name.localeCompare(b.name));
   const trainersFirst = [...sortedPlayers].sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0));
 
-  // === Such‐/Filter‐Funktion für Trainings nach Datum ===
-  // Wenn filterDate leer ist, gib alle zurück; sonst nur Trainings mit genau diesem Datum.
+  // === Filterfunktion: Trainings nach einem Datum filtern ===
   const trainingsToShow = filterDate
     ? trainings.filter((t) => {
-        // t.date ist z.B. "Mi, 29.05.2025" – wir vergleichen nur das Datum nach dem Komma:
-        const datePart = t.date.split(', ')[1]; // "29.05.2025"
-        // filterDate hat Format "YYYY-MM-DD":
-        const [y, m, d] = filterDate.split('-');
-        const comp = `${d}.${m}.${y}`; // "29.05.2025"
+        const datePart = t.date.split(', ')[1]; // z.B. "29.05.2025"
+        const [y, m, d] = filterDate.split('-'); // "2025-05-29"
+        const comp = `${d}.${m}.${y}`;
         return datePart === comp;
       })
     : trainings;
 
   // === Auswertung (Report) ===
   const parseGermanDate = (str) => {
-    const datePart = str.includes(',') ? str.split(', ')[1] : str; // "29.05.2025"
+    const datePart = str.includes(', ') ? str.split(', ')[1] : str; // "29.05.2025"
     const [d, m, y] = datePart.split('.');
     return new Date(Number(y), Number(m) - 1, Number(d));
   };
@@ -520,6 +524,7 @@ export default function App() {
           details,
           showDetails: false,
           joinDate: player.joinDate || '',
+          note: player.note || '',
         };
       });
 
@@ -579,7 +584,7 @@ export default function App() {
         )}
       </div>
 
-      {/* === Admin‐Sektion (nur für Matthias) === */}
+      {/* === Admin-Sektion (nur für Matthias) === */}
       {loggedInUser === 'Matthias' && showAdmin && (
         <section className="admin-section">
           <h2>Benutzerverwaltung (Admin)</h2>
@@ -653,37 +658,68 @@ export default function App() {
             />
             <button onClick={addPlayer}>➕ Hinzufügen</button>
           </div>
+
           <ul className="player-list">
             {trainersFirst.map((p, i) => (
               <li key={i}>
-                <span className={p.isTrainer ? 'role-trainer' : 'role-player'}>
-                  {p.name}
-                </span>
-                <span className="join-date"> (Im Team seit: {p.joinDate || '-'})</span>
-                {p.note && <span className="note"> [{p.note}]</span>}
-                <div>
-                  <select
-                    className="role-dropdown"
-                    value={p.isTrainer ? 'Trainer' : 'Spieler'}
-                    onChange={(e) => changeRole(i, e.target.value)}
-                  >
-                    <option value="Spieler">Spieler</option>
-                    <option value="Trainer">Trainer</option>
-                  </select>
-                  <button className="btn-delete" onClick={() => deletePlayer(i)}>
-                    ❌ Löschen
-                  </button>
-                </div>
+                {/* Name bearbeiten */}
+                <input
+                  type="text"
+                  value={p.name}
+                  onChange={(e) => updatePlayerField(i, 'name', e.target.value)}
+                  className="edit-input-name"
+                />
+
+                {/* Join-Date bearbeiten als date-Input */}
+                <input
+                  type="date"
+                  value={
+                    // Falls p.joinDate im Format "DD.MM.YYYY" vorliegt, umwandeln zu "YYYY-MM-DD"
+                    /^\d{2}\.\d{2}\.\d{4}$/.test(p.joinDate || '')
+                      ? (() => {
+                          const [d, m, y] = p.joinDate.split('.');
+                          return `${y}-${m}-${d}`;
+                        })()
+                      : p.joinDate
+                  }
+                  onChange={(e) => updatePlayerField(i, 'joinDate', e.target.value)}
+                  className="edit-input-date"
+                  title="Beitrittsdatum bearbeiten"
+                />
+
+                {/* Note (Probetraining etc.) bearbeiten */}
+                <input
+                  type="text"
+                  placeholder="Vermerk (Probetraining)"
+                  value={p.note}
+                  onChange={(e) => updatePlayerField(i, 'note', e.target.value)}
+                  className="edit-input-note"
+                />
+
+                {/* Rolle bearbeiten */}
+                <select
+                  className="role-dropdown"
+                  value={p.isTrainer ? 'Trainer' : 'Spieler'}
+                  onChange={(e) => updatePlayerField(i, 'isTrainer', e.target.value === 'Trainer')}
+                >
+                  <option value="Spieler">Spieler</option>
+                  <option value="Trainer">Trainer</option>
+                </select>
+
+                <button className="btn-delete" onClick={() => deletePlayer(i)}>
+                  ❌ Löschen
+                </button>
               </li>
             ))}
           </ul>
-          <button className="btn-save-players" onClick={() => alert('Alle Änderungen im Team wurden gespeichert.')}>
+
+          <button className="btn-save-players" onClick={saveAllPlayers}>
             💾 Speichern
           </button>
         </section>
       )}
 
-      {/* === Trainings‐Liste === */}
+      {/* === Trainings-Liste === */}
       <section className="trainings-list">
         <div className="training-filter">
           <label>
@@ -731,7 +767,6 @@ export default function App() {
                       type="date"
                       className="edit-date-input"
                       defaultValue={() => {
-                        // date ist "Mi, 29.05.2025" → split: ["Mi", "29.05.2025"] → "29.05.2025" → parts["29","05","2025"] → "2025-05-29"
                         const parts = t.date.split(', ')[1].split('.');
                         return `${parts[2]}-${parts[1]}-${parts[0]}`;
                       }}
@@ -883,6 +918,7 @@ export default function App() {
                         }}
                       >
                         {row.name}
+                        {row.note && <span className="note-report"> ({row.note})</span>}
                       </td>
                       <td>{row.joinDate}</td>
                       <td>{row.percent}%</td>
