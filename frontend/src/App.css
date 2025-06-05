@@ -1,37 +1,16 @@
-/* App.css */
-
-/* === Globale Einstellungen === */
-* {
-  box-sizing: border-box;
+/* === Allgemeines Dark Theme === */
+body {
   margin: 0;
   padding: 0;
-}
-
-html, body, #root {
-  height: 100%;
-}
-
-body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   background-color: #121212;
   color: #e0e0e0;
-  line-height: 1.5;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-a {
-  color: #90caf9;
-  text-decoration: none;
-}
-
-a:hover {
-  text-decoration: underline;
-}
-
-/* === Layout: Wrapper === */
 .App {
-  max-width: 900px;
-  margin: 1rem auto 2rem;
-  padding: 0 1rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
 /* === Login-Screen === */
@@ -41,33 +20,35 @@ a:hover {
   align-items: center;
   justify-content: center;
   height: 100vh;
-  background-color: #1f1f1f;
+  background-color: #181818;
 }
 
 .login-screen h2 {
   margin-bottom: 1rem;
-  color: #90caf9;
+  color: #ffffff;
 }
 
 .login-screen input {
   width: 250px;
-  padding: 0.5rem;
-  margin-bottom: 0.5rem;
-  background-color: #2a2a2a;
+  padding: 0.6rem;
+  margin: 0.3rem 0;
   border: 1px solid #444;
   border-radius: 4px;
-  color: #fff;
+  background-color: #2a2a2a;
+  color: #f1f1f1;
+}
+
+.login-screen input::placeholder {
+  color: #888;
 }
 
 .login-screen button {
-  width: 100%;
-  max-width: 260px;
-  padding: 0.5rem;
-  margin-top: 0.5rem;
+  margin-top: 0.8rem;
   background-color: #1976d2;
+  color: white;
   border: none;
   border-radius: 4px;
-  color: #fff;
+  padding: 0.6rem 1.2rem;
   cursor: pointer;
 }
 
@@ -76,415 +57,400 @@ a:hover {
 }
 
 .login-error {
-  margin-top: 0.5rem;
   color: #f44336;
+  margin-top: 0.5rem;
 }
 
-/* === Header und Controls === */
+/* === Header === */
 header {
-  position: relative;
-  margin-bottom: 1rem;
+  background-color: #1f1f1f;
+  padding: 1rem 0;
+  text-align: center;
+  border-bottom: 1px solid #333;
 }
 
 header h1 {
+  margin: 0;
   font-size: 1.8rem;
-  text-align: center;
-  color: #90caf9;
+  color: #ffffff;
 }
 
+/* === Controls (oben) === */
+/* (Der globale „Alles speichern“-Button wurde entfernt.) */
 .controls {
   display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin: 1rem 0;
+}
+
+.controls button {
+  background-color: #2a2a2a;
+  color: #f1f1f1;
+  border: 1px solid #444;
+  border-radius: 5px;
+  padding: 0.6rem 1.2rem;
+  font-size: 1rem;
+  transition: background-color 0.2s;
+}
+
+.controls button:hover {
+  background-color: #3a3a3a;
+}
+
+.controls button:active {
+  background-color: #555;
+}
+
+/* === Nutzer-Verwaltung === */
+.player-management {
+  background-color: #1a1a1a;
+  margin: 0 auto;
+  max-width: 800px;
+  padding: 1rem;
+  border: 1px solid #333;
+  border-radius: 8px;
+}
+
+.player-management h2 {
+  margin-top: 0;
+  text-align: center;
+  color: #ffffff;
+}
+
+/* Formular zum Hinzufügen */
+.add-player-form {
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   justify-content: center;
   margin-bottom: 1rem;
 }
 
-.controls button {
-  padding: 0.5rem 0.8rem;
-  background-color: #388e3c;
+.add-player-form input,
+.add-player-form select {
+  background-color: #2a2a2a;
+  color: #f1f1f1;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 0.5rem;
+  font-size: 1rem;
+  min-width: 150px;
+}
+
+.add-player-form input::placeholder {
+  color: #888;
+}
+
+.add-player-form button {
+  background-color: #1976d2;
+  color: white;
   border: none;
   border-radius: 4px;
-  color: #fff;
+  padding: 0.5rem 1rem;
   cursor: pointer;
 }
 
-.controls button:hover {
-  background-color: #2e7d32;
-}
-
-/* === Admin-Sektion === */
-.admin-section {
-  background-color: #1e1e1e;
-  padding: 1rem;
-  border: 1px solid #333;
-  border-radius: 6px;
-  margin-bottom: 1rem;
-}
-
-.admin-section h2 {
-  margin-bottom: 0.8rem;
-  color: #ffb300;
-}
-
-.admin-section .add-player-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.admin-section .add-player-form input {
-  background-color: #2a2a2a;
-  border: 1px solid #444;
-  border-radius: 4px;
-  color: #fff;
-  padding: 0.4rem 0.6rem;
-}
-
-.admin-section .add-player-form button {
-  background-color: #1976d2;
-}
-
-.admin-section .add-player-form button:hover {
+.add-player-form button:hover {
   background-color: #1565c0;
 }
 
-.admin-section .player-list {
+/* Liste der Spieler/Trainer */
+.player-list {
   list-style: none;
+  padding: 0;
+  margin: 0;
 }
 
-.admin-section .player-list li {
+.player-list li {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
-  background-color: #2a2a2a;
-  padding: 0.6rem;
-  border-radius: 4px;
-  margin-bottom: 0.5rem;
+  justify-content: space-between;
+  background-color: #222;
+  border: 1px solid #333;
+  border-radius: 6px;
+  margin: 0.3rem 0;
+  padding: 0.5rem 1rem;
 }
 
-.admin-section .player-list span {
-  flex-shrink: 0;
+.player-list li span {
+  font-size: 1rem;
+  flex: 1;
 }
 
-.admin-section .player-list input[type="text"] {
-  background-color: #3a3a3a;
-  border: 1px solid #555;
-  border-radius: 4px;
-  color: #fff;
-  padding: 0.3rem 0.6rem;
+.role-trainer {
+  color: #ffd54f; /* Gelb für Trainer */
 }
 
+.role-player {
+  color: #90caf9; /* Blau für Spieler */
+}
+
+/* Buttons in der Nutzer-Liste */
 .btn-delete {
-  margin-left: auto;
-  background-color: #d32f2f;
+  background-color: #c62828;
+  color: #e0e0e0;
   border: none;
   border-radius: 4px;
-  color: #fff;
-  padding: 0.3rem 0.6rem;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.9rem;
+  margin-left: 0.3rem;
+  transition: background-color 0.2s;
   cursor: pointer;
 }
 
 .btn-delete:hover {
-  background-color: #c62828;
+  background-color: #b71c1c;
 }
 
-/* === Teamverwaltung: Spieler & Trainer === */
-.player-management {
-  background-color: #1e1e1e;
-  padding: 1rem;
-  border: 1px solid #333;
-  border-radius: 6px;
-  margin-bottom: 1rem;
-}
-
-.player-management h2 {
-  margin-bottom: 0.8rem;
-  color: #ffb300;
-}
-
-.player-management .add-player-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.player-management .add-player-form input,
-.player-management .add-player-form select {
+/* Dropdown für Rolle */
+.role-dropdown {
   background-color: #2a2a2a;
+  color: #f1f1f1;
   border: 1px solid #444;
   border-radius: 4px;
-  color: #fff;
-  padding: 0.4rem 0.6rem;
+  padding: 0.3rem;
+  font-size: 0.9rem;
+  margin-left: 0.5rem;
+  cursor: pointer;
 }
 
-.player-management .add-player-form input[type="date"] {
-  width: auto;
-}
-
-.player-management .add-player-form button {
-  background-color: #388e3c;
-}
-
-.player-management .add-player-form button:hover {
-  background-color: #2e7d32;
-}
-
-.player-management .player-list {
-  list-style: none;
-  margin-bottom: 1rem;
-}
-
-.player-management .player-list li {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+.role-dropdown option {
   background-color: #2a2a2a;
-  padding: 0.6rem;
-  border-radius: 4px;
-  margin-bottom: 0.5rem;
+  color: #f1f1f1;
 }
 
-.player-management .player-list input[type="text"],
-.player-management .player-list input[type="date"],
-.player-management .player-list select {
-  background-color: #3a3a3a;
-  border: 1px solid #555;
-  border-radius: 4px;
-  color: #fff;
-  padding: 0.3rem 0.6rem;
-}
-
-.player-management .role-dropdown {
-  min-width: 100px;
-}
-
+/* Speichern-Button in Spieler-Verwaltung */
 .btn-save-players {
-  display: block;
-  margin: 0 auto;
-  padding: 0.5rem 0.8rem;
-  background-color: #1976d2;
+  background-color: #388e3c;
+  color: white;
   border: none;
   border-radius: 4px;
-  color: #fff;
+  padding: 0.6rem 1.2rem;
+  font-size: 1rem;
+  margin-top: 1rem;
   cursor: pointer;
 }
 
 .btn-save-players:hover {
-  background-color: #1565c0;
+  background-color: #2e7d32;
 }
 
 /* === Trainings-Liste === */
 .trainings-list {
-  margin-bottom: 2rem;
-}
-
-.training-filter {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  margin-bottom: 0.8rem;
-}
-
-.training-filter input[type="date"] {
-  background-color: #2a2a2a;
-  border: 1px solid #444;
-  border-radius: 4px;
-  color: #fff;
-  padding: 0.3rem 0.6rem;
-}
-
-.training-filter button {
-  background-color: #616161;
-  border: none;
-  border-radius: 4px;
-  color: #fff;
-  padding: 0.3rem 0.6rem;
-  cursor: pointer;
-}
-
-.training-filter button:hover {
-  background-color: #424242;
+  flex-grow: 1;
+  width: 100%;
+  max-width: 800px;
+  margin: 1rem auto;
+  border: 1px solid #333;
+  border-radius: 6px;
+  overflow: hidden;
 }
 
 .training {
-  background-color: #1e1e1e;
-  border: 1px solid #333;
-  border-radius: 6px;
-  margin-bottom: 1rem;
-  padding: 0.5rem;
+  margin-bottom: 0.8rem;
+  background-color: #1f1f1f;
 }
 
+/* Training-Header */
 .training-header {
-  font-size: 1.1rem;
+  background-color: #2a2a2a;
+  color: #ffffff;
+  margin: 0;
+  padding: 0.7rem 1rem;
   cursor: pointer;
-  display: inline-block;
-  color: #90caf9;
+  font-size: 1rem;
+  user-select: none;
+  border-bottom: 1px solid #333;
 }
 
 .training-header:hover {
   text-decoration: underline;
 }
 
+/* „Erstellt von“-Zeile */
 .created-by,
 .last-edited {
+  padding: 0 1rem;
   font-size: 0.85rem;
-  color: #b0bec5;
-  margin: 0.3rem 0;
+  color: #ccc;
+  margin-bottom: 0.3rem;
+  border-bottom: 1px solid #333;
 }
 
+.last-edited {
+  margin-bottom: 0.8rem;
+}
+
+/* Zeile, in der das Datum bearbeitbar wird */
 .edit-date-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0.6rem;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 1rem;
 }
 
-.edit-date-input {
-  background-color: #2a2a2a;
-  border: 1px solid #444;
-  border-radius: 4px;
-  color: #fff;
-  padding: 0.3rem 0.6rem;
-}
-
-.btn-save-date,
+/* Button „✏️ Datum anpassen“ */
 .btn-edit-date {
   background-color: #1976d2;
+  color: white;
   border: none;
   border-radius: 4px;
-  color: #fff;
-  padding: 0.3rem 0.6rem;
+  padding: 0.4rem 0.8rem;
   cursor: pointer;
 }
 
-.btn-save-date:hover,
 .btn-edit-date:hover {
   background-color: #1565c0;
 }
 
+/* Input „Datum ändern“ */
+.edit-date-input {
+  background-color: #2a2a2a;
+  color: #f1f1f1;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 0.3rem;
+}
+
+/* Button „Abbrechen“ (Datums‐Bearbeitung abbrechen) */
+.btn-save-date {
+  background-color: #c62828;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+}
+
+.btn-save-date:hover {
+  background-color: #b71c1c;
+}
+
+.training-details {
+  background-color: #292929;
+  padding: 0.5rem 1rem;
+}
+
+/* Jeder Teilnehmer (Spieler/Trainer) */
 .participant {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
-  background-color: #2a2a2a;
-  padding: 0.5rem;
-  border-radius: 4px;
-  margin-bottom: 0.5rem;
+  justify-content: space-between;
+  padding: 0.3rem 1rem;
+  border-bottom: 1px solid #333;
+}
+
+.participant:last-child {
+  border-bottom: none;
 }
 
 .participant span {
   flex: 1;
+  color: #e0e0e0;
 }
 
+/* Status-Text hinter dem Namen */
+.status-text {
+  font-style: italic;
+  color: #90caf9;
+}
+
+/* Trainer-Status-Dropdown */
 .trainer-status-dropdown {
+  background-color: #2a2a2a;
+  color: #f1f1f1;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 0.3rem;
+  font-size: 0.9rem;
+  margin-left: 0.5rem;
+  cursor: pointer;
+}
+
+.trainer-status-dropdown option {
+  background-color: #2a2a2a;
+  color: #f1f1f1;
+}
+
+/* Spieler-Status-Buttons in Training */
+.btn-part-status button {
   background-color: #3a3a3a;
+  color: #e0e0e0;
   border: 1px solid #555;
   border-radius: 4px;
-  color: #fff;
-  padding: 0.3rem 0.6rem;
-  margin-left: auto;
-}
-
-.btn-part-status {
-  display: flex;
-  gap: 0.3rem;
-  margin-left: auto;
-}
-
-.btn-part-status button {
-  background-color: #616161;
-  border: none;
-  border-radius: 4px;
-  color: #fff;
-  padding: 0.3rem 0.6rem;
+  padding: 0.2rem 0.6rem;
+  margin: 0 0.2rem;
   cursor: pointer;
 }
 
 .btn-part-status button.active {
-  background-color: #388e3c;
+  background-color: #1565c0;
+  color: #ffffff;
 }
 
-.btn-part-status button:hover:not(.active) {
-  background-color: #424242;
-}
-
-.status-text {
-  margin-left: 0.3rem;
-  font-style: italic;
-  color: #aed581;
-}
-
+/* Speichern-Button in Training („Training speichern“) */
 .btn-save-training {
   background-color: #388e3c;
+  color: white;
   border: none;
   border-radius: 4px;
-  color: #fff;
-  padding: 0.5rem 0.8rem;
+  padding: 0.5rem 1rem;
+  margin: 0.5rem 1rem 1rem 1rem;
+  width: calc(100% - 2rem);
   cursor: pointer;
-  margin-right: 0.5rem;
 }
 
 .btn-save-training:hover {
   background-color: #2e7d32;
 }
 
-.btn-delete-training {
-  background-color: #d32f2f;
-  border: none;
-  border-radius: 4px;
-  color: #fff;
-  padding: 0.5rem 0.8rem;
-  cursor: pointer;
-}
-
-.btn-delete-training:hover {
-  background-color: #c62828;
-}
-
-.no-trainings {
-  text-align: center;
-  color: #b0bec5;
-  margin-top: 1rem;
-  font-style: italic;
-}
-
-/* === Auswertung (Report) === */
+/* === Auswertungs-Section === */
 .report-section {
-  background-color: #1e1e1e;
+  background-color: #1a1a1a;
+  margin: 1.5rem auto;
+  max-width: 800px;
   padding: 1rem;
   border: 1px solid #333;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
 .report-section h2 {
-  margin-bottom: 0.8rem;
-  color: #ffb300;
+  margin-top: 0;
+  color: #ffffff;
+  text-align: center;
 }
 
 .report-form {
   display: flex;
-  align-items: center;
-  gap: 0.7rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
   margin-bottom: 1rem;
 }
 
-.report-form input[type="date"] {
+.report-form label {
+  color: #ccc;
+}
+
+.report-form input {
   background-color: #2a2a2a;
+  color: #f1f1f1;
   border: 1px solid #444;
   border-radius: 4px;
-  color: #fff;
-  padding: 0.3rem 0.6rem;
+  padding: 0.4rem;
 }
 
 .report-form button {
   background-color: #1976d2;
+  color: white;
   border: none;
   border-radius: 4px;
-  color: #fff;
-  padding: 0.4rem 0.8rem;
+  padding: 0.5rem 1rem;
   cursor: pointer;
 }
 
@@ -492,60 +458,190 @@ header h1 {
   background-color: #1565c0;
 }
 
+/* Tabelle in Auswertung */
+.report-results {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+
 .report-results p {
-  margin-bottom: 0.6rem;
+  margin: 0 0 0.5rem 0;
+  color: #ddd;
 }
 
 .report-results table {
   width: 100%;
   border-collapse: collapse;
-  background-color: #2a2a2a;
-  border: 1px solid #444;
-  border-radius: 4px;
-  overflow: hidden;
 }
 
 .report-results th,
 .report-results td {
+  border: 1px solid #444;
   padding: 0.6rem;
   text-align: left;
-  border-bottom: 1px solid #444;
   color: #e0e0e0;
 }
 
 .report-results th {
-  background-color: #333;
-}
-
-.report-row:hover {
-  background-color: #3a3a3a;
-  cursor: pointer;
-}
-
-.report-details-row td {
   background-color: #2a2a2a;
-  padding: 0.4rem 0.6rem;
 }
 
+.report-results tr:nth-child(even) {
+  background-color: #232323;
+}
+
+/* Klickbare Zelle (Spielername) */
 .clickable {
-  cursor: pointer;
   color: #90caf9;
+  cursor: pointer;
 }
 
-.note-report {
-  font-style: italic;
-  color: #aed581;
-  margin-left: 0.3rem;
+.clickable:hover {
+  text-decoration: underline;
+}
+
+/* Details-Zeile in der Tabelle */
+.report-details-row td {
+  background-color: #1e1e1e;
+  padding: 0.5rem 0.6rem;
+}
+
+.report-details-row ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.report-details-row li {
+  padding: 0.2rem 0;
+  font-size: 0.9rem;
+  color: #ccc;
 }
 
 /* === Footer === */
 footer {
-  margin-top: 2rem;
+  background-color: #1f1f1f;
+  padding: 0.8rem 0;
   text-align: center;
-  font-size: 0.85rem;
-  color: #b0bec5;
+  border-top: 1px solid #333;
+  margin-top: auto;
+}
+
+footer p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #aaa;
 }
 
 footer a {
   color: #90caf9;
+  text-decoration: none;
+}
+
+footer a:hover {
+  text-decoration: underline;
+}
+
+/* === Responsives Design === */
+@media (max-width: 600px) {
+  .controls,
+  .add-player-form,
+  .report-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .player-list li,
+  .participant,
+  .edit-date-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .role-dropdown,
+  .trainer-status-dropdown {
+    margin-left: 0;
+    margin-top: 0.3rem;
+  }
+
+  .btn-part-status button {
+    margin: 0.2rem 0;
+  }
+}
+
+/* ===========================
+   Admin‐Sektion (Benutzerverwaltung)
+   =========================== */
+.admin-section {
+  background-color: #1a1a1a;
+  margin: 1rem auto;
+  max-width: 500px;
+  padding: 1rem;
+  border: 1px solid #333;
+  border-radius: 8px;
+}
+
+.admin-section h2 {
+  margin-top: 0;
+  color: #ffffff;
+  text-align: center;
+}
+
+/* Gleicher Stil wie .player-list für Admin‐Liste */
+.admin-section .player-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.admin-section .player-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #222;
+  border: 1px solid #333;
+  border-radius: 6px;
+  margin: 0.3rem 0;
+  padding: 0.5rem 1rem;
+}
+
+.admin-section .add-player-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.admin-section .add-player-form input {
+  flex: 1;
+  background-color: #2a2a2a;
+  color: #f1f1f1;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 0.5rem;
+}
+
+.admin-section .add-player-form button {
+  background-color: #388e3c;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+}
+
+.admin-section .add-player-form button:hover {
+  background-color: #2e7d32;
+}
+
+.admin-section .btn-delete {
+  background-color: #c62828;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+}
+
+.admin-section .btn-delete:hover {
+  background-color: #b71c1c;
 }
