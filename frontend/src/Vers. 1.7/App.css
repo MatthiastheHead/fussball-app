@@ -1,0 +1,551 @@
+/* App.css */
+
+/* === Globale Einstellungen === */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #121212;
+  color: #e0e0e0;
+  line-height: 1.5;
+}
+
+a {
+  color: #90caf9;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* === Layout: Wrapper === */
+.App {
+  max-width: 900px;
+  margin: 1rem auto 2rem;
+  padding: 0 1rem;
+}
+
+/* === Login-Screen === */
+.login-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background-color: #1f1f1f;
+}
+
+.login-screen h2 {
+  margin-bottom: 1rem;
+  color: #90caf9;
+}
+
+.login-screen input {
+  width: 250px;
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+  background-color: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #fff;
+}
+
+.login-screen button {
+  width: 100%;
+  max-width: 260px;
+  padding: 0.5rem;
+  margin-top: 0.5rem;
+  background-color: #1976d2;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+}
+
+.login-screen button:hover {
+  background-color: #1565c0;
+}
+
+.login-error {
+  margin-top: 0.5rem;
+  color: #f44336;
+}
+
+/* === Header und Controls === */
+header {
+  position: relative;
+  margin-bottom: 1rem;
+}
+
+header h1 {
+  font-size: 1.8rem;
+  text-align: center;
+  color: #90caf9;
+}
+
+.controls {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.controls button {
+  padding: 0.5rem 0.8rem;
+  background-color: #388e3c;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+}
+
+.controls button:hover {
+  background-color: #2e7d32;
+}
+
+/* === Admin-Sektion === */
+.admin-section {
+  background-color: #1e1e1e;
+  padding: 1rem;
+  border: 1px solid #333;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.admin-section h2 {
+  margin-bottom: 0.8rem;
+  color: #ffb300;
+}
+
+.admin-section .add-player-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.admin-section .add-player-form input {
+  background-color: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #fff;
+  padding: 0.4rem 0.6rem;
+}
+
+.admin-section .add-player-form button {
+  background-color: #1976d2;
+}
+
+.admin-section .add-player-form button:hover {
+  background-color: #1565c0;
+}
+
+.admin-section .player-list {
+  list-style: none;
+}
+
+.admin-section .player-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: #2a2a2a;
+  padding: 0.6rem;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.admin-section .player-list span {
+  flex-shrink: 0;
+}
+
+.admin-section .player-list input[type="text"] {
+  background-color: #3a3a3a;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: #fff;
+  padding: 0.3rem 0.6rem;
+}
+
+.btn-delete {
+  margin-left: auto;
+  background-color: #d32f2f;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+}
+
+.btn-delete:hover {
+  background-color: #c62828;
+}
+
+/* === Teamverwaltung: Spieler & Trainer === */
+.player-management {
+  background-color: #1e1e1e;
+  padding: 1rem;
+  border: 1px solid #333;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.player-management h2 {
+  margin-bottom: 0.8rem;
+  color: #ffb300;
+}
+
+.player-management .add-player-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.player-management .add-player-form input,
+.player-management .add-player-form select {
+  background-color: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #fff;
+  padding: 0.4rem 0.6rem;
+}
+
+.player-management .add-player-form input[type="date"] {
+  width: auto;
+}
+
+.player-management .add-player-form button {
+  background-color: #388e3c;
+}
+
+.player-management .add-player-form button:hover {
+  background-color: #2e7d32;
+}
+
+.player-management .player-list {
+  list-style: none;
+  margin-bottom: 1rem;
+}
+
+.player-management .player-list li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  background-color: #2a2a2a;
+  padding: 0.6rem;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.player-management .player-list input[type="text"],
+.player-management .player-list input[type="date"],
+.player-management .player-list select {
+  background-color: #3a3a3a;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: #fff;
+  padding: 0.3rem 0.6rem;
+}
+
+.player-management .role-dropdown {
+  min-width: 100px;
+}
+
+.btn-save-players {
+  display: block;
+  margin: 0 auto;
+  padding: 0.5rem 0.8rem;
+  background-color: #1976d2;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+}
+
+.btn-save-players:hover {
+  background-color: #1565c0;
+}
+
+/* === Trainings-Liste === */
+.trainings-list {
+  margin-bottom: 2rem;
+}
+
+.training-filter {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.8rem;
+}
+
+.training-filter input[type="date"] {
+  background-color: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #fff;
+  padding: 0.3rem 0.6rem;
+}
+
+.training-filter button {
+  background-color: #616161;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+}
+
+.training-filter button:hover {
+  background-color: #424242;
+}
+
+.training {
+  background-color: #1e1e1e;
+  border: 1px solid #333;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  padding: 0.5rem;
+}
+
+.training-header {
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: inline-block;
+  color: #90caf9;
+}
+
+.training-header:hover {
+  text-decoration: underline;
+}
+
+.created-by,
+.last-edited {
+  font-size: 0.85rem;
+  color: #b0bec5;
+  margin: 0.3rem 0;
+}
+
+.edit-date-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.edit-date-input {
+  background-color: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #fff;
+  padding: 0.3rem 0.6rem;
+}
+
+.btn-save-date,
+.btn-edit-date {
+  background-color: #1976d2;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+}
+
+.btn-save-date:hover,
+.btn-edit-date:hover {
+  background-color: #1565c0;
+}
+
+.participant {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: #2a2a2a;
+  padding: 0.5rem;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.participant span {
+  flex: 1;
+}
+
+.trainer-status-dropdown {
+  background-color: #3a3a3a;
+  border: 1px solid #555;
+  border-radius: 4px;
+  color: #fff;
+  padding: 0.3rem 0.6rem;
+  margin-left: auto;
+}
+
+.btn-part-status {
+  display: flex;
+  gap: 0.3rem;
+  margin-left: auto;
+}
+
+.btn-part-status button {
+  background-color: #616161;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+}
+
+.btn-part-status button.active {
+  background-color: #388e3c;
+}
+
+.btn-part-status button:hover:not(.active) {
+  background-color: #424242;
+}
+
+.status-text {
+  margin-left: 0.3rem;
+  font-style: italic;
+  color: #aed581;
+}
+
+.btn-save-training {
+  background-color: #388e3c;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  padding: 0.5rem 0.8rem;
+  cursor: pointer;
+  margin-right: 0.5rem;
+}
+
+.btn-save-training:hover {
+  background-color: #2e7d32;
+}
+
+.btn-delete-training {
+  background-color: #d32f2f;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  padding: 0.5rem 0.8rem;
+  cursor: pointer;
+}
+
+.btn-delete-training:hover {
+  background-color: #c62828;
+}
+
+.no-trainings {
+  text-align: center;
+  color: #b0bec5;
+  margin-top: 1rem;
+  font-style: italic;
+}
+
+/* === Auswertung (Report) === */
+.report-section {
+  background-color: #1e1e1e;
+  padding: 1rem;
+  border: 1px solid #333;
+  border-radius: 6px;
+}
+
+.report-section h2 {
+  margin-bottom: 0.8rem;
+  color: #ffb300;
+}
+
+.report-form {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 1rem;
+}
+
+.report-form input[type="date"] {
+  background-color: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #fff;
+  padding: 0.3rem 0.6rem;
+}
+
+.report-form button {
+  background-color: #1976d2;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+}
+
+.report-form button:hover {
+  background-color: #1565c0;
+}
+
+.report-results p {
+  margin-bottom: 0.6rem;
+}
+
+.report-results table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.report-results th,
+.report-results td {
+  padding: 0.6rem;
+  text-align: left;
+  border-bottom: 1px solid #444;
+  color: #e0e0e0;
+}
+
+.report-results th {
+  background-color: #333;
+}
+
+.report-row:hover {
+  background-color: #3a3a3a;
+  cursor: pointer;
+}
+
+.report-details-row td {
+  background-color: #2a2a2a;
+  padding: 0.4rem 0.6rem;
+}
+
+.clickable {
+  cursor: pointer;
+  color: #90caf9;
+}
+
+.note-report {
+  font-style: italic;
+  color: #aed581;
+  margin-left: 0.3rem;
+}
+
+/* === Footer === */
+footer {
+  margin-top: 2rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: #b0bec5;
+}
+
+footer a {
+  color: #90caf9;
+}

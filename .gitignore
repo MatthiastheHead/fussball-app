@@ -1,0 +1,23 @@
+# ####################################
+# Root .gitignore für fussball-app
+# ####################################
+
+# Ignoriere node_modules in allen Unterordnern
+node_modules/
+
+# Ignoriere dist/ (falls versehentlich generiert)
+dist/
+
+# Ignoriere lokale Umgebungsdateien
+.env
+.env.local
+.env.*.local
+
+# Ignoriere Build‐Ordner im Frontend (falls vorhanden)
+frontend/dist/
+
+# Ignoriere node_modules im Backend
+backend/node_modules/
+
+# Log‐Dateien
+*.log
