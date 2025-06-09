@@ -57,6 +57,8 @@ export default function App() {
   const [trainings, setTrainings] = useState([]);
   const [showAdmin, setShowAdmin] = useState(false);
   const [expandedTraining, setExpandedTraining] = useState(null);
+  const [editDateIdx, setEditDateIdx] = useState(null);
+  const [editDateValue, setEditDateValue] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [searchText, setSearchText] = useState('');
   const [fromDate, setFromDate] = useState('');
@@ -64,9 +66,9 @@ export default function App() {
   const [reportData, setReportData] = useState(null);
   const [expandedReportRow, setExpandedReportRow] = useState(null);
 
-  const version = '1.5';
+  const version = '1.6';
 
-  // Daten laden, Felder absichern
+  // Daten laden
   useEffect(() => {
     fetch(API + '/users').then(res => res.json()).then(setUsers).catch(() => setUsers([]));
     fetch(API + '/players').then(res => res.json()).then(setPlayers).catch(() => setPlayers([]));
@@ -392,14 +394,6 @@ export default function App() {
   };
 
   // Trainingsdatum editieren (Abbrechen robust)
-  const startEditDate = (training) => {
-    setExpandedTraining(training.date + (training.createdBy || ''));
-    const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
-    if (idx !== -1) {
-      trainings[idx].isEditing = true;
-      setTrainings([...trainings]);
-    }
-  };
   const saveEditedDate = (training, newDateValue) => {
     if (!newDateValue) return;
     const [year, month, day] = newDateValue.split('-');
@@ -676,7 +670,7 @@ export default function App() {
             />
             <input
               type="text"
-              placeholder="Vermerk (z.B. Probetraining)"
+              placeholder="Bemerkung (z.B. Probetraining)"
               value={newNote}
               onChange={(e) => setNewNote(e.target.value)}
             />
@@ -701,7 +695,7 @@ export default function App() {
                     type="text"
                     value={playerDraft.note}
                     onChange={e => setPlayerDraft(draft => ({ ...draft, note: e.target.value }))}
-                    placeholder="Vermerk"
+                    placeholder="Bemerkung"
                   />
                   <select
                     className="role-dropdown"
@@ -767,7 +761,7 @@ export default function App() {
           <button onClick={() => { setFilterDate(''); setSearchText(''); }}>Filter zurücksetzen</button>
         </div>
 
-        {trainingsToShow.map((t) => (
+        {trainingsToShow.map((t, idx) => (
           <div key={t.date + (t.createdBy || '')} className="training">
             <h3
               className={`training-header ${expandedTraining === t.date + (t.createdBy || '') ? 'expanded' : ''}`}
@@ -788,28 +782,29 @@ export default function App() {
                   </div>
                 )}
 
-                {t.isEditing ? (
+                {editDateIdx === idx ? (
                   <div className="edit-date-row">
                     <input
                       type="date"
                       className="edit-date-input"
-                      defaultValue={
-                        (() => {
-                          const parts = (t.date || '').split(', ')[1]?.split('.') || [];
-                          return parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : '';
-                        })()
-                      }
-                      onChange={e => saveEditedDate(t, e.target.value)}
+                      value={editDateValue}
+                      onChange={e => setEditDateValue(e.target.value)}
                     />
                     <button
                       className="btn-save-date"
                       onClick={() => {
-                        const idx = trainings.findIndex(tr => tr.date + (tr.createdBy || '') === t.date + (t.createdBy || ''));
-                        if (idx !== -1) {
-                          const updated = [...trainings];
-                          updated[idx].isEditing = false;
-                          setTrainings(updated);
-                        }
+                        saveEditedDate(t, editDateValue);
+                        setEditDateIdx(null);
+                        setEditDateValue('');
+                      }}
+                    >
+                      Speichern
+                    </button>
+                    <button
+                      className="btn-save-date"
+                      onClick={() => {
+                        setEditDateIdx(null);
+                        setEditDateValue('');
                       }}
                     >
                       Abbrechen
@@ -817,7 +812,15 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="edit-date-row">
-                    <button className="btn-edit-date" onClick={() => startEditDate(t)}>
+                    <button
+                      className="btn-edit-date"
+                      onClick={() => {
+                        // Setze das Datumsfeld für dieses Training
+                        const parts = (t.date || '').split(', ')[1]?.split('.') || [];
+                        setEditDateValue(parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : '');
+                        setEditDateIdx(idx);
+                      }}
+                    >
                       ✏️ Datum anpassen
                     </button>
                   </div>
@@ -830,10 +833,10 @@ export default function App() {
                     placeholder="Notiz zum Training (z.B. was gemacht wurde...)"
                     value={typeof t.note === 'string' ? t.note : ''}
                     onChange={(e) => {
-                      const idx = trainings.findIndex(tr => tr.date + (tr.createdBy || '') === t.date + (t.createdBy || ''));
-                      if (idx === -1) return;
+                      const idx2 = trainings.findIndex(tr => tr.date + (tr.createdBy || '') === t.date + (t.createdBy || ''));
+                      if (idx2 === -1) return;
                       const updated = [...trainings];
-                      updated[idx].note = e.target.value;
+                      updated[idx2].note = e.target.value;
                       setTrainings(updated);
                     }}
                     onBlur={(e) => saveTrainingNote(t, e.target.value)}
@@ -950,7 +953,7 @@ export default function App() {
                 <tr>
                   <th>Spieler</th>
                   <th>Im Team seit</th>
-                  <th>Vermerk</th>
+                  <th>Bemerkung</th>
                   <th>Teilnahme (%)</th>
                 </tr>
               </thead>
