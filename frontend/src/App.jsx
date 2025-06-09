@@ -377,7 +377,7 @@ export default function App() {
       .then((saved) => {
         setTrainings(saved);
         alert(
-          `Teilnahme-Status von "${name}" im Training vom "${saved[tIndex].date]}" wurde auf "${iconToText(statusIcon).trim()}" gesetzt.`
+          `Teilnahme-Status von "${name}" im Training vom "${saved[tIndex].date}" wurde auf "${iconToText(statusIcon).trim()}" gesetzt.`
         );
       })
       .catch(() => alert('Fehler beim Aktualisieren des Teilnahme-Status.'));
