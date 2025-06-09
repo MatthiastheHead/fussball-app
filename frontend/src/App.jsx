@@ -33,34 +33,40 @@ const formatDateTime = (dateObj) => {
   return `${day}.${month}.${year} ${hours}:${minutes}`;
 };
 const parseGermanDate = (str) => {
-  const datePart = str.includes(',') ? str.split(', ')[1] : str;
+  const datePart = str && str.includes(',') ? str.split(', ')[1] : str;
+  if (!datePart) return new Date(0);
   const [d, m, y] = datePart.split('.');
   return new Date(Number(y), Number(m) - 1, Number(d));
 };
 
 export default function App() {
-  // === State ===
+  // === STATES ===
   const [loggedInUser, setLoggedInUser] = useState(null);
   const [loginName, setLoginName] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState('');
 
-  // Teamverwaltung
+  // Teamverwaltung/Admin
   const [users, setUsers] = useState([]);
   const [newUserName, setNewUserName] = useState('');
   const [newUserPass, setNewUserPass] = useState('');
 
-  // Team (Spieler & Trainer)
+  // Team
   const [players, setPlayers] = useState([]);
   const [showTeam, setShowTeam] = useState(false);
   const [editPlayerId, setEditPlayerId] = useState(null);
   const [playerDraft, setPlayerDraft] = useState({});
-  // Neu für sicheres Löschen/Bearbeiten: Nach Name & Beitrittsdatum filtern (quasi unique).
+
+  // Spieler-Hinzufügen-Formular
+  const [newName, setNewName] = useState('');
+  const [newRole, setNewRole] = useState('Spieler');
+  const [newJoinDate, setNewJoinDate] = useState('');
+  const [newNote, setNewNote] = useState('');
 
   // Trainings
   const [trainings, setTrainings] = useState([]);
   const [showAdmin, setShowAdmin] = useState(false);
-  const [expandedTraining, setExpandedTraining] = useState(null); // ID der geöffneten Zeile
+  const [expandedTraining, setExpandedTraining] = useState(null);
 
   // Filter/Suche Trainings
   const [filterDate, setFilterDate] = useState('');
@@ -75,11 +81,20 @@ export default function App() {
   // Version
   const version = '1.3';
 
-  // === Initialdaten laden ===
+  // === Initialdaten laden, robust gegen fehlende Felder ===
   useEffect(() => {
-    fetch(API + '/users').then(res => res.json()).then(setUsers).catch(console.error);
-    fetch(API + '/players').then(res => res.json()).then(setPlayers).catch(console.error);
-    fetch(API + '/trainings').then(res => res.json()).then(setTrainings).catch(console.error);
+    fetch(API + '/users').then(res => res.json()).then(setUsers).catch(() => setUsers([]));
+    fetch(API + '/players').then(res => res.json()).then(setPlayers).catch(() => setPlayers([]));
+    fetch(API + '/trainings').then(res => res.json()).then(data => {
+      setTrainings(Array.isArray(data) ? data.map(t => ({
+        ...t,
+        participants: t.participants || {},
+        trainerStatus: t.trainerStatus || {},
+        note: t.note || '',
+        createdBy: t.createdBy || '',
+        lastEdited: t.lastEdited || null,
+      })) : []);
+    }).catch(() => setTrainings([]));
   }, []);
 
   // Login-Handler
@@ -173,7 +188,7 @@ export default function App() {
   // Teamverwaltung (mit Bearbeiten)
   const startEditPlayer = (player) => {
     setEditPlayerId(player.name + (player.joinDate || ''));
-    setPlayerDraft({ ...player });
+    setPlayerDraft({ ...player, note: player.note || '', joinDate: player.joinDate || '' });
   };
   const saveEditPlayer = () => {
     const idx = players.findIndex(
@@ -181,7 +196,7 @@ export default function App() {
     );
     if (idx === -1) return;
     const updated = [...players];
-    updated[idx] = { ...playerDraft };
+    updated[idx] = { ...playerDraft, note: playerDraft.note || '', joinDate: playerDraft.joinDate || '' };
     fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -196,7 +211,6 @@ export default function App() {
       })
       .catch(() => alert('Fehler beim Bearbeiten.'));
   };
-
   const cancelEditPlayer = () => {
     setEditPlayerId(null);
     setPlayerDraft({});
@@ -284,8 +298,8 @@ export default function App() {
   // Trainings nach Datum absteigend sortieren
   function sortTrainings(arr) {
     return [...arr].sort((a, b) => {
-      const ad = a.date.split(', ')[1].split('.').reverse().join('');
-      const bd = b.date.split(', ')[1].split('.').reverse().join('');
+      const ad = (a.date || '').split(', ')[1]?.split('.').reverse().join('') || '';
+      const bd = (b.date || '').split(', ')[1]?.split('.').reverse().join('') || '';
       return bd.localeCompare(ad);
     });
   }
@@ -322,7 +336,12 @@ export default function App() {
     })
       .then(res => res.json())
       .then((saved) => {
-        setTrainings(saved);
+        setTrainings(saved.map(t => ({
+          ...t,
+          participants: t.participants || {},
+          trainerStatus: t.trainerStatus || {},
+          note: t.note || '',
+        })));
         alert('Neues Training angelegt.');
       })
       .catch(() => alert('Fehler beim Anlegen des Trainings.'));
@@ -342,7 +361,12 @@ export default function App() {
       })
         .then(res => res.json())
         .then((saved) => {
-          setTrainings(saved);
+          setTrainings(saved.map(t => ({
+            ...t,
+            participants: t.participants || {},
+            trainerStatus: t.trainerStatus || {},
+            note: t.note || '',
+          })));
           alert('Training gelöscht.');
         })
         .catch(() => alert('Fehler beim Löschen des Trainings.'));
@@ -362,7 +386,12 @@ export default function App() {
     })
       .then(res => res.json())
       .then((saved) => {
-        setTrainings(saved);
+        setTrainings(saved.map(t => ({
+          ...t,
+          participants: t.participants || {},
+          trainerStatus: t.trainerStatus || {},
+          note: t.note || '',
+        })));
         alert('Notiz gespeichert.');
       })
       .catch(() => alert('Fehler beim Speichern der Notiz.'));
@@ -400,7 +429,12 @@ export default function App() {
     })
       .then(res => res.json())
       .then((saved) => {
-        setTrainings(saved);
+        setTrainings(saved.map(t => ({
+          ...t,
+          participants: t.participants || {},
+          trainerStatus: t.trainerStatus || {},
+          note: t.note || '',
+        })));
         alert('Datum wurde aktualisiert.');
       })
       .catch(() => alert('Fehler beim Aktualisieren des Datums.'));
@@ -414,6 +448,7 @@ export default function App() {
     const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
     if (idx === -1) return;
     const updated = [...trainings];
+    updated[idx].participants = updated[idx].participants || {};
     updated[idx].participants[name] = statusIcon;
     updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
 
@@ -424,7 +459,12 @@ export default function App() {
     })
       .then(res => res.json())
       .then((saved) => {
-        setTrainings(saved);
+        setTrainings(saved.map(t => ({
+          ...t,
+          participants: t.participants || {},
+          trainerStatus: t.trainerStatus || {},
+          note: t.note || '',
+        })));
         alert(
           `Teilnahme-Status von "${name}" im Training vom "${saved[idx].date}" wurde auf "${iconToText(statusIcon).trim()}" gesetzt.`
         );
@@ -440,9 +480,8 @@ export default function App() {
     const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
     if (idx === -1) return;
     const updated = [...trainings];
-    const ts = updated[idx].trainerStatus || {};
-    ts[name] = newStatus;
-    updated[idx].trainerStatus = { ...ts };
+    updated[idx].trainerStatus = updated[idx].trainerStatus || {};
+    updated[idx].trainerStatus[name] = newStatus;
     updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
 
     fetch(API + '/trainings', {
@@ -452,7 +491,12 @@ export default function App() {
     })
       .then(res => res.json())
       .then((saved) => {
-        setTrainings(saved);
+        setTrainings(saved.map(t => ({
+          ...t,
+          participants: t.participants || {},
+          trainerStatus: t.trainerStatus || {},
+          note: t.note || '',
+        })));
         alert(
           `Trainer-Status von "${name}" im Training vom "${saved[idx].date}" wurde auf "${newStatus}" gesetzt.`
         );
@@ -468,7 +512,7 @@ export default function App() {
   const trainingsToShow = sortTrainings(
     trainings.filter((t) => {
       let dateOk = true;
-      if (filterDate) {
+      if (filterDate && t.date) {
         const datePart = t.date.split(', ')[1];
         const [y, m, d] = filterDate.split('-');
         const comp = `${d}.${m}.${y}`;
@@ -478,7 +522,7 @@ export default function App() {
       if (searchText.trim()) {
         const search = searchText.trim().toLowerCase();
         searchOk =
-          t.date.toLowerCase().includes(search) ||
+          (t.date && t.date.toLowerCase().includes(search)) ||
           (t.note && t.note.toLowerCase().includes(search));
       }
       return dateOk && searchOk;
@@ -512,7 +556,7 @@ export default function App() {
       .map((player) => {
         let attendCount = 0;
         const details = trainingsInRange.map((t) => {
-          const icon = t.participants[player.name] || '—';
+          const icon = (t.participants && t.participants[player.name]) || '—';
           const text = iconToText(icon);
           if (icon === '✅') attendCount += 1;
           return { date: t.date, statusText: text };
@@ -741,7 +785,7 @@ export default function App() {
             {expandedTraining === t.date + (t.createdBy || '') && (
               <>
                 <div className="created-by">
-                  Ersteller: <strong>{t.createdBy}</strong>
+                  Ersteller: <strong>{t.createdBy || ''}</strong>
                 </div>
                 {t.lastEdited && (
                   <div className="last-edited">
@@ -756,8 +800,8 @@ export default function App() {
                       type="date"
                       className="edit-date-input"
                       defaultValue={() => {
-                        const parts = t.date.split(', ')[1].split('.');
-                        return `${parts[2]}-${parts[1]}-${parts[0]}`;
+                        const parts = (t.date || '').split(', ')[1]?.split('.') || [];
+                        return `${parts[2] || ''}-${parts[1] || ''}-${parts[0] || ''}`;
                       }}
                       onChange={(e) => saveEditedDate(t, e.target.value)}
                     />
@@ -808,7 +852,7 @@ export default function App() {
                     .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0))
                     .map((p) => {
                       if (p.isTrainer) {
-                        const trainerStatus = t.trainerStatus?.[p.name] || 'Abgemeldet';
+                        const trainerStatus = (t.trainerStatus && t.trainerStatus[p.name]) || 'Abgemeldet';
                         return (
                           <div key={p.name + 'trainer'} className="participant">
                             <span>
@@ -827,7 +871,7 @@ export default function App() {
                           </div>
                         );
                       } else {
-                        const statusIcon = t.participants?.[p.name] || '—';
+                        const statusIcon = (t.participants && t.participants[p.name]) || '—';
                         return (
                           <div key={p.name} className="participant">
                             <span>
