@@ -4,6 +4,7 @@ import './App.css';
 
 const API = 'https://fussball-api.onrender.com';
 
+// Hilfsfunktionen
 const getGermanWeekday = (dateObj) => {
   switch (dateObj.getDay()) {
     case 1: return 'Mo';
@@ -35,13 +36,13 @@ const formatDateTime = (dateObj) => {
 };
 
 export default function App() {
-  // States
+  // === State ===
   const [loggedInUser, setLoggedInUser] = useState(null);
   const [loginName, setLoginName] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState('');
 
-  // Teamverwaltung (ehemals Nutzerverwaltung)
+  // Teamverwaltung
   const [users, setUsers] = useState([]);
   const [newUserName, setNewUserName] = useState('');
   const [newUserPass, setNewUserPass] = useState('');
@@ -93,7 +94,7 @@ export default function App() {
     }
   };
 
-  // Logout jetzt ganz unten!
+  // Logout ganz unten!
   const handleLogout = () => {
     setLoggedInUser(null);
     setShowTeam(false);
@@ -125,9 +126,7 @@ export default function App() {
         setNewUserPass('');
         alert('Neuer Benutzer angelegt.');
       })
-      .catch((err) => {
-        alert('Fehler beim Anlegen des Benutzers.');
-      });
+      .catch(() => alert('Fehler beim Anlegen des Benutzers.'));
   };
 
   const updateUserPassword = (index, newPass) => {
@@ -246,14 +245,13 @@ export default function App() {
   // Trainings nach Datum absteigend sortieren
   function sortTrainings(arr) {
     return [...arr].sort((a, b) => {
-      // Format: "Mi, 29.05.2025"
       const ad = a.date.split(', ')[1].split('.').reverse().join('');
       const bd = b.date.split(', ')[1].split('.').reverse().join('');
       return bd.localeCompare(ad);
     });
   }
 
-  // Neues Training (mit Notizfeld!)
+  // Neues Training (mit Notizfeld)
   const addTraining = () => {
     if (!loggedInUser) {
       alert('Bitte zuerst einloggen.');
@@ -275,7 +273,7 @@ export default function App() {
         trainerStatus: {},
         createdBy: loggedInUser,
         lastEdited: { by: loggedInUser, at: timestamp },
-        note: '', // Neues Notizfeld
+        note: '',
       },
     ];
     fetch(API + '/trainings', {
@@ -327,7 +325,7 @@ export default function App() {
       .catch(() => alert('Fehler beim Speichern der Notiz.'));
   };
 
-  // Trainingsdatum editieren (wie gehabt)
+  // Trainingsdatum editieren
   const startEditDate = (tIndex) => {
     const updated = [...trainings];
     updated[tIndex].isEditing = true;
@@ -437,7 +435,6 @@ export default function App() {
   );
 
   // Auswertung bleibt wie gehabt...
-
   const parseGermanDate = (str) => {
     const datePart = str.includes(',') ? str.split(', ')[1] : str;
     const [d, m, y] = datePart.split('.');
@@ -487,7 +484,7 @@ export default function App() {
     setReportData({ totalTrainings: totalCount, data: report });
   };
 
-  // ==== Rendering ====
+  // === RENDERING ===
   if (!loggedInUser) {
     return (
       <div className="login-screen">
@@ -886,7 +883,7 @@ export default function App() {
         )}
       </section>
 
-      {/* Footer und Logout-BUTTON ganz unten */}
+      {/* Footer und Logout ganz unten */}
       <footer>
         <p>
           Ersteller: <strong>Matthias Kopf</strong> | Mail:{' '}
