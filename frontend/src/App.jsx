@@ -1,4 +1,3 @@
-// frontend/src/App.jsx
 import React, { useEffect, useState } from 'react';
 import './App.css';
 
@@ -39,48 +38,35 @@ const parseGermanDate = (str) => {
 };
 
 export default function App() {
-  // === STATES ===
+  // STATES
   const [loggedInUser, setLoggedInUser] = useState(null);
   const [loginName, setLoginName] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState('');
-
-  // Teamverwaltung/Admin
   const [users, setUsers] = useState([]);
   const [newUserName, setNewUserName] = useState('');
   const [newUserPass, setNewUserPass] = useState('');
-
-  // Team
   const [players, setPlayers] = useState([]);
   const [showTeam, setShowTeam] = useState(false);
   const [editPlayerId, setEditPlayerId] = useState(null);
   const [playerDraft, setPlayerDraft] = useState({});
-
-  // Spieler-Hinzufügen-Formular
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState('Spieler');
   const [newJoinDate, setNewJoinDate] = useState('');
   const [newNote, setNewNote] = useState('');
-
-  // Trainings
   const [trainings, setTrainings] = useState([]);
   const [showAdmin, setShowAdmin] = useState(false);
   const [expandedTraining, setExpandedTraining] = useState(null);
-
-  // Filter/Suche Trainings
   const [filterDate, setFilterDate] = useState('');
   const [searchText, setSearchText] = useState('');
-
-  // Auswertung
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [reportData, setReportData] = useState(null);
   const [expandedReportRow, setExpandedReportRow] = useState(null);
 
-  // Version
-  const version = '1.4';
+  const version = '1.5';
 
-  // === Initialdaten laden, robust gegen fehlende Felder ===
+  // Daten laden, Felder absichern
   useEffect(() => {
     fetch(API + '/users').then(res => res.json()).then(setUsers).catch(() => setUsers([]));
     fetch(API + '/players').then(res => res.json()).then(setPlayers).catch(() => setPlayers([]));
@@ -89,7 +75,7 @@ export default function App() {
         ...t,
         participants: t.participants || {},
         trainerStatus: t.trainerStatus || {},
-        note: t.note || '',
+        note: typeof t.note === 'string' ? t.note : '',
         createdBy: t.createdBy || '',
         lastEdited: t.lastEdited || null,
       })) : []);
@@ -117,7 +103,7 @@ export default function App() {
     setLoginError('');
   };
 
-  // Nutzer anlegen (Teamverwaltung)
+  // Nutzer anlegen
   const addNewUser = () => {
     const name = newUserName.trim();
     if (!name || !newUserPass) {
@@ -194,7 +180,11 @@ export default function App() {
     );
     if (idx === -1) return;
     const updated = [...players];
-    updated[idx] = { ...playerDraft, note: playerDraft.note || '', joinDate: playerDraft.joinDate || '' };
+    updated[idx] = {
+      ...playerDraft,
+      note: typeof playerDraft.note === 'string' ? playerDraft.note : '',
+      joinDate: typeof playerDraft.joinDate === 'string' ? playerDraft.joinDate : ''
+    };
     fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -214,28 +204,35 @@ export default function App() {
     setPlayerDraft({});
   };
 
-  // Spieler/Trainer anlegen (Teamverwaltung)
+  // Spieler/Trainer anlegen (Teamverwaltung) – robust!
   const addPlayer = () => {
     const trimmed = newName.trim();
     if (trimmed === '') {
       alert('Bitte einen Namen eingeben.');
       return;
     }
-    let joinDateValue = newJoinDate;
-    if (!joinDateValue) {
+    let joinDateValue = '';
+    if (!newJoinDate) {
       const today = new Date();
       const dd = String(today.getDate()).padStart(2, '0');
       const mm = String(today.getMonth() + 1).padStart(2, '0');
       const yyyy = today.getFullYear();
       joinDateValue = `${dd}.${mm}.${yyyy}`;
-    } else {
+    } else if (typeof newJoinDate === 'string' && newJoinDate.includes('-')) {
       const [y, m, d] = newJoinDate.split('-');
       joinDateValue = `${d}.${m}.${y}`;
+    } else {
+      joinDateValue = typeof newJoinDate === 'string' ? newJoinDate : '';
     }
     const isTrainer = newRole === 'Trainer';
     const updated = [
       ...players,
-      { name: trimmed, isTrainer, joinDate: joinDateValue, note: newNote || '' },
+      {
+        name: trimmed,
+        isTrainer,
+        joinDate: joinDateValue || '',
+        note: typeof newNote === 'string' ? newNote : ''
+      },
     ];
     fetch(API + '/players', {
       method: 'POST',
@@ -338,7 +335,7 @@ export default function App() {
           ...t,
           participants: t.participants || {},
           trainerStatus: t.trainerStatus || {},
-          note: t.note || '',
+          note: typeof t.note === 'string' ? t.note : '',
         })));
         alert('Neues Training angelegt.');
       })
@@ -363,7 +360,7 @@ export default function App() {
             ...t,
             participants: t.participants || {},
             trainerStatus: t.trainerStatus || {},
-            note: t.note || '',
+            note: typeof t.note === 'string' ? t.note : '',
           })));
           alert('Training gelöscht.');
         })
@@ -371,12 +368,12 @@ export default function App() {
     }
   };
 
-  // Trainingsnotiz speichern (direkt beim Ändern, nicht mehr Button)
+  // Notiz direkt beim Blur speichern!
   const saveTrainingNote = (training, noteValue) => {
     const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
     if (idx === -1) return;
     const updated = [...trainings];
-    updated[idx].note = noteValue;
+    updated[idx].note = typeof noteValue === 'string' ? noteValue : '';
     fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -388,13 +385,13 @@ export default function App() {
           ...t,
           participants: t.participants || {},
           trainerStatus: t.trainerStatus || {},
-          note: t.note || '',
+          note: typeof t.note === 'string' ? t.note : '',
         })));
       })
       .catch(() => {});
   };
 
-  // Trainingsdatum editieren
+  // Trainingsdatum editieren (Abbrechen robust)
   const startEditDate = (training) => {
     setExpandedTraining(training.date + (training.createdBy || ''));
     const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
@@ -430,7 +427,7 @@ export default function App() {
           ...t,
           participants: t.participants || {},
           trainerStatus: t.trainerStatus || {},
-          note: t.note || '',
+          note: typeof t.note === 'string' ? t.note : '',
         })));
         alert('Datum wurde aktualisiert.');
       })
@@ -460,7 +457,7 @@ export default function App() {
           ...t,
           participants: t.participants || {},
           trainerStatus: t.trainerStatus || {},
-          note: t.note || '',
+          note: typeof t.note === 'string' ? t.note : '',
         })));
         alert(
           `Teilnahme-Status von "${name}" im Training vom "${saved[idx].date}" wurde auf "${iconToText(statusIcon).trim()}" gesetzt.`
@@ -492,7 +489,7 @@ export default function App() {
           ...t,
           participants: t.participants || {},
           trainerStatus: t.trainerStatus || {},
-          note: t.note || '',
+          note: typeof t.note === 'string' ? t.note : '',
         })));
         alert(
           `Trainer-Status von "${name}" im Training vom "${saved[idx].date}" wurde auf "${newStatus}" gesetzt.`
@@ -501,7 +498,6 @@ export default function App() {
       .catch(() => alert('Fehler beim Aktualisieren des Trainer-Status.'));
   };
 
-  // Team-Sortierung: Trainer zuerst, dann alphabetisch
   const sortedPlayers = [...players].sort((a, b) => a.name.localeCompare(b.name));
   const trainersFirst = [...sortedPlayers].sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0));
 
@@ -571,7 +567,7 @@ export default function App() {
     setReportData({ totalTrainings: totalCount, data: report });
   };
 
-  // === RENDERING ===
+  // RENDERING
   if (!loggedInUser) {
     return (
       <div className="login-screen modern-dark-blue">
@@ -797,17 +793,23 @@ export default function App() {
                     <input
                       type="date"
                       className="edit-date-input"
-                      defaultValue={() => {
-                        const parts = (t.date || '').split(', ')[1]?.split('.') || [];
-                        return `${parts[2] || ''}-${parts[1] || ''}-${parts[0] || ''}`;
-                      }}
-                      onChange={(e) => saveEditedDate(t, e.target.value)}
+                      defaultValue={
+                        (() => {
+                          const parts = (t.date || '').split(', ')[1]?.split('.') || [];
+                          return parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : '';
+                        })()
+                      }
+                      onChange={e => saveEditedDate(t, e.target.value)}
                     />
                     <button
                       className="btn-save-date"
                       onClick={() => {
-                        t.isEditing = false;
-                        setTrainings([...trainings]);
+                        const idx = trainings.findIndex(tr => tr.date + (tr.createdBy || '') === t.date + (t.createdBy || ''));
+                        if (idx !== -1) {
+                          const updated = [...trainings];
+                          updated[idx].isEditing = false;
+                          setTrainings(updated);
+                        }
                       }}
                     >
                       Abbrechen
@@ -826,14 +828,13 @@ export default function App() {
                   <textarea
                     rows={2}
                     placeholder="Notiz zum Training (z.B. was gemacht wurde...)"
-                    value={t.note || ''}
+                    value={typeof t.note === 'string' ? t.note : ''}
                     onChange={(e) => {
                       const idx = trainings.findIndex(tr => tr.date + (tr.createdBy || '') === t.date + (t.createdBy || ''));
                       if (idx === -1) return;
                       const updated = [...trainings];
                       updated[idx].note = e.target.value;
                       setTrainings(updated);
-                      saveTrainingNote(t, e.target.value); // speichere direkt
                     }}
                     onBlur={(e) => saveTrainingNote(t, e.target.value)}
                   />
