@@ -4,7 +4,6 @@ import './App.css';
 
 const API = 'https://fussball-api.onrender.com';
 
-// Hilfsfunktionen
 const getGermanWeekday = (dateObj) => {
   switch (dateObj.getDay()) {
     case 1: return 'Mo';
@@ -79,7 +78,7 @@ export default function App() {
   const [expandedReportRow, setExpandedReportRow] = useState(null);
 
   // Version
-  const version = '1.3';
+  const version = '1.4';
 
   // === Initialdaten laden, robust gegen fehlende Felder ===
   useEffect(() => {
@@ -111,7 +110,6 @@ export default function App() {
     }
   };
 
-  // Logout (ganz unten)
   const handleLogout = () => {
     setLoggedInUser(null);
     setShowTeam(false);
@@ -373,7 +371,7 @@ export default function App() {
     }
   };
 
-  // Trainingsnotiz speichern
+  // Trainingsnotiz speichern (direkt beim Ändern, nicht mehr Button)
   const saveTrainingNote = (training, noteValue) => {
     const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
     if (idx === -1) return;
@@ -392,9 +390,8 @@ export default function App() {
           trainerStatus: t.trainerStatus || {},
           note: t.note || '',
         })));
-        alert('Notiz gespeichert.');
       })
-      .catch(() => alert('Fehler beim Speichern der Notiz.'));
+      .catch(() => {});
   };
 
   // Trainingsdatum editieren
@@ -568,6 +565,7 @@ export default function App() {
           details,
           showDetails: false,
           joinDate: player.joinDate || '',
+          note: player.note || '',
         };
       });
     setReportData({ totalTrainings: totalCount, data: report });
@@ -835,14 +833,10 @@ export default function App() {
                       const updated = [...trainings];
                       updated[idx].note = e.target.value;
                       setTrainings(updated);
+                      saveTrainingNote(t, e.target.value); // speichere direkt
                     }}
+                    onBlur={(e) => saveTrainingNote(t, e.target.value)}
                   />
-                  <button
-                    style={{ marginLeft: '1rem', marginTop: '0.3rem' }}
-                    onClick={() => saveTrainingNote(t, t.note || '')}
-                  >
-                    💾 Notiz speichern
-                  </button>
                 </div>
 
                 {/* Spieler/Trainer Liste */}
@@ -955,6 +949,7 @@ export default function App() {
                 <tr>
                   <th>Spieler</th>
                   <th>Im Team seit</th>
+                  <th>Vermerk</th>
                   <th>Teilnahme (%)</th>
                 </tr>
               </thead>
@@ -969,11 +964,12 @@ export default function App() {
                     >
                       <td className="clickable">{row.name}</td>
                       <td>{row.joinDate}</td>
+                      <td>{row.note || ''}</td>
                       <td>{row.percent}%</td>
                     </tr>
                     {expandedReportRow === row.name + (row.joinDate || '') && (
                       <tr className="report-details-row">
-                        <td colSpan="3">
+                        <td colSpan="4">
                           <ul>
                             {row.details.map((d, dIdx) => (
                               <li key={dIdx}>
