@@ -53,11 +53,10 @@ export default function App() {
   const [toDate, setToDate] = useState('');
   const [reportData, setReportData] = useState(null);
   const [expandedReportRow, setExpandedReportRow] = useState(null);
-  // Sichtbarkeit für Trainingsliste und Auswertung
   const [showTrainings, setShowTrainings] = useState(false);
   const [showReport, setShowReport] = useState(false);
 
-  const version = '1.8';
+  const version = '1.9';
 
   // Daten laden
   useEffect(() => {
@@ -182,7 +181,10 @@ export default function App() {
       body: JSON.stringify({ reset: true, list: updated }),
     })
       .then(res => res.json())
-      .then(setPlayers)
+      .then(playersFromServer => {
+        setPlayers(playersFromServer);
+        alert('Änderung gespeichert.');
+      })
       .catch(() => alert('Fehler beim Bearbeiten.'));
     setEditPlayerId(null);
     setPlayerDraft({});
@@ -215,7 +217,10 @@ export default function App() {
       body: JSON.stringify({ reset: true, list: updated }),
     })
       .then(res => res.json())
-      .then(setPlayers)
+      .then(playersFromServer => {
+        setPlayers(playersFromServer);
+        alert('Team-Mitglied hinzugefügt.');
+      })
       .catch(() => alert('Fehler beim Hinzufügen des Team-Mitglieds.'));
     setNewName('');
     setNewRole('Spieler');
@@ -235,8 +240,11 @@ export default function App() {
       body: JSON.stringify({ reset: true, list: updated }),
     })
       .then(res => res.json())
-      .then(setPlayers)
-      .catch(() => {});
+      .then(playersFromServer => {
+        setPlayers(playersFromServer);
+        alert('Spieler-Notiz gespeichert.');
+      })
+      .catch(() => alert('Fehler beim Speichern der Notiz.'));
   };
 
   // Rolle ändern
@@ -252,7 +260,10 @@ export default function App() {
       body: JSON.stringify({ reset: true, list: updated }),
     })
       .then(res => res.json())
-      .then(setPlayers)
+      .then(playersFromServer => {
+        setPlayers(playersFromServer);
+        alert('Rolle geändert.');
+      })
       .catch(() => alert('Fehler beim Ändern der Rolle.'));
   };
 
@@ -270,7 +281,10 @@ export default function App() {
         body: JSON.stringify({ reset: true, list: updated }),
       })
         .then(res => res.json())
-        .then(setPlayers)
+        .then(playersFromServer => {
+          setPlayers(playersFromServer);
+          alert('Team-Mitglied gelöscht.');
+        })
         .catch(() => alert('Fehler beim Löschen des Team-Mitglieds.'));
     }
   };
@@ -316,12 +330,15 @@ export default function App() {
       body: JSON.stringify({ reset: true, list: updated }),
     })
       .then(res => res.json())
-      .then(saved => setTrainings(saved.map(t => ({
-        ...t,
-        participants: t.participants || {},
-        trainerStatus: t.trainerStatus || {},
-        note: typeof t.note === 'string' ? t.note : '',
-      }))))
+      .then(trainingsFromServer => {
+        setTrainings(trainingsFromServer.map(t => ({
+          ...t,
+          participants: t.participants || {},
+          trainerStatus: t.trainerStatus || {},
+          note: typeof t.note === 'string' ? t.note : '',
+        })));
+        alert('Neues Training angelegt.');
+      })
       .catch(() => alert('Fehler beim Anlegen des Trainings.'));
   };
 
@@ -339,12 +356,15 @@ export default function App() {
         body: JSON.stringify({ reset: true, list: updated }),
       })
         .then(res => res.json())
-        .then(saved => setTrainings(saved.map(t => ({
-          ...t,
-          participants: t.participants || {},
-          trainerStatus: t.trainerStatus || {},
-          note: typeof t.note === 'string' ? t.note : '',
-        }))))
+        .then(trainingsFromServer => {
+          setTrainings(trainingsFromServer.map(t => ({
+            ...t,
+            participants: t.participants || {},
+            trainerStatus: t.trainerStatus || {},
+            note: typeof t.note === 'string' ? t.note : '',
+          })));
+          alert('Training gelöscht.');
+        })
         .catch(() => alert('Fehler beim Löschen des Trainings.'));
     }
   };
@@ -362,13 +382,16 @@ export default function App() {
       body: JSON.stringify({ reset: true, list: updated }),
     })
       .then(res => res.json())
-      .then(saved => setTrainings(saved.map(t => ({
-        ...t,
-        participants: t.participants || {},
-        trainerStatus: t.trainerStatus || {},
-        note: typeof t.note === 'string' ? t.note : '',
-      }))))
-      .catch(() => {});
+      .then(trainingsFromServer => {
+        setTrainings(trainingsFromServer.map(t => ({
+          ...t,
+          participants: t.participants || {},
+          trainerStatus: t.trainerStatus || {},
+          note: typeof t.note === 'string' ? t.note : '',
+        })));
+        alert('Trainingsnotiz gespeichert.');
+      })
+      .catch(() => alert('Fehler beim Speichern der Notiz.'));
   };
 
   // Trainingsdatum editieren (Abbrechen robust)
@@ -395,12 +418,15 @@ export default function App() {
       body: JSON.stringify({ reset: true, list: updated }),
     })
       .then(res => res.json())
-      .then(saved => setTrainings(saved.map(t => ({
-        ...t,
-        participants: t.participants || {},
-        trainerStatus: t.trainerStatus || {},
-        note: typeof t.note === 'string' ? t.note : '',
-      }))))
+      .then(trainingsFromServer => {
+        setTrainings(trainingsFromServer.map(t => ({
+          ...t,
+          participants: t.participants || {},
+          trainerStatus: t.trainerStatus || {},
+          note: typeof t.note === 'string' ? t.note : '',
+        })));
+        alert('Datum wurde aktualisiert.');
+      })
       .catch(() => alert('Fehler beim Aktualisieren des Datums.'));
   };
 
@@ -423,12 +449,17 @@ export default function App() {
       body: JSON.stringify({ reset: true, list: updated }),
     })
       .then(res => res.json())
-      .then(saved => setTrainings(saved.map(t => ({
-        ...t,
-        participants: t.participants || {},
-        trainerStatus: t.trainerStatus || {},
-        note: typeof t.note === 'string' ? t.note : '',
-      }))))
+      .then(trainingsFromServer => {
+        setTrainings(trainingsFromServer.map(t => ({
+          ...t,
+          participants: t.participants || {},
+          trainerStatus: t.trainerStatus || {},
+          note: typeof t.note === 'string' ? t.note : '',
+        })));
+        alert(
+          `Teilnahme-Status von "${name}" im Training vom "${updated[idx].date}" wurde auf "${iconToText(statusIcon).trim()}" gesetzt.`
+        );
+      })
       .catch(() => alert('Fehler beim Aktualisieren des Teilnahme-Status.'));
   };
 
@@ -451,12 +482,17 @@ export default function App() {
       body: JSON.stringify({ reset: true, list: updated }),
     })
       .then(res => res.json())
-      .then(saved => setTrainings(saved.map(t => ({
-        ...t,
-        participants: t.participants || {},
-        trainerStatus: t.trainerStatus || {},
-        note: typeof t.note === 'string' ? t.note : '',
-      }))))
+      .then(trainingsFromServer => {
+        setTrainings(trainingsFromServer.map(t => ({
+          ...t,
+          participants: t.participants || {},
+          trainerStatus: t.trainerStatus || {},
+          note: typeof t.note === 'string' ? t.note : '',
+        })));
+        alert(
+          `Trainer-Status von "${name}" im Training vom "${updated[idx].date}" wurde auf "${newStatus}" gesetzt.`
+        );
+      })
       .catch(() => alert('Fehler beim Aktualisieren des Trainer-Status.'));
   };
 
@@ -526,6 +562,7 @@ export default function App() {
         };
       });
     setReportData({ totalTrainings: totalCount, data: report });
+    alert("Auswertung aktualisiert.");
   };
 
   // RENDERING
@@ -561,17 +598,17 @@ export default function App() {
         <h1>⚽ Fußball‐App <span className="blue-version">{version}</span> Trainingsteilnahme</h1>
       </header>
 
-      <div className="controls">
-        <button onClick={addTraining}>➕ Training hinzufügen</button>
-        <button onClick={() => setShowTeam(!showTeam)}>👥 Team verwalten</button>
-        <button onClick={() => setShowTrainings(!showTrainings)}>
+      <div className="controls mobile-controls">
+        <button className="main-func-btn" onClick={addTraining}>➕ Training hinzufügen</button>
+        <button className="main-func-btn" onClick={() => setShowTeam(!showTeam)}>👥 Team verwalten</button>
+        <button className="main-func-btn" onClick={() => setShowTrainings(!showTrainings)}>
           {showTrainings ? "Trainingsliste verbergen" : "Gespeicherte Trainings anzeigen"}
         </button>
-        <button onClick={() => setShowReport(!showReport)}>
+        <button className="main-func-btn" onClick={() => setShowReport(!showReport)}>
           {showReport ? "Auswertung verbergen" : "Auswertung anzeigen"}
         </button>
         {loggedInUser === 'Matthias' && (
-          <button onClick={() => setShowAdmin(!showAdmin)}>👤 Adminverwaltung</button>
+          <button className="main-func-btn" onClick={() => setShowAdmin(!showAdmin)}>👤 Adminverwaltung</button>
         )}
       </div>
 
