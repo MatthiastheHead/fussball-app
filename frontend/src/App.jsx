@@ -53,8 +53,11 @@ export default function App() {
   const [toDate, setToDate] = useState('');
   const [reportData, setReportData] = useState(null);
   const [expandedReportRow, setExpandedReportRow] = useState(null);
+  // Sichtbarkeit für Trainingsliste und Auswertung
+  const [showTrainings, setShowTrainings] = useState(false);
+  const [showReport, setShowReport] = useState(false);
 
-  const version = '1.7';
+  const version = '1.8';
 
   // Daten laden
   useEffect(() => {
@@ -159,7 +162,7 @@ export default function App() {
     }
   };
 
-  // Teamverwaltung (mit Bearbeiten)
+  // Teamverwaltung (mit Bearbeiten & Notiz speichern onBlur)
   const startEditPlayer = (player) => {
     setEditPlayerId(player.name);
     setPlayerDraft({ ...player, note: player.note || '' });
@@ -172,19 +175,17 @@ export default function App() {
       ...playerDraft,
       note: typeof playerDraft.note === 'string' ? playerDraft.note : ''
     };
+    setPlayers(updated); // Sofort sichtbar!
     fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list: updated }),
     })
       .then(res => res.json())
-      .then((saved) => {
-        setPlayers(saved);
-        setEditPlayerId(null);
-        setPlayerDraft({});
-        alert('Änderung gespeichert.');
-      })
+      .then(setPlayers)
       .catch(() => alert('Fehler beim Bearbeiten.'));
+    setEditPlayerId(null);
+    setPlayerDraft({});
   };
   const cancelEditPlayer = () => {
     setEditPlayerId(null);
@@ -207,20 +208,35 @@ export default function App() {
         note: typeof newNote === 'string' ? newNote : ''
       },
     ];
+    setPlayers(updated); // Sofort sichtbar!
     fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list: updated }),
     })
       .then(res => res.json())
-      .then((saved) => {
-        setPlayers(saved);
-        setNewName('');
-        setNewRole('Spieler');
-        setNewNote('');
-        alert('Team-Mitglied hinzugefügt.');
-      })
+      .then(setPlayers)
       .catch(() => alert('Fehler beim Hinzufügen des Team-Mitglieds.'));
+    setNewName('');
+    setNewRole('Spieler');
+    setNewNote('');
+  };
+
+  // Notiz in der Teamverwaltung – SPEICHERT DAUERHAFT onBlur
+  const handlePlayerNoteBlur = (player, noteValue) => {
+    const idx = players.findIndex(p => p.name === player.name);
+    if (idx === -1) return;
+    const updated = [...players];
+    updated[idx].note = noteValue;
+    setPlayers(updated); // Sofort sichtbar!
+    fetch(API + '/players', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then(setPlayers)
+      .catch(() => {});
   };
 
   // Rolle ändern
@@ -229,6 +245,7 @@ export default function App() {
     if (idx === -1) return;
     const updated = [...players];
     updated[idx].isTrainer = role === 'Trainer';
+    setPlayers(updated); // Sofort sichtbar!
     fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -246,16 +263,14 @@ export default function App() {
       if (idx === -1) return;
       const updated = [...players];
       updated.splice(idx, 1);
+      setPlayers(updated); // Sofort sichtbar!
       fetch(API + '/players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
       })
         .then(res => res.json())
-        .then((saved) => {
-          setPlayers(saved);
-          alert('Team-Mitglied gelöscht.');
-        })
+        .then(setPlayers)
         .catch(() => alert('Fehler beim Löschen des Team-Mitglieds.'));
     }
   };
@@ -294,21 +309,19 @@ export default function App() {
         note: '',
       },
     ];
+    setTrainings(updated); // Sofort sichtbar!
     fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list: updated }),
     })
       .then(res => res.json())
-      .then((saved) => {
-        setTrainings(saved.map(t => ({
-          ...t,
-          participants: t.participants || {},
-          trainerStatus: t.trainerStatus || {},
-          note: typeof t.note === 'string' ? t.note : '',
-        })));
-        alert('Neues Training angelegt.');
-      })
+      .then(saved => setTrainings(saved.map(t => ({
+        ...t,
+        participants: t.participants || {},
+        trainerStatus: t.trainerStatus || {},
+        note: typeof t.note === 'string' ? t.note : '',
+      }))))
       .catch(() => alert('Fehler beim Anlegen des Trainings.'));
   };
 
@@ -319,46 +332,42 @@ export default function App() {
       if (idx === -1) return;
       const updated = [...trainings];
       updated.splice(idx, 1);
+      setTrainings(updated); // Sofort sichtbar!
       fetch(API + '/trainings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
       })
         .then(res => res.json())
-        .then((saved) => {
-          setTrainings(saved.map(t => ({
-            ...t,
-            participants: t.participants || {},
-            trainerStatus: t.trainerStatus || {},
-            note: typeof t.note === 'string' ? t.note : '',
-          })));
-          alert('Training gelöscht.');
-        })
+        .then(saved => setTrainings(saved.map(t => ({
+          ...t,
+          participants: t.participants || {},
+          trainerStatus: t.trainerStatus || {},
+          note: typeof t.note === 'string' ? t.note : '',
+        }))))
         .catch(() => alert('Fehler beim Löschen des Trainings.'));
     }
   };
 
-  // Notiz direkt beim Blur speichern!
+  // Notiz Training – SPEICHERT DAUERHAFT onBlur
   const saveTrainingNote = (training, noteValue) => {
     const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
     if (idx === -1) return;
     const updated = [...trainings];
-    updated[idx].note = typeof noteValue === 'string' ? noteValue : '';
-    setTrainings(updated); // Sofort im State sichtbar!
+    updated[idx].note = noteValue;
+    setTrainings(updated); // Sofort sichtbar!
     fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list: updated }),
     })
       .then(res => res.json())
-      .then((saved) => {
-        setTrainings(saved.map(t => ({
-          ...t,
-          participants: t.participants || {},
-          trainerStatus: t.trainerStatus || {},
-          note: typeof t.note === 'string' ? t.note : '',
-        })));
-      })
+      .then(saved => setTrainings(saved.map(t => ({
+        ...t,
+        participants: t.participants || {},
+        trainerStatus: t.trainerStatus || {},
+        note: typeof t.note === 'string' ? t.note : '',
+      }))))
       .catch(() => {});
   };
 
@@ -379,21 +388,19 @@ export default function App() {
     updated[idx].isEditing = false;
     updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
 
+    setTrainings(updated); // Sofort sichtbar!
     fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list: updated }),
     })
       .then(res => res.json())
-      .then((saved) => {
-        setTrainings(saved.map(t => ({
-          ...t,
-          participants: t.participants || {},
-          trainerStatus: t.trainerStatus || {},
-          note: typeof t.note === 'string' ? t.note : '',
-        })));
-        alert('Datum wurde aktualisiert.');
-      })
+      .then(saved => setTrainings(saved.map(t => ({
+        ...t,
+        participants: t.participants || {},
+        trainerStatus: t.trainerStatus || {},
+        note: typeof t.note === 'string' ? t.note : '',
+      }))))
       .catch(() => alert('Fehler beim Aktualisieren des Datums.'));
   };
 
@@ -409,23 +416,19 @@ export default function App() {
     updated[idx].participants[name] = statusIcon;
     updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
 
+    setTrainings(updated); // Sofort sichtbar!
     fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list: updated }),
     })
       .then(res => res.json())
-      .then((saved) => {
-        setTrainings(saved.map(t => ({
-          ...t,
-          participants: t.participants || {},
-          trainerStatus: t.trainerStatus || {},
-          note: typeof t.note === 'string' ? t.note : '',
-        })));
-        alert(
-          `Teilnahme-Status von "${name}" im Training vom "${saved[idx].date}" wurde auf "${iconToText(statusIcon).trim()}" gesetzt.`
-        );
-      })
+      .then(saved => setTrainings(saved.map(t => ({
+        ...t,
+        participants: t.participants || {},
+        trainerStatus: t.trainerStatus || {},
+        note: typeof t.note === 'string' ? t.note : '',
+      }))))
       .catch(() => alert('Fehler beim Aktualisieren des Teilnahme-Status.'));
   };
 
@@ -441,23 +444,19 @@ export default function App() {
     updated[idx].trainerStatus[name] = newStatus;
     updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
 
+    setTrainings(updated); // Sofort sichtbar!
     fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list: updated }),
     })
       .then(res => res.json())
-      .then((saved) => {
-        setTrainings(saved.map(t => ({
-          ...t,
-          participants: t.participants || {},
-          trainerStatus: t.trainerStatus || {},
-          note: typeof t.note === 'string' ? t.note : '',
-        })));
-        alert(
-          `Trainer-Status von "${name}" im Training vom "${saved[idx].date}" wurde auf "${newStatus}" gesetzt.`
-        );
-      })
+      .then(saved => setTrainings(saved.map(t => ({
+        ...t,
+        participants: t.participants || {},
+        trainerStatus: t.trainerStatus || {},
+        note: typeof t.note === 'string' ? t.note : '',
+      }))))
       .catch(() => alert('Fehler beim Aktualisieren des Trainer-Status.'));
   };
 
@@ -565,6 +564,12 @@ export default function App() {
       <div className="controls">
         <button onClick={addTraining}>➕ Training hinzufügen</button>
         <button onClick={() => setShowTeam(!showTeam)}>👥 Team verwalten</button>
+        <button onClick={() => setShowTrainings(!showTrainings)}>
+          {showTrainings ? "Trainingsliste verbergen" : "Gespeicherte Trainings anzeigen"}
+        </button>
+        <button onClick={() => setShowReport(!showReport)}>
+          {showReport ? "Auswertung verbergen" : "Auswertung anzeigen"}
+        </button>
         {loggedInUser === 'Matthias' && (
           <button onClick={() => setShowAdmin(!showAdmin)}>👤 Adminverwaltung</button>
         )}
@@ -651,6 +656,7 @@ export default function App() {
                     type="text"
                     value={playerDraft.note}
                     onChange={e => setPlayerDraft(draft => ({ ...draft, note: e.target.value }))}
+                    onBlur={e => handlePlayerNoteBlur(playerDraft, e.target.value)}
                     placeholder="Notiz / Bemerkung"
                   />
                   <select
@@ -672,7 +678,19 @@ export default function App() {
                   <span className={p.isTrainer ? 'role-trainer' : 'role-player'}>
                     {p.name}
                   </span>
-                  {p.note && <span className="note"> [{p.note}]</span>}
+                  <input
+                    type="text"
+                    value={p.note || ""}
+                    placeholder="Notiz / Bemerkung"
+                    style={{marginLeft: '1rem', background:'#222c', color:'#fff', border:'1px solid #226', borderRadius:'4px', padding:'0.2rem'}}
+                    onChange={e => {
+                      const idx = players.findIndex(x => x.name === p.name);
+                      const updated = [...players];
+                      updated[idx].note = e.target.value;
+                      setPlayers(updated);
+                    }}
+                    onBlur={e => handlePlayerNoteBlur(p, e.target.value)}
+                  />
                   <div>
                     <select
                       className="role-dropdown"
@@ -693,257 +711,261 @@ export default function App() {
       )}
 
       {/* === Trainings-Liste === */}
-      <section className="trainings-list">
-        <div className="training-filter">
-          <label>
-            Nach Datum filtern:{' '}
-            <input
-              type="date"
-              value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
-            />
-          </label>
-          <label>
-            Suchen:{' '}
-            <input
-              type="text"
-              placeholder="Datum oder Text"
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              style={{ minWidth: 140 }}
-            />
-          </label>
-          <button onClick={() => { setFilterDate(''); setSearchText(''); }}>Filter zurücksetzen</button>
-        </div>
-
-        {trainingsToShow.map((t, idx) => (
-          <div key={t.date + (t.createdBy || '')} className="training">
-            <h3
-              className={`training-header ${expandedTraining === t.date + (t.createdBy || '') ? 'expanded' : ''}`}
-              onClick={() => setExpandedTraining(expandedTraining === t.date + (t.createdBy || '') ? null : t.date + (t.createdBy || ''))}
-            >
-              📅 {t.date} {expandedTraining === t.date + (t.createdBy || '') ? '🔽' : '▶️'}
-            </h3>
-
-            {expandedTraining === t.date + (t.createdBy || '') && (
-              <>
-                <div className="created-by">
-                  Ersteller: <strong>{t.createdBy || ''}</strong>
-                </div>
-                {t.lastEdited && (
-                  <div className="last-edited">
-                    Zuletzt bearbeitet: <strong>{t.lastEdited.at}</strong> von{' '}
-                    <strong>{t.lastEdited.by}</strong>
-                  </div>
-                )}
-
-                {editDateIdx === idx ? (
-                  <div className="edit-date-row">
-                    <input
-                      type="date"
-                      className="edit-date-input"
-                      value={editDateValue}
-                      onChange={e => setEditDateValue(e.target.value)}
-                    />
-                    <button
-                      className="btn-save-date"
-                      onClick={() => {
-                        saveEditedDate(t, editDateValue);
-                        setEditDateIdx(null);
-                        setEditDateValue('');
-                      }}
-                    >
-                      Speichern
-                    </button>
-                    <button
-                      className="btn-save-date"
-                      onClick={() => {
-                        setEditDateIdx(null);
-                        setEditDateValue('');
-                      }}
-                    >
-                      Abbrechen
-                    </button>
-                  </div>
-                ) : (
-                  <div className="edit-date-row">
-                    <button
-                      className="btn-edit-date"
-                      onClick={() => {
-                        // Setze das Datumsfeld für dieses Training
-                        const parts = (t.date || '').split(', ')[1]?.split('.') || [];
-                        setEditDateValue(parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : '');
-                        setEditDateIdx(idx);
-                      }}
-                    >
-                      ✏️ Datum anpassen
-                    </button>
-                  </div>
-                )}
-
-                {/* Notizfeld */}
-                <div className="note-field">
-                  <textarea
-                    rows={2}
-                    placeholder="Notiz zum Training (z.B. was gemacht wurde...)"
-                    value={typeof t.note === 'string' ? t.note : ''}
-                    onChange={(e) => {
-                      const idx2 = trainings.findIndex(tr => tr.date + (tr.createdBy || '') === t.date + (t.createdBy || ''));
-                      if (idx2 === -1) return;
-                      const updated = [...trainings];
-                      updated[idx2].note = e.target.value;
-                      setTrainings(updated);
-                    }}
-                    onBlur={(e) => saveTrainingNote(t, e.target.value)}
-                  />
-                </div>
-
-                {/* Spieler/Trainer Liste */}
-                {!t.isEditing &&
-                  players
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0))
-                    .map((p) => {
-                      if (p.isTrainer) {
-                        const trainerStatus = (t.trainerStatus && t.trainerStatus[p.name]) || 'Abgemeldet';
-                        return (
-                          <div key={p.name + 'trainer'} className="participant">
-                            <span>
-                              {p.name} <em>({trainerStatus})</em>
-                            </span>
-                            <select
-                              className="trainer-status-dropdown"
-                              value={trainerStatus}
-                              onChange={(e) =>
-                                updateTrainerStatus(t, p.name, e.target.value)
-                              }
-                            >
-                              <option value="Zugesagt">Zugesagt</option>
-                              <option value="Abgemeldet">Abgemeldet</option>
-                            </select>
-                          </div>
-                        );
-                      } else {
-                        const statusIcon = (t.participants && t.participants[p.name]) || '—';
-                        return (
-                          <div key={p.name} className="participant">
-                            <span>
-                              {p.name}
-                              <em className="status-text">{iconToText(statusIcon)}</em>
-                            </span>
-                            <div className="btn-part-status">
-                              {['✅', '❌', '⏳', '—'].map((icon, idx) => (
-                                <button
-                                  key={idx}
-                                  className={statusIcon === icon ? 'active' : ''}
-                                  onClick={() => updateParticipation(t, p.name, icon)}
-                                >
-                                  {icon}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      }
-                    })}
-
-                {!t.isEditing && (
-                  <button
-                    className="btn-save-training"
-                    onClick={() => alert('Änderungen im Training wurden gespeichert.')}
-                  >
-                    💾 Speichern
-                  </button>
-                )}
-
-                {!t.isEditing && (
-                  <button
-                    className="btn-delete-training"
-                    onClick={() => deleteTraining(t)}
-                  >
-                    🗑️ Training löschen
-                  </button>
-                )}
-              </>
-            )}
+      {showTrainings && (
+        <section className="trainings-list">
+          <div className="training-filter">
+            <label>
+              Nach Datum filtern:{' '}
+              <input
+                type="date"
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+              />
+            </label>
+            <label>
+              Suchen:{' '}
+              <input
+                type="text"
+                placeholder="Datum oder Text"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                style={{ minWidth: 140 }}
+              />
+            </label>
+            <button onClick={() => { setFilterDate(''); setSearchText(''); }}>Filter zurücksetzen</button>
           </div>
-        ))}
 
-        {trainingsToShow.length === 0 && (
-          <p className="no-trainings">Keine Trainings gefunden{filterDate || searchText ? ' für diesen Filter.' : '.'}</p>
-        )}
-      </section>
+          {trainingsToShow.map((t, idx) => (
+            <div key={t.date + (t.createdBy || '')} className="training">
+              <h3
+                className={`training-header ${expandedTraining === t.date + (t.createdBy || '') ? 'expanded' : ''}`}
+                onClick={() => setExpandedTraining(expandedTraining === t.date + (t.createdBy || '') ? null : t.date + (t.createdBy || ''))}
+              >
+                📅 {t.date} {expandedTraining === t.date + (t.createdBy || '') ? '🔽' : '▶️'}
+              </h3>
+
+              {expandedTraining === t.date + (t.createdBy || '') && (
+                <>
+                  <div className="created-by">
+                    Ersteller: <strong>{t.createdBy || ''}</strong>
+                  </div>
+                  {t.lastEdited && (
+                    <div className="last-edited">
+                      Zuletzt bearbeitet: <strong>{t.lastEdited.at}</strong> von{' '}
+                      <strong>{t.lastEdited.by}</strong>
+                    </div>
+                  )}
+
+                  {editDateIdx === idx ? (
+                    <div className="edit-date-row">
+                      <input
+                        type="date"
+                        className="edit-date-input"
+                        value={editDateValue}
+                        onChange={e => setEditDateValue(e.target.value)}
+                      />
+                      <button
+                        className="btn-save-date"
+                        onClick={() => {
+                          saveEditedDate(t, editDateValue);
+                          setEditDateIdx(null);
+                          setEditDateValue('');
+                        }}
+                      >
+                        Speichern
+                      </button>
+                      <button
+                        className="btn-save-date"
+                        onClick={() => {
+                          setEditDateIdx(null);
+                          setEditDateValue('');
+                        }}
+                      >
+                        Abbrechen
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="edit-date-row">
+                      <button
+                        className="btn-edit-date"
+                        onClick={() => {
+                          // Setze das Datumsfeld für dieses Training
+                          const parts = (t.date || '').split(', ')[1]?.split('.') || [];
+                          setEditDateValue(parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : '');
+                          setEditDateIdx(idx);
+                        }}
+                      >
+                        ✏️ Datum anpassen
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Notizfeld */}
+                  <div className="note-field">
+                    <textarea
+                      rows={2}
+                      placeholder="Notiz zum Training (z.B. was gemacht wurde...)"
+                      value={typeof t.note === 'string' ? t.note : ''}
+                      onChange={(e) => {
+                        const idx2 = trainings.findIndex(tr => tr.date + (tr.createdBy || '') === t.date + (t.createdBy || ''));
+                        if (idx2 === -1) return;
+                        const updated = [...trainings];
+                        updated[idx2].note = e.target.value;
+                        setTrainings(updated);
+                      }}
+                      onBlur={(e) => saveTrainingNote(t, e.target.value)}
+                    />
+                  </div>
+
+                  {/* Spieler/Trainer Liste */}
+                  {!t.isEditing &&
+                    players
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0))
+                      .map((p) => {
+                        if (p.isTrainer) {
+                          const trainerStatus = (t.trainerStatus && t.trainerStatus[p.name]) || 'Abgemeldet';
+                          return (
+                            <div key={p.name + 'trainer'} className="participant">
+                              <span>
+                                {p.name} <em>({trainerStatus})</em>
+                              </span>
+                              <select
+                                className="trainer-status-dropdown"
+                                value={trainerStatus}
+                                onChange={(e) =>
+                                  updateTrainerStatus(t, p.name, e.target.value)
+                                }
+                              >
+                                <option value="Zugesagt">Zugesagt</option>
+                                <option value="Abgemeldet">Abgemeldet</option>
+                              </select>
+                            </div>
+                          );
+                        } else {
+                          const statusIcon = (t.participants && t.participants[p.name]) || '—';
+                          return (
+                            <div key={p.name} className="participant">
+                              <span>
+                                {p.name}
+                                <em className="status-text">{iconToText(statusIcon)}</em>
+                              </span>
+                              <div className="btn-part-status">
+                                {['✅', '❌', '⏳', '—'].map((icon, idx) => (
+                                  <button
+                                    key={idx}
+                                    className={statusIcon === icon ? 'active' : ''}
+                                    onClick={() => updateParticipation(t, p.name, icon)}
+                                  >
+                                    {icon}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        }
+                      })}
+
+                  {!t.isEditing && (
+                    <button
+                      className="btn-save-training"
+                      onClick={() => alert('Änderungen im Training wurden gespeichert.')}
+                    >
+                      💾 Speichern
+                    </button>
+                  )}
+
+                  {!t.isEditing && (
+                    <button
+                      className="btn-delete-training"
+                      onClick={() => deleteTraining(t)}
+                    >
+                      🗑️ Training löschen
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          ))}
+
+          {trainingsToShow.length === 0 && (
+            <p className="no-trainings">Keine Trainings gefunden{filterDate || searchText ? ' für diesen Filter.' : '.'}</p>
+          )}
+        </section>
+      )}
 
       {/* === Auswertung === */}
-      <section className="report-section">
-        <h2>Auswertung</h2>
-        <div className="report-form">
-          <label>
-            Von:{' '}
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-            />
-          </label>
-          <label>
-            Bis:{' '}
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-            />
-          </label>
-          <button onClick={computeReport}>Auswertung anzeigen</button>
-        </div>
-
-        {reportData && (
-          <div className="report-results">
-            <p>
-              {reportData.totalTrainings} Training
-              {reportData.totalTrainings !== 1 ? 's' : ''} im Zeitraum.
-            </p>
-            <table>
-              <thead>
-                <tr>
-                  <th>Spieler</th>
-                  <th>Bemerkung</th>
-                  <th>Teilnahme (%)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reportData.data.map((row, idx) => (
-                  <React.Fragment key={row.name}>
-                    <tr
-                      className={`report-row ${expandedReportRow === row.name ? 'expanded' : ''}`}
-                      onClick={() => setExpandedReportRow(
-                        expandedReportRow === row.name ? null : row.name
-                      )}
-                    >
-                      <td className="clickable">{row.name}</td>
-                      <td>{row.note || ''}</td>
-                      <td>{row.percent}%</td>
-                    </tr>
-                    {expandedReportRow === row.name && (
-                      <tr className="report-details-row">
-                        <td colSpan="3">
-                          <ul>
-                            {row.details.map((d, dIdx) => (
-                              <li key={dIdx}>
-                                {d.date}: <strong>{d.statusText.trim()}</strong>
-                              </li>
-                            ))}
-                          </ul>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
+      {showReport && (
+        <section className="report-section">
+          <h2>Auswertung</h2>
+          <div className="report-form">
+            <label>
+              Von:{' '}
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
+            </label>
+            <label>
+              Bis:{' '}
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+              />
+            </label>
+            <button onClick={computeReport}>Auswertung anzeigen</button>
           </div>
-        )}
-      </section>
+
+          {reportData && (
+            <div className="report-results">
+              <p>
+                {reportData.totalTrainings} Training
+                {reportData.totalTrainings !== 1 ? 's' : ''} im Zeitraum.
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Spieler</th>
+                    <th>Bemerkung</th>
+                    <th>Teilnahme (%)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reportData.data.map((row, idx) => (
+                    <React.Fragment key={row.name}>
+                      <tr
+                        className={`report-row ${expandedReportRow === row.name ? 'expanded' : ''}`}
+                        onClick={() => setExpandedReportRow(
+                          expandedReportRow === row.name ? null : row.name
+                        )}
+                      >
+                        <td className="clickable">{row.name}</td>
+                        <td>{row.note || ''}</td>
+                        <td>{row.percent}%</td>
+                      </tr>
+                      {expandedReportRow === row.name && (
+                        <tr className="report-details-row">
+                          <td colSpan="3">
+                            <ul>
+                              {row.details.map((d, dIdx) => (
+                                <li key={dIdx}>
+                                  {d.date}: <strong>{d.statusText.trim()}</strong>
+                                </li>
+                              ))}
+                            </ul>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Footer und Logout ganz unten */}
       <footer>
