@@ -3,17 +3,6 @@ import './App.css';
 
 const API = 'https://fussball-api.onrender.com';
 
-const getGermanWeekday = (dateObj) => {
-  switch (dateObj.getDay()) {
-    case 1: return 'Mo';
-    case 2: return 'Di';
-    case 3: return 'Mi';
-    case 4: return 'Do';
-    case 5: return 'Fr';
-    case 6: return 'Sa';
-    default: return 'So';
-  }
-};
 const iconToText = (icon) => {
   switch (icon) {
     case '✅': return ' TEILNEHMEND';
@@ -52,7 +41,6 @@ export default function App() {
   const [playerDraft, setPlayerDraft] = useState({});
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState('Spieler');
-  const [newJoinDate, setNewJoinDate] = useState('');
   const [newNote, setNewNote] = useState('');
   const [trainings, setTrainings] = useState([]);
   const [showAdmin, setShowAdmin] = useState(false);
@@ -66,7 +54,7 @@ export default function App() {
   const [reportData, setReportData] = useState(null);
   const [expandedReportRow, setExpandedReportRow] = useState(null);
 
-  const version = '1.6';
+  const version = '1.7';
 
   // Daten laden
   useEffect(() => {
@@ -173,19 +161,16 @@ export default function App() {
 
   // Teamverwaltung (mit Bearbeiten)
   const startEditPlayer = (player) => {
-    setEditPlayerId(player.name + (player.joinDate || ''));
-    setPlayerDraft({ ...player, note: player.note || '', joinDate: player.joinDate || '' });
+    setEditPlayerId(player.name);
+    setPlayerDraft({ ...player, note: player.note || '' });
   };
   const saveEditPlayer = () => {
-    const idx = players.findIndex(
-      p => p.name + (p.joinDate || '') === editPlayerId
-    );
+    const idx = players.findIndex(p => p.name === editPlayerId);
     if (idx === -1) return;
     const updated = [...players];
     updated[idx] = {
       ...playerDraft,
-      note: typeof playerDraft.note === 'string' ? playerDraft.note : '',
-      joinDate: typeof playerDraft.joinDate === 'string' ? playerDraft.joinDate : ''
+      note: typeof playerDraft.note === 'string' ? playerDraft.note : ''
     };
     fetch(API + '/players', {
       method: 'POST',
@@ -206,25 +191,12 @@ export default function App() {
     setPlayerDraft({});
   };
 
-  // Spieler/Trainer anlegen (Teamverwaltung) – robust!
+  // Spieler/Trainer anlegen (Teamverwaltung)
   const addPlayer = () => {
     const trimmed = newName.trim();
     if (trimmed === '') {
       alert('Bitte einen Namen eingeben.');
       return;
-    }
-    let joinDateValue = '';
-    if (!newJoinDate) {
-      const today = new Date();
-      const dd = String(today.getDate()).padStart(2, '0');
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      const yyyy = today.getFullYear();
-      joinDateValue = `${dd}.${mm}.${yyyy}`;
-    } else if (typeof newJoinDate === 'string' && newJoinDate.includes('-')) {
-      const [y, m, d] = newJoinDate.split('-');
-      joinDateValue = `${d}.${m}.${y}`;
-    } else {
-      joinDateValue = typeof newJoinDate === 'string' ? newJoinDate : '';
     }
     const isTrainer = newRole === 'Trainer';
     const updated = [
@@ -232,7 +204,6 @@ export default function App() {
       {
         name: trimmed,
         isTrainer,
-        joinDate: joinDateValue || '',
         note: typeof newNote === 'string' ? newNote : ''
       },
     ];
@@ -246,7 +217,6 @@ export default function App() {
         setPlayers(saved);
         setNewName('');
         setNewRole('Spieler');
-        setNewJoinDate('');
         setNewNote('');
         alert('Team-Mitglied hinzugefügt.');
       })
@@ -255,7 +225,7 @@ export default function App() {
 
   // Rolle ändern
   const changeRole = (player, role) => {
-    const idx = players.findIndex(p => p.name + (p.joinDate || '') === player.name + (player.joinDate || ''));
+    const idx = players.findIndex(p => p.name === player.name);
     if (idx === -1) return;
     const updated = [...players];
     updated[idx].isTrainer = role === 'Trainer';
@@ -272,9 +242,7 @@ export default function App() {
   // Spieler/Trainer löschen
   const deletePlayer = (player) => {
     if (window.confirm(`Team-Mitglied "${player.name}" wirklich löschen?`)) {
-      const idx = players.findIndex(
-        p => p.name + (p.joinDate || '') === player.name + (player.joinDate || '')
-      );
+      const idx = players.findIndex(p => p.name === player.name);
       if (idx === -1) return;
       const updated = [...players];
       updated.splice(idx, 1);
@@ -311,7 +279,7 @@ export default function App() {
     const dd = String(now.getDate()).padStart(2, '0');
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const yyyy = now.getFullYear();
-    const weekday = getGermanWeekday(now);
+    const weekday = ['So','Mo','Di','Mi','Do','Fr','Sa'][now.getDay()];
     const formatted = `${weekday}, ${dd}.${mm}.${yyyy}`;
     const timestamp = formatDateTime(now);
 
@@ -376,6 +344,7 @@ export default function App() {
     if (idx === -1) return;
     const updated = [...trainings];
     updated[idx].note = typeof noteValue === 'string' ? noteValue : '';
+    setTrainings(updated); // Sofort im State sichtbar!
     fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -398,7 +367,7 @@ export default function App() {
     if (!newDateValue) return;
     const [year, month, day] = newDateValue.split('-');
     const dateObj = new Date(Number(year), Number(month) - 1, Number(day));
-    const weekday = getGermanWeekday(dateObj);
+    const weekday = ['So','Mo','Di','Mi','Do','Fr','Sa'][dateObj.getDay()];
     const formatted = `${weekday}, ${String(day).padStart(2, '0')}.${String(month).padStart(2, '0')}.${year}`;
     const now = new Date();
     const timestamp = formatDateTime(now);
@@ -554,7 +523,6 @@ export default function App() {
           percent,
           details,
           showDetails: false,
-          joinDate: player.joinDate || '',
           note: player.note || '',
         };
       });
@@ -663,14 +631,8 @@ export default function App() {
               <option value="Trainer">Trainer</option>
             </select>
             <input
-              type="date"
-              value={newJoinDate}
-              onChange={(e) => setNewJoinDate(e.target.value)}
-              title="Beitrittsdatum"
-            />
-            <input
               type="text"
-              placeholder="Bemerkung (z.B. Probetraining)"
+              placeholder="Notiz / Bemerkung"
               value={newNote}
               onChange={(e) => setNewNote(e.target.value)}
             />
@@ -678,8 +640,8 @@ export default function App() {
           </div>
           <ul className="player-list">
             {trainersFirst.map((p) =>
-              editPlayerId === p.name + (p.joinDate || '') ? (
-                <li key={p.name + (p.joinDate || '')} className="edit-player-row">
+              editPlayerId === p.name ? (
+                <li key={p.name} className="edit-player-row">
                   <input
                     type="text"
                     value={playerDraft.name}
@@ -687,15 +649,9 @@ export default function App() {
                   />
                   <input
                     type="text"
-                    value={playerDraft.joinDate}
-                    onChange={e => setPlayerDraft(draft => ({ ...draft, joinDate: e.target.value }))}
-                    placeholder="Im Team seit"
-                  />
-                  <input
-                    type="text"
                     value={playerDraft.note}
                     onChange={e => setPlayerDraft(draft => ({ ...draft, note: e.target.value }))}
-                    placeholder="Bemerkung"
+                    placeholder="Notiz / Bemerkung"
                   />
                   <select
                     className="role-dropdown"
@@ -712,11 +668,10 @@ export default function App() {
                   <button className="btn-delete" onClick={cancelEditPlayer}>Abbrechen</button>
                 </li>
               ) : (
-                <li key={p.name + (p.joinDate || '')}>
+                <li key={p.name}>
                   <span className={p.isTrainer ? 'role-trainer' : 'role-player'}>
                     {p.name}
                   </span>
-                  <span className="join-date"> (Im Team seit: {p.joinDate || '-'})</span>
                   {p.note && <span className="note"> [{p.note}]</span>}
                   <div>
                     <select
@@ -952,28 +907,26 @@ export default function App() {
               <thead>
                 <tr>
                   <th>Spieler</th>
-                  <th>Im Team seit</th>
                   <th>Bemerkung</th>
                   <th>Teilnahme (%)</th>
                 </tr>
               </thead>
               <tbody>
                 {reportData.data.map((row, idx) => (
-                  <React.Fragment key={row.name + (row.joinDate || '')}>
+                  <React.Fragment key={row.name}>
                     <tr
-                      className={`report-row ${expandedReportRow === row.name + (row.joinDate || '') ? 'expanded' : ''}`}
+                      className={`report-row ${expandedReportRow === row.name ? 'expanded' : ''}`}
                       onClick={() => setExpandedReportRow(
-                        expandedReportRow === row.name + (row.joinDate || '') ? null : row.name + (row.joinDate || '')
+                        expandedReportRow === row.name ? null : row.name
                       )}
                     >
                       <td className="clickable">{row.name}</td>
-                      <td>{row.joinDate}</td>
                       <td>{row.note || ''}</td>
                       <td>{row.percent}%</td>
                     </tr>
-                    {expandedReportRow === row.name + (row.joinDate || '') && (
+                    {expandedReportRow === row.name && (
                       <tr className="report-details-row">
-                        <td colSpan="4">
+                        <td colSpan="3">
                           <ul>
                             {row.details.map((d, dIdx) => (
                               <li key={dIdx}>
