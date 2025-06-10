@@ -174,7 +174,6 @@ export default function App() {
       ...playerDraft,
       note: typeof playerDraft.note === 'string' ? playerDraft.note : ''
     };
-    setPlayers(updated); // Sofort sichtbar!
     fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -210,7 +209,6 @@ export default function App() {
         note: typeof newNote === 'string' ? newNote : ''
       },
     ];
-    setPlayers(updated); // Sofort sichtbar!
     fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -233,7 +231,6 @@ export default function App() {
     if (idx === -1) return;
     const updated = [...players];
     updated[idx].note = noteValue;
-    setPlayers(updated); // Sofort sichtbar!
     fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -253,7 +250,6 @@ export default function App() {
     if (idx === -1) return;
     const updated = [...players];
     updated[idx].isTrainer = role === 'Trainer';
-    setPlayers(updated); // Sofort sichtbar!
     fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -274,7 +270,6 @@ export default function App() {
       if (idx === -1) return;
       const updated = [...players];
       updated.splice(idx, 1);
-      setPlayers(updated); // Sofort sichtbar!
       fetch(API + '/players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -323,7 +318,6 @@ export default function App() {
         note: '',
       },
     ];
-    setTrainings(updated); // Sofort sichtbar!
     fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -349,7 +343,6 @@ export default function App() {
       if (idx === -1) return;
       const updated = [...trainings];
       updated.splice(idx, 1);
-      setTrainings(updated); // Sofort sichtbar!
       fetch(API + '/trainings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -375,7 +368,6 @@ export default function App() {
     if (idx === -1) return;
     const updated = [...trainings];
     updated[idx].note = noteValue;
-    setTrainings(updated); // Sofort sichtbar!
     fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -411,7 +403,6 @@ export default function App() {
     updated[idx].isEditing = false;
     updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
 
-    setTrainings(updated); // Sofort sichtbar!
     fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -442,7 +433,6 @@ export default function App() {
     updated[idx].participants[name] = statusIcon;
     updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
 
-    setTrainings(updated); // Sofort sichtbar!
     fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -475,7 +465,6 @@ export default function App() {
     updated[idx].trainerStatus[name] = newStatus;
     updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
 
-    setTrainings(updated); // Sofort sichtbar!
     fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
