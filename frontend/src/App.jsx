@@ -1,4 +1,3 @@
-// frontend/src/App.jsx
 import React, { useEffect, useState } from 'react';
 import './App.css';
 
@@ -12,7 +11,6 @@ const iconToText = (icon) => {
     default: return ' ZUGESAGT ABER NICHT ERSCHIENEN';
   }
 };
-
 const formatDateTime = (dateObj) => {
   const day = String(dateObj.getDate()).padStart(2, '0');
   const month = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -21,7 +19,6 @@ const formatDateTime = (dateObj) => {
   const minutes = String(dateObj.getMinutes()).padStart(2, '0');
   return `${day}.${month}.${year} ${hours}:${minutes}`;
 };
-
 const parseGermanDate = (str) => {
   const datePart = str && str.includes(',') ? str.split(', ')[1] : str;
   if (!datePart) return new Date(0);
@@ -30,71 +27,57 @@ const parseGermanDate = (str) => {
 };
 
 export default function App() {
-  // === STATES ===
+  // STATES
   const [loggedInUser, setLoggedInUser] = useState(null);
   const [loginName, setLoginName] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState('');
-
-  // Admin/Users
   const [users, setUsers] = useState([]);
   const [newUserName, setNewUserName] = useState('');
   const [newUserPass, setNewUserPass] = useState('');
-
-  // Team / Players
   const [players, setPlayers] = useState([]);
   const [showTeam, setShowTeam] = useState(false);
-  const [editPlayerName, setEditPlayerName] = useState(null);
-  const [playerDraft, setPlayerDraft] = useState({ name: '', isTrainer: false, note: '', memberSince: '' });
+  const [editPlayerId, setEditPlayerId] = useState(null);
+  const [playerDraft, setPlayerDraft] = useState({});
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState('Spieler');
   const [newNote, setNewNote] = useState('');
-  const [newMemberSince, setNewMemberSince] = useState('');
-
-  // Trainings
   const [trainings, setTrainings] = useState([]);
-  const [showTrainings, setShowTrainings] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
   const [expandedTraining, setExpandedTraining] = useState(null);
   const [editDateIdx, setEditDateIdx] = useState(null);
   const [editDateValue, setEditDateValue] = useState('');
-  const [newTrainingNote, setNewTrainingNote] = useState('');
-
-  // Filter & Search
   const [filterDate, setFilterDate] = useState('');
   const [searchText, setSearchText] = useState('');
-
-  // Report
-  const [showReport, setShowReport] = useState(false);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [reportData, setReportData] = useState(null);
   const [expandedReportRow, setExpandedReportRow] = useState(null);
+  const [showTrainings, setShowTrainings] = useState(false);
+  const [showReport, setShowReport] = useState(false);
 
-  const version = '2.0';
+  const version = '1.9';
 
-  // === LOAD INITIAL DATA ===
+  // Daten laden
   useEffect(() => {
-    fetch(API + '/users').then(r => r.json()).then(setUsers).catch(() => setUsers([]));
-    fetch(API + '/players').then(r => r.json()).then(data => {
-      setPlayers(data.map(p => ({
-        ...p,
-        note: p.note || '',
-        memberSince: p.memberSince || ''
-      })));
-    }).catch(() => setPlayers([]));
-    fetch(API + '/trainings').then(r => r.json()).then(data => {
-      setTrainings(data.map(t => ({
+    fetch(API + '/users').then(res => res.json()).then(setUsers).catch(() => setUsers([]));
+    fetch(API + '/players').then(res => res.json()).then(setPlayers).catch(() => setPlayers([]));
+    fetch(API + '/trainings').then(res => res.json()).then(data => {
+      setTrainings(Array.isArray(data) ? data.map(t => ({
         ...t,
-        note: t.note || '',
         participants: t.participants || {},
-        trainerStatus: t.trainerStatus || {}
-      })));
+        trainerStatus: t.trainerStatus || {},
+        note: typeof t.note === 'string' ? t.note : '',
+        createdBy: t.createdBy || '',
+        lastEdited: t.lastEdited || null,
+      })) : []);
     }).catch(() => setTrainings([]));
   }, []);
 
-  // === AUTH HANDLERS ===
+  // Login-Handler
   const handleLogin = () => {
-    const user = users.find(u => u.name === loginName.trim() && u.password === loginPass);
+    const trimmedName = loginName.trim();
+    const user = users.find((u) => u.name === trimmedName && u.password === loginPass);
     if (user) {
       setLoggedInUser(user.name);
       setLoginError('');
@@ -104,345 +87,936 @@ export default function App() {
       setLoginError('Falscher Benutzername oder Passwort.');
     }
   };
+
   const handleLogout = () => {
     setLoggedInUser(null);
     setShowTeam(false);
-    setShowTrainings(false);
-    setShowReport(false);
+    setShowAdmin(false);
+    setLoginError('');
   };
 
-  // === ADMIN / USER CRUD ===
+  // Nutzer anlegen
   const addNewUser = () => {
-    if (!newUserName.trim() || !newUserPass) return alert('Bitte Nutzername & Passwort angeben.');
-    const updated = [...users, { name: newUserName.trim(), password: newUserPass }];
+    const name = newUserName.trim();
+    if (!name || !newUserPass) {
+      alert('Bitte Benutzername und Passwort eingeben.');
+      return;
+    }
+    if (users.some((u) => u.name === name)) {
+      alert('Dieser Benutzername existiert bereits.');
+      return;
+    }
+    const updated = [...users, { name, password: newUserPass }];
     fetch(API + '/users', {
-      method: 'POST', headers: { 'Content-Type':'application/json' },
-      body: JSON.stringify({ reset: true, list: updated })
-    }).then(r => r.json()).then(setUsers).then(() => alert('Nutzer angelegt')).catch(() => alert('Fehler'));
-    setNewUserName(''); setNewUserPass('');
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then((saved) => {
+        setUsers(saved);
+        setNewUserName('');
+        setNewUserPass('');
+        alert('Neuer Benutzer angelegt.');
+      })
+      .catch(() => alert('Fehler beim Anlegen des Benutzers.'));
   };
 
-  // === TEAM / PLAYERS CRUD ===
-  const startEditPlayer = p => {
-    setEditPlayerName(p.name);
-    setPlayerDraft({ name: p.name, isTrainer: p.isTrainer, note: p.note, memberSince: p.memberSince });
+  const updateUserPassword = (index, newPass) => {
+    const updated = [...users];
+    updated[index].password = newPass;
+    fetch(API + '/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then((saved) => {
+        setUsers(saved);
+        alert(`Passwort für ${saved[index].name} geändert.`);
+      })
+      .catch(() => alert('Fehler beim Aktualisieren des Passworts.'));
+  };
+
+  const deleteUser = (index) => {
+    const userToDelete = users[index];
+    if (userToDelete.name === 'Matthias') {
+      alert('Den Administrator kann man nicht löschen.');
+      return;
+    }
+    if (window.confirm(`Benutzer "${userToDelete.name}" wirklich löschen?`)) {
+      const updated = [...users];
+      updated.splice(index, 1);
+      fetch(API + '/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reset: true, list: updated }),
+      })
+        .then(res => res.json())
+        .then((saved) => {
+          setUsers(saved);
+          alert('Benutzer gelöscht.');
+        })
+        .catch(() => alert('Fehler beim Löschen des Benutzers.'));
+    }
+  };
+
+  // Teamverwaltung (mit Bearbeiten & Notiz speichern onBlur)
+  const startEditPlayer = (player) => {
+    setEditPlayerId(player.name);
+    setPlayerDraft({ ...player, note: player.note || '' });
   };
   const saveEditPlayer = () => {
-    const idx = players.findIndex(p => p.name === editPlayerName);
-    if (idx < 0) return;
+    const idx = players.findIndex(p => p.name === editPlayerId);
+    if (idx === -1) return;
     const updated = [...players];
-    updated[idx] = { ...playerDraft };
+    updated[idx] = {
+      ...playerDraft,
+      note: typeof playerDraft.note === 'string' ? playerDraft.note : ''
+    };
     fetch(API + '/players', {
-      method: 'POST', headers: { 'Content-Type':'application/json' },
-      body: JSON.stringify({ reset: true, list: updated })
-    }).then(r => r.json()).then(setPlayers).then(() => alert('Spieler gespeichert')).catch(() => alert('Fehler'));
-    setEditPlayerName(null);
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then(playersFromServer => {
+        setPlayers(playersFromServer);
+        alert('Änderung gespeichert.');
+      })
+      .catch(() => alert('Fehler beim Bearbeiten.'));
+    setEditPlayerId(null);
+    setPlayerDraft({});
   };
-  const cancelEditPlayer = () => setEditPlayerName(null);
+  const cancelEditPlayer = () => {
+    setEditPlayerId(null);
+    setPlayerDraft({});
+  };
 
+  // Spieler/Trainer anlegen (Teamverwaltung)
   const addPlayer = () => {
-    if (!newName.trim()) return alert('Name angeben.');
-    const obj = { name: newName.trim(), isTrainer: newRole==='Trainer', note: newNote, memberSince: newMemberSince };
-    const updated = [...players, obj];
+    const trimmed = newName.trim();
+    if (trimmed === '') {
+      alert('Bitte einen Namen eingeben.');
+      return;
+    }
+    const isTrainer = newRole === 'Trainer';
+    const updated = [
+      ...players,
+      {
+        name: trimmed,
+        isTrainer,
+        note: typeof newNote === 'string' ? newNote : ''
+      },
+    ];
     fetch(API + '/players', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ reset:true, list:updated })
-    }).then(r=>r.json()).then(setPlayers).then(() => alert('Spieler hinzugefügt')).catch(()=>alert('Fehler'));
-    setNewName(''); setNewRole('Spieler'); setNewNote(''); setNewMemberSince('');
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then(playersFromServer => {
+        setPlayers(playersFromServer);
+        alert('Team-Mitglied hinzugefügt.');
+      })
+      .catch(() => alert('Fehler beim Hinzufügen des Team-Mitglieds.'));
+    setNewName('');
+    setNewRole('Spieler');
+    setNewNote('');
   };
 
-  const handlePlayerNoteBlur = (p, value) => {
-    const idx = players.findIndex(x => x.name === p.name);
-    if (idx<0) return;
+  // Notiz in der Teamverwaltung – SPEICHERT DAUERHAFT onBlur
+  const handlePlayerNoteBlur = (player, noteValue) => {
+    const idx = players.findIndex(p => p.name === player.name);
+    if (idx === -1) return;
     const updated = [...players];
-    updated[idx].note = value;
+    updated[idx].note = noteValue;
     fetch(API + '/players', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ reset:true, list:updated})
-    }).then(r=>r.json()).then(setPlayers).then(()=>alert('Notiz gespeichert')).catch(()=>alert('Fehler'));
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then(playersFromServer => {
+        setPlayers(playersFromServer);
+        alert('Spieler-Notiz gespeichert.');
+      })
+      .catch(() => alert('Fehler beim Speichern der Notiz.'));
   };
 
-  const changeRole = (p, rol) => {
-    const idx = players.findIndex(x=>x.name===p.name);
-    if (idx<0) return;
-    const updated=[...players]; updated[idx].isTrainer=(rol==='Trainer');
-    fetch(API + '/players',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reset:true,list:updated})})
-      .then(r=>r.json()).then(setPlayers).then(()=>alert('Rolle geändert')).catch(()=>alert('Fehler'));
+  // Rolle ändern
+  const changeRole = (player, role) => {
+    const idx = players.findIndex(p => p.name === player.name);
+    if (idx === -1) return;
+    const updated = [...players];
+    updated[idx].isTrainer = role === 'Trainer';
+    fetch(API + '/players', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then(playersFromServer => {
+        setPlayers(playersFromServer);
+        alert('Rolle geändert.');
+      })
+      .catch(() => alert('Fehler beim Ändern der Rolle.'));
   };
 
-  const deletePlayer = p => {
-    if(!window.confirm(`"${p.name}" löschen?`))return;
-    const updated=players.filter(x=>x.name!==p.name);
-    fetch(API+'/players',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reset:true,list:updated})})
-      .then(r=>r.json()).then(setPlayers).then(()=>alert('Gelöscht')).catch(()=>alert('Fehler'));
+  // Spieler/Trainer löschen
+  const deletePlayer = (player) => {
+    if (window.confirm(`Team-Mitglied "${player.name}" wirklich löschen?`)) {
+      const idx = players.findIndex(p => p.name === player.name);
+      if (idx === -1) return;
+      const updated = [...players];
+      updated.splice(idx, 1);
+      fetch(API + '/players', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reset: true, list: updated }),
+      })
+        .then(res => res.json())
+        .then(playersFromServer => {
+          setPlayers(playersFromServer);
+          alert('Team-Mitglied gelöscht.');
+        })
+        .catch(() => alert('Fehler beim Löschen des Team-Mitglieds.'));
+    }
   };
 
-  // === TRAININGS CRUD ===
+  // Trainings nach Datum absteigend sortieren
+  function sortTrainings(arr) {
+    return [...arr].sort((a, b) => {
+      const ad = (a.date || '').split(', ')[1]?.split('.').reverse().join('') || '';
+      const bd = (b.date || '').split(', ')[1]?.split('.').reverse().join('') || '';
+      return bd.localeCompare(ad);
+    });
+  }
+
+  // Neues Training (mit Notizfeld)
   const addTraining = () => {
-    if (!loggedInUser) return alert('Bitte einloggen.');
-    const now=new Date();
-    const weekday=['So','Mo','Di','Mi','Do','Fr','Sa'][now.getDay()];
-    const formatted=`${weekday}, ${String(now.getDate()).padStart(2,'0')}.${String(now.getMonth()+1).padStart(2,'0')}.${now.getFullYear()}`;
-    const obj={ date:formatted, participants:{}, trainerStatus:{}, note:newTrainingNote, createdBy:loggedInUser, lastEdited:{by:loggedInUser,at:formatDateTime(now)} };
-    const updated=[...trainings,obj];
-    fetch(API+'/trainings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reset:true,list:updated})})
-      .then(r=>r.json()).then(data=>setTrainings(data.map(t=>({...t,note:t.note||'',participants:t.participants||{},trainerStatus:t.trainerStatus||{}}))))
-      .then(()=>alert('Training angelegt')).catch(()=>alert('Fehler'));
-    setNewTrainingNote('');
-  };
-
-  const deleteTraining = t => {
-    if(!window.confirm('Training löschen?'))return;
-    const updated=trainings.filter(x=>x.date!==t.date||x.createdBy!==t.createdBy);
-    fetch(API+'/trainings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reset:true,list:updated})})
-      .then(r=>r.json()).then(data=>setTrainings(data.map(t=>({...t,note:t.note||'',participants:t.participants||{},trainerStatus:t.trainerStatus||{}}))))
-      .then(()=>alert('Training gelöscht')).catch(()=>alert('Fehler'));
-  };
-
-  const saveTrainingNote = (t, value) => {
-    const idx=trainings.findIndex(x=>x.date===t.date&&x.createdBy===t.createdBy);
-    if(idx<0)return;
-    const updated=[...trainings]; updated[idx].note=value;
-    fetch(API+'/trainings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reset:true,list:updated})})
-      .then(r=>r.json()).then(data=>setTrainings(data.map(t=>({...t,note:t.note||'',participants:t.participants||{},trainerStatus:t.trainerStatus||{}}))))
-      .then(()=>alert('Trainingsnotiz gespeichert')).catch(()=>alert('Fehler'));
-  };
-
-  const saveEditedDate = (t,newVal) => {
-    if(!newVal)return;
-    const [y,m,d]=newVal.split('-');
-    const dateObj=new Date(y,m-1,d);
-    const weekday=['So','Mo','Di','Mi','Do','Fr','Sa'][dateObj.getDay()];
-    const formatted=`${weekday}, ${String(d).padStart(2,'0')}.${String(m).padStart(2,'0')}.${y}`;
-    const idx=trainings.findIndex(x=>x.date===t.date&&x.createdBy===t.createdBy);
-    if(idx<0)return;
-    const updated=[...trainings];
-    updated[idx].date=formatted;
-    updated[idx].isEditing=false;
-    updated[idx].lastEdited={by:loggedInUser,at:formatDateTime(new Date())};
-    fetch(API+'/trainings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reset:true,list:updated})})
-      .then(r=>r.json()).then(data=>setTrainings(data.map(t=>({...t,note:t.note||'',participants:t.participants||{},trainerStatus:t.trainerStatus||{}}))))
-      .then(()=>alert('Datum aktualisiert')).catch(()=>alert('Fehler'));
-    setEditDateIdx(null);
-  };
-
-  const updateParticipation = (t,name,icon) => {
-    const now=new Date();
-    const ts=formatDateTime(now);
-    const idx=trainings.findIndex(x=>x.date===t.date&&x.createdBy===t.createdBy);
-    if(idx<0)return;
-    const updated=[...trainings];
-    updated[idx].participants={...updated[idx].participants,[name]:icon};
-    updated[idx].lastEdited={by:loggedInUser,at:ts};
-    fetch(API+'/trainings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reset:true,list:updated})})
-      .then(r=>r.json()).then(data=>setTrainings(data.map(t=>({...t,note:t.note||'',participants:t.participants||{},trainerStatus:t.trainerStatus||{}}))))
-      .then(()=>alert(`Status ${name} auf ${iconToText(icon).trim()}`)).catch(()=>alert('Fehler'));
-  };
-
-  const updateTrainerStatus = (t,name,status) => {
-    const now=new Date();
-    const ts=formatDateTime(now);
-    const idx=trainings.findIndex(x=>x.date===t.date&&x.createdBy===t.createdBy);
-    if(idx<0)return;
-    const updated=[...trainings];
-    updated[idx].trainerStatus={...updated[idx].trainerStatus,[name]:status};
-    updated[idx].lastEdited={by:loggedInUser,at:ts};
-    fetch(API+'/trainings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reset:true,list:updated})})
-      .then(r=>r.json()).then(data=>setTrainings(data.map(t=>({...t,note:t.note||'',participants:t.participants||{},trainerStatus:t.trainerStatus||{}}))))
-      .then(()=>alert(`Trainer ${name} auf ${status}`)).catch(()=>alert('Fehler'));
-  };
-
-  const sortedPlayers=[...players].sort((a,b)=>a.name.localeCompare(b.name));
-  const trainersFirst=[...sortedPlayers].sort((a,b)=>b.isTrainer - a.isTrainer);
-
-  const trainingsToShow=sortTrainings(trainings.filter(t=>{
-    let ok=true;
-    if(filterDate && t.date){
-      const dp=t.date.split(', ')[1];
-      const [y,m,d]=filterDate.split('-');
-      ok=dp===`${d}.${m}.${y}`;
+    if (!loggedInUser) {
+      alert('Bitte zuerst einloggen.');
+      return;
     }
-    if(searchText.trim()){
-      const s=searchText.trim().toLowerCase();
-      ok=ok&&((t.date||'').toLowerCase().includes(s)||(t.note||'').toLowerCase().includes(s));
-    }
-    return ok;
-  }));
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const yyyy = now.getFullYear();
+    const weekday = ['So','Mo','Di','Mi','Do','Fr','Sa'][now.getDay()];
+    const formatted = `${weekday}, ${dd}.${mm}.${yyyy}`;
+    const timestamp = formatDateTime(now);
 
-  const computeReport=()=>{
-    if(!fromDate||!toDate)return alert('Datum wählen');
-    const start=new Date(fromDate), end=new Date(toDate);
-    if(end<start)return alert('Ende>Start');
-    const inRange=trainings.filter(t=>{
-      const d=parseGermanDate(t.date);
-      return d>=start&&d<=end;
+    const updated = [
+      ...trainings,
+      {
+        date: formatted,
+        participants: {},
+        trainerStatus: {},
+        createdBy: loggedInUser,
+        lastEdited: { by: loggedInUser, at: timestamp },
+        note: '',
+      },
+    ];
+    fetch(API + '/trainings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then(trainingsFromServer => {
+        setTrainings(trainingsFromServer.map(t => ({
+          ...t,
+          participants: t.participants || {},
+          trainerStatus: t.trainerStatus || {},
+          note: typeof t.note === 'string' ? t.note : '',
+        })));
+        alert('Neues Training angelegt.');
+      })
+      .catch(() => alert('Fehler beim Anlegen des Trainings.'));
+  };
+
+  // Training löschen
+  const deleteTraining = (training) => {
+    if (window.confirm('Training wirklich löschen?')) {
+      const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
+      if (idx === -1) return;
+      const updated = [...trainings];
+      updated.splice(idx, 1);
+      fetch(API + '/trainings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reset: true, list: updated }),
+      })
+        .then(res => res.json())
+        .then(trainingsFromServer => {
+          setTrainings(trainingsFromServer.map(t => ({
+            ...t,
+            participants: t.participants || {},
+            trainerStatus: t.trainerStatus || {},
+            note: typeof t.note === 'string' ? t.note : '',
+          })));
+          alert('Training gelöscht.');
+        })
+        .catch(() => alert('Fehler beim Löschen des Trainings.'));
+    }
+  };
+
+  // Notiz Training – SPEICHERT DAUERHAFT onBlur
+  const saveTrainingNote = (training, noteValue) => {
+    const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
+    if (idx === -1) return;
+    const updated = [...trainings];
+    updated[idx].note = noteValue;
+    fetch(API + '/trainings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then(trainingsFromServer => {
+        setTrainings(trainingsFromServer.map(t => ({
+          ...t,
+          participants: t.participants || {},
+          trainerStatus: t.trainerStatus || {},
+          note: typeof t.note === 'string' ? t.note : '',
+        })));
+        alert('Trainingsnotiz gespeichert.');
+      })
+      .catch(() => alert('Fehler beim Speichern der Notiz.'));
+  };
+
+  // Trainingsdatum editieren (Abbrechen robust)
+  const saveEditedDate = (training, newDateValue) => {
+    if (!newDateValue) return;
+    const [year, month, day] = newDateValue.split('-');
+    const dateObj = new Date(Number(year), Number(month) - 1, Number(day));
+    const weekday = ['So','Mo','Di','Mi','Do','Fr','Sa'][dateObj.getDay()];
+    const formatted = `${weekday}, ${String(day).padStart(2, '0')}.${String(month).padStart(2, '0')}.${year}`;
+    const now = new Date();
+    const timestamp = formatDateTime(now);
+
+    const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
+    if (idx === -1) return;
+    const updated = [...trainings];
+    updated[idx].date = formatted;
+    updated[idx].isEditing = false;
+    updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
+
+    fetch(API + '/trainings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then(trainingsFromServer => {
+        setTrainings(trainingsFromServer.map(t => ({
+          ...t,
+          participants: t.participants || {},
+          trainerStatus: t.trainerStatus || {},
+          note: typeof t.note === 'string' ? t.note : '',
+        })));
+        alert('Datum wurde aktualisiert.');
+      })
+      .catch(() => alert('Fehler beim Aktualisieren des Datums.'));
+  };
+
+  // Teilnahme-Status (Spieler)
+  const updateParticipation = (training, name, statusIcon) => {
+    const now = new Date();
+    const timestamp = formatDateTime(now);
+
+    const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
+    if (idx === -1) return;
+    const updated = [...trainings];
+    updated[idx].participants = updated[idx].participants || {};
+    updated[idx].participants[name] = statusIcon;
+    updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
+
+    fetch(API + '/trainings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then(trainingsFromServer => {
+        setTrainings(trainingsFromServer.map(t => ({
+          ...t,
+          participants: t.participants || {},
+          trainerStatus: t.trainerStatus || {},
+          note: typeof t.note === 'string' ? t.note : '',
+        })));
+        alert(
+          `Teilnahme-Status von "${name}" im Training vom "${updated[idx].date}" wurde auf "${iconToText(statusIcon).trim()}" gesetzt.`
+        );
+      })
+      .catch(() => alert('Fehler beim Aktualisieren des Teilnahme-Status.'));
+  };
+
+  // Trainer-Status (Dropdown)
+  const updateTrainerStatus = (training, name, newStatus) => {
+    const now = new Date();
+    const timestamp = formatDateTime(now);
+
+    const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
+    if (idx === -1) return;
+    const updated = [...trainings];
+    updated[idx].trainerStatus = updated[idx].trainerStatus || {};
+    updated[idx].trainerStatus[name] = newStatus;
+    updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
+
+    fetch(API + '/trainings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then(trainingsFromServer => {
+        setTrainings(trainingsFromServer.map(t => ({
+          ...t,
+          participants: t.participants || {},
+          trainerStatus: t.trainerStatus || {},
+          note: typeof t.note === 'string' ? t.note : '',
+        })));
+        alert(
+          `Trainer-Status von "${name}" im Training vom "${updated[idx].date}" wurde auf "${newStatus}" gesetzt.`
+        );
+      })
+      .catch(() => alert('Fehler beim Aktualisieren des Trainer-Status.'));
+  };
+
+  const sortedPlayers = [...players].sort((a, b) => a.name.localeCompare(b.name));
+  const trainersFirst = [...sortedPlayers].sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0));
+
+  // Such-/Filterfunktion für Trainings
+  const trainingsToShow = sortTrainings(
+    trainings.filter((t) => {
+      let dateOk = true;
+      if (filterDate && t.date) {
+        const datePart = t.date.split(', ')[1];
+        const [y, m, d] = filterDate.split('-');
+        const comp = `${d}.${m}.${y}`;
+        dateOk = datePart === comp;
+      }
+      let searchOk = true;
+      if (searchText.trim()) {
+        const search = searchText.trim().toLowerCase();
+        searchOk =
+          (t.date && t.date.toLowerCase().includes(search)) ||
+          (t.note && t.note.toLowerCase().includes(search));
+      }
+      return dateOk && searchOk;
+    })
+  );
+
+  // === Auswertung
+  const computeReport = () => {
+    if (!fromDate || !toDate) {
+      alert('Bitte Start- und Enddatum auswählen.');
+      return;
+    }
+    const start = new Date(fromDate);
+    const end = new Date(toDate);
+    if (end < start) {
+      alert('Enddatum muss nach dem Startdatum liegen.');
+      return;
+    }
+    const trainingsInRange = trainings.filter((t) => {
+      const d = parseGermanDate(t.date);
+      return d >= start && d <= end;
     });
-    if(inRange.length===0)return alert('Keine Trainings');
-    const report=trainersFirst.filter(p=>!p.isTrainer).map(p=>{
-      let cnt=0;
-      const details=inRange.map(t=>{
-        const ic=(t.participants&&t.participants[p.name])||'—';
-        if(ic==='✅')cnt++;
-        return {date:t.date,statusText:iconToText(ic)};
+    const totalCount = trainingsInRange.length;
+    if (totalCount === 0) {
+      alert('In diesem Zeitraum wurden keine Trainings gefunden.');
+      setReportData(null);
+      return;
+    }
+    const report = trainersFirst
+      .filter((p) => !p.isTrainer)
+      .map((player) => {
+        let attendCount = 0;
+        const details = trainingsInRange.map((t) => {
+          const icon = (t.participants && t.participants[player.name]) || '—';
+          const text = iconToText(icon);
+          if (icon === '✅') attendCount += 1;
+          return { date: t.date, statusText: text };
+        });
+        const percent = Math.round((attendCount / totalCount) * 100);
+        return {
+          name: player.name,
+          percent,
+          details,
+          showDetails: false,
+          note: player.note || '',
+        };
       });
-      return { name:p.name, percent:Math.round(cnt/inRange.length*100), details, note:p.note||'' };
-    });
-    setReportData({totalTrainings:inRange.length,data:report});
-    alert('Auswertung erstellt');
+    setReportData({ totalTrainings: totalCount, data: report });
+    alert("Auswertung aktualisiert.");
   };
 
-  // RENDER
-  if(!loggedInUser){
+  // RENDERING
+  if (!loggedInUser) {
     return (
-      <div className="login-screen">
-        <h2>Bitte einloggen</h2>
-        <input placeholder="Benutzername" value={loginName} onChange={e=>setLoginName(e.target.value)}/>
-        <input type="password" placeholder="Passwort" value={loginPass} onChange={e=>setLoginPass(e.target.value)}/>
+      <div className="login-screen modern-dark-blue">
+        <div className="login-icon-row">
+          <span className="login-icon" role="img" aria-label="fußball">⚽</span>
+        </div>
+        <h1 className="login-headline">Fußball-App</h1>
+        <div className="login-version">Version {version}</div>
+        <input
+          type="text"
+          placeholder="Benutzername"
+          value={loginName}
+          onChange={(e) => setLoginName(e.target.value)}
+        />
+        <input
+          type="password"
+          placeholder="Passwort"
+          value={loginPass}
+          onChange={(e) => setLoginPass(e.target.value)}
+        />
         <button onClick={handleLogin}>Einloggen</button>
-        {loginError&&<p className="login-error">{loginError}</p>}
+        {loginError && <p className="login-error">{loginError}</p>}
       </div>
     );
   }
 
   return (
     <div className="App">
-      <header><h1>⚽ Fußball-App {version}</h1></header>
+      <header>
+        <h1>⚽ Fußball‐App <span className="blue-version">{version}</span> Trainingsteilnahme</h1>
+      </header>
+
       <div className="controls mobile-controls">
-        <button className="main-func-btn" onClick={addTraining}>➕ Training</button>
-        <button className="main-func-btn" onClick={()=>setShowTeam(!showTeam)}>👥 Team</button>
-        <button className="main-func-btn" onClick={()=>setShowTrainings(!showTrainings)}>{showTrainings?'Trainings verbergen':'Trainings anzeigen'}</button>
-        <button className="main-func-btn" onClick={()=>setShowReport(!showReport)}>{showReport?'Auswertung verbergen':'Auswertung'}</button>
-        {loggedInUser==='Matthias'&&<button className="main-func-btn" onClick={()=>setShowAdmin(!showAdmin)}>👤 Admin</button>}
+        <button className="main-func-btn" onClick={addTraining}>➕ Training hinzufügen</button>
+        <button className="main-func-btn" onClick={() => setShowTeam(!showTeam)}>👥 Team verwalten</button>
+        <button className="main-func-btn" onClick={() => setShowTrainings(!showTrainings)}>
+          {showTrainings ? "Trainingsliste verbergen" : "Gespeicherte Trainings anzeigen"}
+        </button>
+        <button className="main-func-btn" onClick={() => setShowReport(!showReport)}>
+          {showReport ? "Auswertung verbergen" : "Auswertung anzeigen"}
+        </button>
+        {loggedInUser === 'Matthias' && (
+          <button className="main-func-btn" onClick={() => setShowAdmin(!showAdmin)}>👤 Adminverwaltung</button>
+        )}
       </div>
 
-      {loggedInUser==='Matthias'&&showAdmin&&(
+      {/* === Adminbereich (nur für Matthias) === */}
+      {loggedInUser === 'Matthias' && showAdmin && (
         <section className="admin-section">
-          <h2>Admin</h2>
+          <h2>Adminbereich</h2>
           <div className="add-player-form">
-            <input placeholder="Neuer Nutzer" value={newUserName} onChange={e=>setNewUserName(e.target.value)}/>
-            <input placeholder="Passwort" value={newUserPass} onChange={e=>setNewUserPass(e.target.value)}/>
-            <button onClick={addNewUser}>➕</button>
+            <input
+              type="text"
+              placeholder="Neuer Benutzername"
+              value={newUserName}
+              onChange={(e) => setNewUserName(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="Passwort"
+              value={newUserPass}
+              onChange={(e) => setNewUserPass(e.target.value)}
+            />
+            <button onClick={addNewUser}>➕ Erstellen</button>
           </div>
-          <ul>{users.map((u,i)=>(
-            <li key={u.name}>
-              {u.name}
-              <input value={u.password} onChange={e=>updateUserPassword(i,e.target.value)}/>
-              <button onClick={()=>deleteUser(i)}>❌</button>
-            </li>
-          ))}</ul>
+          <ul className="player-list">
+            {users.map((u, idx) => (
+              <li key={u.name}>
+                <span style={{ color: '#e0e0e0' }}>{u.name}</span>
+                <input
+                  type="text"
+                  value={u.password}
+                  onChange={(e) => updateUserPassword(idx, e.target.value)}
+                  style={{
+                    marginLeft: '0.5rem',
+                    backgroundColor: '#232942',
+                    color: '#f1f1f1',
+                    border: '1px solid #2d385b',
+                    borderRadius: '4px',
+                    padding: '0.3rem 0.6rem',
+                  }}
+                />
+                <button className="btn-delete" onClick={() => deleteUser(idx)}>
+                  ❌ Löschen
+                </button>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
-      {showTeam&&(
+      {/* === Teamverwaltung für alle === */}
+      {showTeam && (
         <section className="player-management">
           <h2>Teamverwaltung</h2>
           <div className="add-player-form">
-            <input placeholder="Name" value={newName} onChange={e=>setNewName(e.target.value)}/>
-            <select value={newRole} onChange={e=>setNewRole(e.target.value)}>
-              <option>Spieler</option><option>Trainer</option>
+            <input
+              type="text"
+              placeholder="Name eingeben"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+            />
+            <select value={newRole} onChange={(e) => setNewRole(e.target.value)}>
+              <option value="Spieler">Spieler</option>
+              <option value="Trainer">Trainer</option>
             </select>
-            <input placeholder="Notiz" value={newNote} onChange={e=>setNewNote(e.target.value)}/>
-            <input placeholder="Mitglied seit (DD.MM.YYYY)" value={newMemberSince} onChange={e=>setNewMemberSince(e.target.value)}/>
-            <button onClick={addPlayer}>➕</button>
+            <input
+              type="text"
+              placeholder="Notiz / Bemerkung"
+              value={newNote}
+              onChange={(e) => setNewNote(e.target.value)}
+            />
+            <button onClick={addPlayer}>➕ Hinzufügen</button>
           </div>
-          <ul>{trainersFirst.map(p=>(
-            editPlayerId===p.name
-            ? <li key={p.name}>
-                <input value={playerDraft.name} onChange={e=>setPlayerDraft(d=>({...d,name:e.target.value}))}/>
-                <input value={playerDraft.note} onChange={e=>setPlayerDraft(d=>({...d,note:e.target.value}))} onBlur={e=>handlePlayerNoteBlur(playerDraft,e.target.value)}/>
-                <input value={playerDraft.memberSince} onChange={e=>setPlayerDraft(d=>({...d,memberSince:e.target.value}))} onBlur={e=>handlePlayerNoteBlur(playerDraft,e.target.value)}/>
-                <select value={playerDraft.isTrainer?'Trainer':'Spieler'} onChange={e=>setPlayerDraft(d=>({...d,isTrainer:e.target.value==='Trainer'}))}/>
-                <button onClick={saveEditPlayer}>💾</button>
-                <button onClick={cancelEditPlayer}>✖️</button>
-              </li>
-            : <li key={p.name}>
-                <span className={p.isTrainer?'role-trainer':'role-player'}>{p.name}</span>
-                <span className="note">[{p.note}]</span>
-                <span className="memberSince">(seit {p.memberSince||'-'})</span>
-                <select value={p.isTrainer?'Trainer':'Spieler'} onChange={e=>changeRole(p,e.target.value)}/>
-                <button onClick={()=>startEditPlayer(p)}>✏️</button>
-                <button onClick={()=>deletePlayer(p)}>❌</button>
-              </li>
-          ))}</ul>
+          <ul className="player-list">
+            {trainersFirst.map((p) =>
+              editPlayerId === p.name ? (
+                <li key={p.name} className="edit-player-row">
+                  <input
+                    type="text"
+                    value={playerDraft.name}
+                    onChange={e => setPlayerDraft(draft => ({ ...draft, name: e.target.value }))}
+                  />
+                  <input
+                    type="text"
+                    value={playerDraft.note}
+                    onChange={e => setPlayerDraft(draft => ({ ...draft, note: e.target.value }))}
+                    onBlur={e => handlePlayerNoteBlur(playerDraft, e.target.value)}
+                    placeholder="Notiz / Bemerkung"
+                  />
+                  <select
+                    className="role-dropdown"
+                    value={playerDraft.isTrainer ? 'Trainer' : 'Spieler'}
+                    onChange={e => setPlayerDraft(draft => ({
+                      ...draft,
+                      isTrainer: e.target.value === 'Trainer',
+                    }))}
+                  >
+                    <option value="Spieler">Spieler</option>
+                    <option value="Trainer">Trainer</option>
+                  </select>
+                  <button className="btn-save-players" onClick={saveEditPlayer}>💾 Speichern</button>
+                  <button className="btn-delete" onClick={cancelEditPlayer}>Abbrechen</button>
+                </li>
+              ) : (
+                <li key={p.name}>
+                  <span className={p.isTrainer ? 'role-trainer' : 'role-player'}>
+                    {p.name}
+                  </span>
+                  <input
+                    type="text"
+                    value={p.note || ""}
+                    placeholder="Notiz / Bemerkung"
+                    style={{marginLeft: '1rem', background:'#222c', color:'#fff', border:'1px solid #226', borderRadius:'4px', padding:'0.2rem'}}
+                    onChange={e => {
+                      const idx = players.findIndex(x => x.name === p.name);
+                      const updated = [...players];
+                      updated[idx].note = e.target.value;
+                      setPlayers(updated);
+                    }}
+                    onBlur={e => handlePlayerNoteBlur(p, e.target.value)}
+                  />
+                  <div>
+                    <select
+                      className="role-dropdown"
+                      value={p.isTrainer ? 'Trainer' : 'Spieler'}
+                      onChange={e => changeRole(p, e.target.value)}
+                    >
+                      <option value="Spieler">Spieler</option>
+                      <option value="Trainer">Trainer</option>
+                    </select>
+                    <button className="btn-edit" onClick={() => startEditPlayer(p)}>✏️ Bearbeiten</button>
+                    <button className="btn-delete" onClick={() => deletePlayer(p)}>❌ Löschen</button>
+                  </div>
+                </li>
+              )
+            )}
+          </ul>
         </section>
       )}
 
-      {showTrainings&&(
+      {/* === Trainings-Liste === */}
+      {showTrainings && (
         <section className="trainings-list">
           <div className="training-filter">
-            <input type="date" value={filterDate} onChange={e=>setFilterDate(e.target.value)}/>
-            <input placeholder="Suche" value={searchText} onChange={e=>setSearchText(e.target.value)}/>
-            <button onClick={()=>{setFilterDate('');setSearchText('');}}>✖️</button>
+            <label>
+              Nach Datum filtern:{' '}
+              <input
+                type="date"
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+              />
+            </label>
+            <label>
+              Suchen:{' '}
+              <input
+                type="text"
+                placeholder="Datum oder Text"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                style={{ minWidth: 140 }}
+              />
+            </label>
+            <button onClick={() => { setFilterDate(''); setSearchText(''); }}>Filter zurücksetzen</button>
           </div>
-          {trainingsToShow.map((t,i)=>(
-            <div key={t.date+i} className="training">
-              <h3 onClick={()=>setExpandedTraining(expandedTraining===i?null:i)}>
-                📅 {t.date} {expandedTraining===i?'🔽':'▶️'}
+
+          {trainingsToShow.map((t, idx) => (
+            <div key={t.date + (t.createdBy || '')} className="training">
+              <h3
+                className={`training-header ${expandedTraining === t.date + (t.createdBy || '') ? 'expanded' : ''}`}
+                onClick={() => setExpandedTraining(expandedTraining === t.date + (t.createdBy || '') ? null : t.date + (t.createdBy || ''))}
+              >
+                📅 {t.date} {expandedTraining === t.date + (t.createdBy || '') ? '🔽' : '▶️'}
               </h3>
-              {expandedTraining===i&&<>
-                <div>Ersteller: {t.createdBy}</div>
-                {t.isEditing
-                  ? <div>
-                      <input type="date" value={editDateValue} onChange={e=>setEditDateValue(e.target.value)}/>
-                      <button onClick={()=>saveEditedDate(t,editDateValue)}>💾</button>
-                      <button onClick={()=>setEditDateIdx(null)}>✖️</button>
+
+              {expandedTraining === t.date + (t.createdBy || '') && (
+                <>
+                  <div className="created-by">
+                    Ersteller: <strong>{t.createdBy || ''}</strong>
+                  </div>
+                  {t.lastEdited && (
+                    <div className="last-edited">
+                      Zuletzt bearbeitet: <strong>{t.lastEdited.at}</strong> von{' '}
+                      <strong>{t.lastEdited.by}</strong>
                     </div>
-                  : <button onClick={()=>{const parts=t.date.split(', ')[1].split('.');setEditDateValue(`${parts[2]}-${parts[1]}-${parts[0]}`);setEditDateIdx(i);}}>✏️ Datum</button>
-                }
-                <textarea
-                  rows={2}
-                  value={t.note}
-                  onChange={e=>{const u=[...trainings];u[i].note=e.target.value;setTrainings(u);}}
-                  onBlur={e=>saveTrainingNote(t,e.target.value)}
-                />
-                {/* Teilnehmer-Status & Buttons wie gehabt */}
-                <button onClick={()=>addTraining()}>➕</button>
-                <button onClick={()=>deleteTraining(t)}>🗑️</button>
-              </>}
+                  )}
+
+                  {editDateIdx === idx ? (
+                    <div className="edit-date-row">
+                      <input
+                        type="date"
+                        className="edit-date-input"
+                        value={editDateValue}
+                        onChange={e => setEditDateValue(e.target.value)}
+                      />
+                      <button
+                        className="btn-save-date"
+                        onClick={() => {
+                          saveEditedDate(t, editDateValue);
+                          setEditDateIdx(null);
+                          setEditDateValue('');
+                        }}
+                      >
+                        Speichern
+                      </button>
+                      <button
+                        className="btn-save-date"
+                        onClick={() => {
+                          setEditDateIdx(null);
+                          setEditDateValue('');
+                        }}
+                      >
+                        Abbrechen
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="edit-date-row">
+                      <button
+                        className="btn-edit-date"
+                        onClick={() => {
+                          // Setze das Datumsfeld für dieses Training
+                          const parts = (t.date || '').split(', ')[1]?.split('.') || [];
+                          setEditDateValue(parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : '');
+                          setEditDateIdx(idx);
+                        }}
+                      >
+                        ✏️ Datum anpassen
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Notizfeld */}
+                  <div className="note-field">
+                    <textarea
+                      rows={2}
+                      placeholder="Notiz zum Training (z.B. was gemacht wurde...)"
+                      value={typeof t.note === 'string' ? t.note : ''}
+                      onChange={(e) => {
+                        const idx2 = trainings.findIndex(tr => tr.date + (tr.createdBy || '') === t.date + (t.createdBy || ''));
+                        if (idx2 === -1) return;
+                        const updated = [...trainings];
+                        updated[idx2].note = e.target.value;
+                        setTrainings(updated);
+                      }}
+                      onBlur={(e) => saveTrainingNote(t, e.target.value)}
+                    />
+                  </div>
+
+                  {/* Spieler/Trainer Liste */}
+                  {!t.isEditing &&
+                    players
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0))
+                      .map((p) => {
+                        if (p.isTrainer) {
+                          const trainerStatus = (t.trainerStatus && t.trainerStatus[p.name]) || 'Abgemeldet';
+                          return (
+                            <div key={p.name + 'trainer'} className="participant">
+                              <span>
+                                {p.name} <em>({trainerStatus})</em>
+                              </span>
+                              <select
+                                className="trainer-status-dropdown"
+                                value={trainerStatus}
+                                onChange={(e) =>
+                                  updateTrainerStatus(t, p.name, e.target.value)
+                                }
+                              >
+                                <option value="Zugesagt">Zugesagt</option>
+                                <option value="Abgemeldet">Abgemeldet</option>
+                              </select>
+                            </div>
+                          );
+                        } else {
+                          const statusIcon = (t.participants && t.participants[p.name]) || '—';
+                          return (
+                            <div key={p.name} className="participant">
+                              <span>
+                                {p.name}
+                                <em className="status-text">{iconToText(statusIcon)}</em>
+                              </span>
+                              <div className="btn-part-status">
+                                {['✅', '❌', '⏳', '—'].map((icon, idx) => (
+                                  <button
+                                    key={idx}
+                                    className={statusIcon === icon ? 'active' : ''}
+                                    onClick={() => updateParticipation(t, p.name, icon)}
+                                  >
+                                    {icon}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        }
+                      })}
+
+                  {!t.isEditing && (
+                    <button
+                      className="btn-save-training"
+                      onClick={() => alert('Änderungen im Training wurden gespeichert.')}
+                    >
+                      💾 Speichern
+                    </button>
+                  )}
+
+                  {!t.isEditing && (
+                    <button
+                      className="btn-delete-training"
+                      onClick={() => deleteTraining(t)}
+                    >
+                      🗑️ Training löschen
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           ))}
-          {trainingsToShow.length===0&&<p>Keine Trainings</p>}
-        </section>
-      )}
 
-      {showReport&&(
-        <section className="report-section">
-          <h2>Auswertung</h2>
-          <div className="report-form">
-            <input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)}/>
-            <input type="date" value={toDate} onChange={e=>setToDate(e.target.value)}/>
-            <button onClick={computeReport}>▶️</button>
-          </div>
-          {reportData&&(
-            <table>
-              <thead><tr><th>Spieler</th><th>Notiz</th><th>%</th></tr></thead>
-              <tbody>
-                {reportData.data.map(r=>(
-                  <tr key={r.name}>
-                    <td>{r.name}</td>
-                    <td>{r.note}</td>
-                    <td>{r.percent}%</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {trainingsToShow.length === 0 && (
+            <p className="no-trainings">Keine Trainings gefunden{filterDate || searchText ? ' für diesen Filter.' : '.'}</p>
           )}
         </section>
       )}
 
+      {/* === Auswertung === */}
+      {showReport && (
+        <section className="report-section">
+          <h2>Auswertung</h2>
+          <div className="report-form">
+            <label>
+              Von:{' '}
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
+            </label>
+            <label>
+              Bis:{' '}
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+              />
+            </label>
+            <button onClick={computeReport}>Auswertung anzeigen</button>
+          </div>
+
+          {reportData && (
+            <div className="report-results">
+              <p>
+                {reportData.totalTrainings} Training
+                {reportData.totalTrainings !== 1 ? 's' : ''} im Zeitraum.
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Spieler</th>
+                    <th>Bemerkung</th>
+                    <th>Teilnahme (%)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reportData.data.map((row, idx) => (
+                    <React.Fragment key={row.name}>
+                      <tr
+                        className={`report-row ${expandedReportRow === row.name ? 'expanded' : ''}`}
+                        onClick={() => setExpandedReportRow(
+                          expandedReportRow === row.name ? null : row.name
+                        )}
+                      >
+                        <td className="clickable">{row.name}</td>
+                        <td>{row.note || ''}</td>
+                        <td>{row.percent}%</td>
+                      </tr>
+                      {expandedReportRow === row.name && (
+                        <tr className="report-details-row">
+                          <td colSpan="3">
+                            <ul>
+                              {row.details.map((d, dIdx) => (
+                                <li key={dIdx}>
+                                  {d.date}: <strong>{d.statusText.trim()}</strong>
+                                </li>
+                              ))}
+                            </ul>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Footer und Logout ganz unten */}
       <footer>
-        <p>Ersteller: <strong>Matthias Kopf</strong></p>
-        <button onClick={handleLogout}>Logout</button>
+        <p>
+          Ersteller: <strong>Matthias Kopf</strong> | Mail:{' '}
+          <a href="mailto:matthias@head-mail.com">matthias@head-mail.com</a>
+        </p>
+        <button
+          style={{
+            margin: '2rem auto 0 auto',
+            display: 'block',
+            backgroundColor: '#1363d2',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '4px',
+            padding: '0.7rem 1.4rem',
+            cursor: 'pointer',
+            fontSize: '1.05rem',
+            boxShadow: '0 2px 10px #222a4477',
+          }}
+          onClick={handleLogout}
+        >
+          Logout
+        </button>
       </footer>
     </div>
   );
-}
-
-// Hilfsfunktion sortTrainings
-function sortTrainings(arr) {
-  return arr.slice().sort((a, b) => {
-    const ad = (a.date||'').split(', ')[1]?.split('.').reverse().join('')||'';
-    const bd = (b.date||'').split(', ')[1]?.split('.').reverse().join('')||'';
-    return bd.localeCompare(ad);
-  });
 }
