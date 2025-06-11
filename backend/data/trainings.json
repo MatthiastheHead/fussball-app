@@ -1,19 +1,12 @@
-[
-  {
-    "date": "2025-05-27",
-    "records": [
-      {
-        "name": "Matthias",
-        "status": "nimmt teil"
-      },
-      {
-        "name": "Lina",
-        "status": "nimmt teil"
-      },
-      {
-        "name": "Emma",
-        "status": "nimmt teil"
-      }
-    ]
-  }
-]
+const mongoose = require('mongoose');
+
+const TrainingSchema = new mongoose.Schema({
+  date:          { type: String, required: true },
+  participants:  { type: Object, default: {} },
+  trainerStatus: { type: Object, default: {} },
+  note:          { type: String, default: "" },  // <-- NEU!
+  createdBy:     { type: String, default: "" },
+  lastEdited:    { type: Object, default: null }
+});
+
+module.exports = mongoose.model('Training', TrainingSchema);

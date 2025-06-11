@@ -1,14 +1,10 @@
-[
-  {
-    "name": "Matthias",
-    "type": "trainer"
-  },
-  {
-    "name": "Lina",
-    "type": "spieler"
-  },
-  {
-    "name": "Emma",
-    "type": "spieler"
-  }
-]
+const mongoose = require('mongoose');
+
+const PlayerSchema = new mongoose.Schema({
+  name:        { type: String, required: true },
+  type:        { type: String, required: true }, // "trainer" oder "spieler"
+  note:        { type: String, default: "" },     // <-- NEU!
+  memberSince: { type: String, default: "" }      // <-- NEU!
+});
+
+module.exports = mongoose.model('Player', PlayerSchema);
