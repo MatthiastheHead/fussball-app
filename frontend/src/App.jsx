@@ -13,19 +13,12 @@ const iconToText = (icon) => {
 };
 
 const formatDateTime = (dateObj) => {
-  const d   = String(dateObj.getDate()).padStart(2,'0');
-  const m   = String(dateObj.getMonth()+1).padStart(2,'0');
-  const y   = dateObj.getFullYear();
-  const h   = String(dateObj.getHours()).padStart(2,'0');
-  const min = String(dateObj.getMinutes()).padStart(2,'0');
-  return `${d}.${m}.${y} ${h}:${min}`;
-};
-
-const parseGermanDate = (str) => {
-  const part = str.includes(',') ? str.split(', ')[1] : str;
-  if (!part) return new Date(0);
-  const [d,m,y] = part.split('.');
-  return new Date(+y, +m-1, +d);
+  const d  = String(dateObj.getDate()).padStart(2,'0');
+  const m  = String(dateObj.getMonth()+1).padStart(2,'0');
+  const y  = dateObj.getFullYear();
+  const h  = String(dateObj.getHours()).padStart(2,'0');
+  const mm = String(dateObj.getMinutes()).padStart(2,'0');
+  return `${d}.${m}.${y} ${h}:${mm}`;
 };
 
 export default function App() {
@@ -35,13 +28,11 @@ export default function App() {
   const [loginPass,     setLoginPass]     = useState('');
   const [loginError,    setLoginError]    = useState('');
 
-  // Admin / Users
   const [users,         setUsers]         = useState([]);
   const [newUserName,   setNewUserName]   = useState('');
   const [newUserPass,   setNewUserPass]   = useState('');
   const [showAdmin,     setShowAdmin]     = useState(false);
 
-  // Team / Players
   const [players,       setPlayers]       = useState([]);
   const [showTeam,      setShowTeam]      = useState(false);
   const [editPlayer,    setEditPlayer]    = useState(null);
@@ -51,30 +42,30 @@ export default function App() {
   const [newNote,       setNewNote]       = useState('');
   const [newMemberSince,setNewMemberSince]= useState('');
 
-  // Trainings
   const [trainings,     setTrainings]     = useState([]);
   const [showTrainings, setShowTrainings] = useState(false);
   const [expandedTraining, setExpandedTraining] = useState(null);
   const [editDateIdx,   setEditDateIdx]   = useState(null);
   const [editDateValue, setEditDateValue] = useState('');
 
-  // Filters & Search
   const [filterDate,    setFilterDate]    = useState('');
   const [searchText,    setSearchText]    = useState('');
 
-  // Auswertung / Report
   const [showReport,    setShowReport]    = useState(false);
   const [fromDate,      setFromDate]      = useState('');
   const [toDate,        setToDate]        = useState('');
   const [reportData,    setReportData]    = useState(null);
-  const [expandedReportRow, setExpandedReportRow] = useState(null);
 
   const version = '2.0';
 
   // === LOAD INITIAL DATA ===
   useEffect(() => {
+    // users
     fetch(API + '/users')
-      .then(r => r.json()).then(setUsers).catch(() => setUsers([]));
+      .then(r => r.json()).then(setUsers)
+      .catch(() => setUsers([]));
+
+    // players
     fetch(API + '/players')
       .then(r => r.json())
       .then(data => setPlayers(data.map(p => ({
@@ -83,6 +74,8 @@ export default function App() {
         memberSince: p.memberSince || ''
       }))))
       .catch(() => setPlayers([]));
+
+    // trainings
     fetch(API + '/trainings')
       .then(r => r.json())
       .then(data => setTrainings(data.map(t => ({
@@ -94,9 +87,12 @@ export default function App() {
       .catch(() => setTrainings([]));
   }, []);
 
-  // === AUTH HANDLERS ===
+  // === AUTH ===
   const handleLogin = () => {
-    const user = users.find(u => u.name === loginName.trim() && u.password === loginPass);
+    const user = users.find(u =>
+      u.name === loginName.trim() &&
+      u.password === loginPass
+    );
     if (user) {
       setLoggedInUser(user.name);
       setLoginError('');
@@ -114,36 +110,46 @@ export default function App() {
     setShowAdmin(false);
   };
 
-  // === ADMIN CRUD ===
+  // === ADMIN ===
   const addNewUser = () => {
-    if (!newUserName.trim() || !newUserPass) return alert('Nutzer & Passwort angeben.');
-    const updated = [...users, { name:newUserName.trim(), password:newUserPass }];
+    if (!newUserName.trim() || !newUserPass) {
+      alert('Bitte Nutzername & Passwort eingeben');
+      return;
+    }
+    const updated = [...users, { name: newUserName.trim(), password: newUserPass }];
     fetch(API + '/users', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ reset:true, list:updated })
+      body: JSON.stringify({ reset:true, list:updated })
     })
-      .then(r => r.json()).then(setUsers).then(() => alert('Nutzer angelegt')).catch(() => alert('Fehler'));
+      .then(r => r.json()).then(setUsers)
+      .then(() => alert('Nutzer angelegt'))
+      .catch(() => alert('Fehler'));
     setNewUserName(''); setNewUserPass('');
   };
   const updateUserPassword = (i, pw) => {
-    const updated = [...users]; updated[i].password = pw;
+    const updated = [...users];
+    updated[i].password = pw;
     fetch(API + '/users', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ reset:true, list:updated })
+      body: JSON.stringify({ reset:true, list:updated })
     })
-      .then(r => r.json()).then(setUsers).then(() => alert('Passwort geändert')).catch(() => alert('Fehler'));
+      .then(r => r.json()).then(setUsers)
+      .then(() => alert('Passwort geändert'))
+      .catch(() => alert('Fehler'));
   };
   const deleteUser = i => {
     if (!window.confirm(`"${users[i].name}" wirklich löschen?`)) return;
     const updated = users.filter((_, idx) => idx !== i);
     fetch(API + '/users', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ reset:true, list:updated })
+      body: JSON.stringify({ reset:true, list:updated })
     })
-      .then(r => r.json()).then(setUsers).then(() => alert('Nutzer gelöscht')).catch(() => alert('Fehler'));
+      .then(r => r.json()).then(setUsers)
+      .then(() => alert('Nutzer gelöscht'))
+      .catch(() => alert('Fehler'));
   };
 
-  // === TEAM CRUD ===
+  // === TEAM ===
   const startEditPlayer = p => {
     setEditPlayer(p.name);
     setPlayerDraft({ ...p });
@@ -151,12 +157,15 @@ export default function App() {
   const saveEditPlayer = () => {
     const idx = players.findIndex(x => x.name === editPlayer);
     if (idx < 0) return;
-    const updated = [...players]; updated[idx] = playerDraft;
+    const updated = [...players];
+    updated[idx] = playerDraft;
     fetch(API + '/players', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ reset:true, list:updated })
+      body: JSON.stringify({ reset:true, list:updated })
     })
-      .then(r => r.json()).then(setPlayers).then(() => alert('Spieler gespeichert')).catch(() => alert('Fehler'));
+      .then(r => r.json()).then(setPlayers)
+      .then(() => alert('Spieler gespeichert'))
+      .catch(() => alert('Fehler'));
     setEditPlayer(null);
   };
   const cancelEditPlayer = () => {
@@ -165,53 +174,67 @@ export default function App() {
   };
 
   const addPlayer = () => {
-    if (!newName.trim()) return alert('Name angeben.');
-    const obj = { 
-      name:newName.trim(), 
-      isTrainer:newRole==='Trainer', 
-      note:newNote, 
-      memberSince:newMemberSince 
+    if (!newName.trim()) {
+      alert('Name eingeben');
+      return;
+    }
+    const obj = {
+      name: newName.trim(),
+      isTrainer: newRole === 'Trainer',
+      note: newNote,
+      memberSince: newMemberSince
     };
     const updated = [...players, obj];
     fetch(API + '/players', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ reset:true, list:updated })
+      body: JSON.stringify({ reset:true, list:updated })
     })
-      .then(r => r.json()).then(setPlayers).then(() => alert('Spieler hinzugefügt')).catch(() => alert('Fehler'));
+      .then(r => r.json()).then(setPlayers)
+      .then(() => alert('Spieler hinzugefügt'))
+      .catch(() => alert('Fehler'));
     setNewName(''); setNewRole('Spieler'); setNewNote(''); setNewMemberSince('');
   };
 
   const handlePlayerNoteBlur = (p, val) => {
     const idx = players.findIndex(x => x.name === p.name);
     if (idx < 0) return;
-    const updated = [...players]; updated[idx].note = val;
+    const updated = [...players];
+    updated[idx].note = val;
     fetch(API + '/players', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ reset:true, list:updated })
+      body: JSON.stringify({ reset:true, list:updated })
     })
-      .then(r => r.json()).then(setPlayers).then(() => alert('Notiz gespeichert')).catch(() => alert('Fehler'));
+      .then(r => r.json()).then(setPlayers)
+      .then(() => alert('Notiz gespeichert'))
+      .catch(() => alert('Fehler'));
   };
 
   const handleMemberSinceBlur = (p, val) => {
     const idx = players.findIndex(x => x.name === p.name);
     if (idx < 0) return;
-    const updated = [...players]; updated[idx].memberSince = val;
+    const updated = [...players];
+    updated[idx].memberSince = val;
     fetch(API + '/players', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ reset:true, list:updated })
+      body: JSON.stringify({ reset:true, list:updated })
     })
-      .then(r => r.json()).then(setPlayers).then(() => alert('Mitglied seit gespeichert')).catch(() => alert('Fehler'));
+      .then(r => r.json()).then(setPlayers)
+      .then(() => alert('Mitglied seit gespeichert'))
+      .catch(() => alert('Fehler'));
   };
 
   const changeRole = (p, role) => {
     const idx = players.findIndex(x => x.name === p.name);
     if (idx < 0) return;
-    const updated = [...players]; updated[idx].isTrainer = role==='Trainer';
+    const updated = [...players];
+    updated[idx].isTrainer = (role === 'Trainer');
     fetch(API + '/players', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ reset:true, list:updated })
+      body: JSON.stringify({ reset:true, list:updated })
     })
-      .then(r => r.json()).then(setPlayers).then(() => alert('Rolle geändert')).catch(() => alert('Fehler'));
+      .then(r => r.json()).then(setPlayers)
+      .then(() => alert('Rolle geändert'))
+      .catch(() => alert('Fehler'));
   };
 
   const deletePlayer = p => {
@@ -219,34 +242,47 @@ export default function App() {
     const updated = players.filter(x => x.name !== p.name);
     fetch(API + '/players', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ reset:true, list:updated })
+      body: JSON.stringify({ reset:true, list:updated })
     })
-      .then(r => r.json()).then(setPlayers).then(() => alert('Spieler gelöscht')).catch(() => alert('Fehler'));
+      .then(r => r.json()).then(setPlayers)
+      .then(() => alert('Spieler gelöscht'))
+      .catch(() => alert('Fehler'));
   };
 
-  // === TRAININGS CRUD ===
+  // === TRAININGS ===
   const addTraining = () => {
-    if (!loggedInUser) return alert('Bitte einloggen.');
+    if (!loggedInUser) {
+      alert('Bitte einloggen.');
+      return;
+    }
     const now = new Date();
     const d = String(now.getDate()).padStart(2,'0');
     const m = String(now.getMonth()+1).padStart(2,'0');
     const y = now.getFullYear();
     const wd = ['So','Mo','Di','Mi','Do','Fr','Sa'][now.getDay()];
     const date = `${wd}, ${d}.${m}.${y}`;
-    const obj = { date, participants:{}, trainerStatus:{}, note:'', createdBy:loggedInUser, lastEdited:{by:loggedInUser,at:formatDateTime(now)}};
+    const obj = {
+      date,
+      participants: {},
+      trainerStatus: {},
+      note: '',
+      createdBy: loggedInUser,
+      lastEdited: { by: loggedInUser, at: formatDateTime(now) }
+    };
     const updated = [...trainings, obj];
     fetch(API + '/trainings', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ reset:true, list:updated })
+      body: JSON.stringify({ reset:true, list:updated })
     })
       .then(r => r.json())
       .then(data => setTrainings(data.map(t => ({
         ...t,
-        note: t.note||'',
-        participants: t.participants||{},
-        trainerStatus: t.trainerStatus||{}
+        note: t.note || '',
+        participants: t.participants || {},
+        trainerStatus: t.trainerStatus || {}
       }))))
-      .then(() => alert('Training hinzugefügt')).catch(() => alert('Fehler'));
+      .then(() => alert('Training hinzugefügt'))
+      .catch(() => alert('Fehler'));
   };
 
   const deleteTraining = t => {
@@ -254,161 +290,197 @@ export default function App() {
     const updated = trainings.filter(x => !(x.date===t.date&&x.createdBy===t.createdBy));
     fetch(API + '/trainings', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ reset:true, list:updated })
+      body: JSON.stringify({ reset:true, list:updated })
     })
       .then(r => r.json())
       .then(data => setTrainings(data.map(t => ({
         ...t,
-        note: t.note||'',
-        participants: t.participants||{},
-        trainerStatus: t.trainerStatus||{}
+        note: t.note || '',
+        participants: t.participants || {},
+        trainerStatus: t.trainerStatus || {}
       }))))
-      .then(() => alert('Training gelöscht')).catch(() => alert('Fehler'));
+      .then(() => alert('Training gelöscht'))
+      .catch(() => alert('Fehler'));
   };
 
   const saveTrainingNote = (t, val) => {
     const idx = trainings.findIndex(x => x.date===t.date&&x.createdBy===t.createdBy);
-    if(idx<0) return;
-    const updated = [...trainings]; updated[idx].note = val;
+    if (idx < 0) return;
+    const updated = [...trainings];
+    updated[idx].note = val;
     fetch(API + '/trainings', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ reset:true, list:updated })
+      body: JSON.stringify({ reset:true, list:updated })
     })
-      .then(r=>r.json())
-      .then(data=>setTrainings(data.map(t=>({
+      .then(r => r.json())
+      .then(data => setTrainings(data.map(t => ({
         ...t,
-        note: t.note||'',
-        participants: t.participants||{},
-        trainerStatus: t.trainerStatus||{}
+        note: t.note || '',
+        participants: t.participants || {},
+        trainerStatus: t.trainerStatus || {}
       }))))
-      .then(()=>alert('Trainingsnotiz gespeichert')).catch(()=>alert('Fehler'));
+      .then(() => alert('Notiz gespeichert'))
+      .catch(() => alert('Fehler'));
   };
 
-  const saveEditedDate = (t,val) => {
-    if(!val) return;
+  const saveEditedDate = (t, val) => {
+    if (!val) return;
     const [y,m,d] = val.split('-');
-    const dateObj = new Date(y,m-1,d);
+    const dateObj = new Date(y, m-1, d);
     const wd = ['So','Mo','Di','Mi','Do','Fr','Sa'][dateObj.getDay()];
     const date = `${wd}, ${String(d).padStart(2,'0')}.${String(m).padStart(2,'0')}.${y}`;
     const now = new Date();
     const idx = trainings.findIndex(x => x.date===t.date&&x.createdBy===t.createdBy);
-    if(idx<0) return;
+    if (idx < 0) return;
     const updated = [...trainings];
     updated[idx].date = date;
     updated[idx].isEditing = false;
     updated[idx].lastEdited = { by: loggedInUser, at: formatDateTime(now) };
-    fetch(API + '/trainings',{
+    fetch(API + '/trainings', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ reset:true, list:updated })
+      body: JSON.stringify({ reset:true, list:updated })
     })
-      .then(r=>r.json())
-      .then(data=>setTrainings(data.map(t=>({
+      .then(r => r.json())
+      .then(data => setTrainings(data.map(t => ({
         ...t,
-        note: t.note||'',
-        participants: t.participants||{},
-        trainerStatus: t.trainerStatus||{}
+        note: t.note || '',
+        participants: t.participants || {},
+        trainerStatus: t.trainerStatus || {}
       }))))
-      .then(()=>alert('Datum aktualisiert')).catch(()=>alert('Fehler'));
+      .then(() => alert('Datum aktualisiert'))
+      .catch(() => alert('Fehler'));
     setEditDateIdx(null);
   };
 
-  const updateParticipation = (t,name,icon) => {
+  const updateParticipation = (t, name, icon) => {
     const now = new Date(), ts = formatDateTime(now);
     const idx = trainings.findIndex(x => x.date===t.date&&x.createdBy===t.createdBy);
-    if(idx<0) return;
+    if (idx < 0) return;
     const updated = [...trainings];
     updated[idx].participants = { ...updated[idx].participants, [name]: icon };
     updated[idx].lastEdited = { by: loggedInUser, at: ts };
-    fetch(API + '/trainings',{
+    fetch(API + '/trainings', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ reset:true, list:updated })
+      body: JSON.stringify({ reset:true, list:updated })
     })
-      .then(r=>r.json())
-      .then(data=>setTrainings(data.map(t=>({
+      .then(r => r.json())
+      .then(data => setTrainings(data.map(t => ({
         ...t,
-        note: t.note||'',
-        participants: t.participants||{},
-        trainerStatus: t.trainerStatus||{}
+        note: t.note || '',
+        participants: t.participants || {},
+        trainerStatus: t.trainerStatus || {}
       }))))
-      .then(()=>alert(`Status von "${name}" auf "${iconToText(icon).trim()}" gesetzt`))
-      .catch(()=>alert('Fehler'));
+      .then(() => alert(`Status ${name}→${iconToText(icon).trim()}`))
+      .catch(() => alert('Fehler'));
   };
 
-  const updateTrainerStatus = (t,name,status) => {
-    const now = new Date(), ts=formatDateTime(now);
+  const updateTrainerStatus = (t, name, status) => {
+    const now = new Date(), ts = formatDateTime(now);
     const idx = trainings.findIndex(x => x.date===t.date&&x.createdBy===t.createdBy);
-    if(idx<0) return;
+    if (idx < 0) return;
     const updated = [...trainings];
     updated[idx].trainerStatus = { ...updated[idx].trainerStatus, [name]: status };
     updated[idx].lastEdited = { by: loggedInUser, at: ts };
-    fetch(API + '/trainings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ reset:true, list:updated })})
-      .then(r=>r.json())
-      .then(data=>setTrainings(data.map(t=>({
+    fetch(API + '/trainings', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ reset:true, list:updated })
+    })
+      .then(r => r.json())
+      .then(data => setTrainings(data.map(t => ({
         ...t,
-        note: t.note||'',
-        participants: t.participants||{},
-        trainerStatus: t.trainerStatus||{}
+        note: t.note || '',
+        participants: t.participants || {},
+        trainerStatus: t.trainerStatus || {}
       }))))
-      .then(()=>alert(`Trainer "${name}" auf "${status}" gesetzt`))
-      .catch(()=>alert('Fehler'));
+      .then(() => alert(`Trainer ${name}→${status}`))
+      .catch(() => alert('Fehler'));
   };
 
+  // Sort & filter
   const sortedPlayers = [...players].sort((a,b)=>a.name.localeCompare(b.name));
   const trainersFirst = [...sortedPlayers].sort((a,b)=>b.isTrainer - a.isTrainer);
 
-  const trainingsToShow = sortTrainings(trainings.filter(t=>{
-    let ok=true;
-    if(filterDate && t.date){
+  const trainingsToShow = trainings.filter(t => {
+    let ok = true;
+    if (filterDate && t.date) {
       const dp = t.date.split(', ')[1];
       const [y,m,d] = filterDate.split('-');
       ok = dp === `${d}.${m}.${y}`;
     }
-    if(searchText.trim()){
+    if (searchText.trim()) {
       const s = searchText.trim().toLowerCase();
-      ok = ok && ((t.date||'').toLowerCase().includes(s) || (t.note||'').toLowerCase().includes(s));
+      ok = ok && (
+        (t.date||'').toLowerCase().includes(s) ||
+        (t.note||'').toLowerCase().includes(s)
+      );
     }
     return ok;
-  }));
+  }).sort((a,b) => {
+    const ad = (a.date||'').split(', ')[1]?.split('.').reverse().join('')||'';
+    const bd = (b.date||'').split(', ')[1]?.split('.').reverse().join('')||'';
+    return bd.localeCompare(ad);
+  });
 
   const computeReport = () => {
-    if(!fromDate || !toDate) return alert('Bitte Datum wählen');
+    if (!fromDate || !toDate) {
+      alert('Bitte Datum auswählen');
+      return;
+    }
     const start = new Date(fromDate), end = new Date(toDate);
-    if(end < start) return alert('Enddatum > Start');
-    const inR = trainings.filter(t => {
+    if (end < start) {
+      alert('Enddatum muss nach Startdatum liegen');
+      return;
+    }
+    const inR = trainingsToShow.filter(t => {
       const d = parseGermanDate(t.date);
       return d >= start && d <= end;
     });
-    if(!inR.length) return alert('Keine Trainings gefunden');
+    if (!inR.length) {
+      alert('Keine Trainings in diesem Zeitraum');
+      return;
+    }
     const report = trainersFirst.filter(p=>!p.isTrainer).map(p=>{
       let cnt=0;
-      const details = inR.map(t=> {
-        const ic = (t.participants && t.participants[p.name]) || '—';
+      const details = inR.map(t=>{
+        const ic = (t.participants&&t.participants[p.name])||'—';
         if(ic==='✅') cnt++;
-        return { date: t.date, statusText: iconToText(ic) };
+        return { date:t.date, statusText:iconToText(ic) };
       });
-      return { name:p.name, percent: Math.round(cnt/inR.length*100), details, note: p.note||'' };
+      return {
+        name: p.name,
+        percent: Math.round(cnt/inR.length*100),
+        details,
+        note: p.note||''
+      };
     });
     setReportData({ totalTrainings: inR.length, data: report });
-    alert('Auswertung erstellt');
+    alert('Auswertung fertig');
   };
 
-  // === RENDER ===
-  if(!loggedInUser){
+  // === RENDER LOGIN ===
+  if (!loggedInUser) {
     return (
       <div className="login-screen modern-dark-blue">
         <div className="login-icon-row">
-          <span role="img" aria-label="fussball" className="login-icon">⚽</span>
+          <span className="login-icon" role="img" aria-label="fussball">⚽</span>
         </div>
         <h1 className="login-headline">Fußball-App</h1>
         <div className="login-version">Version {version}</div>
-        <input placeholder="Benutzername" value={loginName} onChange={e=>setLoginName(e.target.value)} />
-        <input type="password" placeholder="Passwort" value={loginPass} onChange={e=>setLoginPass(e.target.value)} />
+        <input
+          type="text" placeholder="Benutzername"
+          value={loginName} onChange={e=>setLoginName(e.target.value)}
+        />
+        <input
+          type="password" placeholder="Passwort"
+          value={loginPass} onChange={e=>setLoginPass(e.target.value)}
+        /> 
         <button onClick={handleLogin}>Einloggen</button>
-        {loginError && <div className="login-error">{loginError}</div>}
+        {loginError && <p className="login-error">{loginError}</p>}
       </div>
     );
   }
 
+  // === RENDER APP ===
   return (
     <div className="App">
       <header>
@@ -436,7 +508,7 @@ export default function App() {
           <div className="add-player-form">
             <input placeholder="Neuer Nutzer" value={newUserName} onChange={e=>setNewUserName(e.target.value)} />
             <input placeholder="Passwort" value={newUserPass} onChange={e=>setNewUserPass(e.target.value)} />
-            <button onClick={addNewUser}>➕ Erstellen</button>
+            <button onClick={addNewUser}>➕</button>
           </div>
           <ul>
             {users.map((u,i)=>(
@@ -450,7 +522,7 @@ export default function App() {
         </section>
       )}
 
-      {/* Teamverwaltung */}
+      {/* Team */}
       {showTeam && (
         <section className="player-management">
           <h2>Teamverwaltung</h2>
@@ -461,16 +533,16 @@ export default function App() {
             </select>
             <input placeholder="Notiz" value={newNote} onChange={e=>setNewNote(e.target.value)} />
             <input placeholder="Mitglied seit" value={newMemberSince} onChange={e=>setNewMemberSince(e.target.value)} />
-            <button onClick={addPlayer}>➕ Hinzufügen</button>
+            <button onClick={addPlayer}>➕</button>
           </div>
           <ul>
             {trainersFirst.map(p=>(
               editPlayer===p.name
               ? <li key={p.name}>
                   <input value={playerDraft.name} onChange={e=>setPlayerDraft(d=>({...d,name:e.target.value}))} />
-                  <input value={playerDraft.note} onChange={e=>setPlayerDraft(d=>({...d,note:e.target.value}))} onBlur={e=>handlePlayerNoteBlur(playerDraft,e.target.value)} />
-                  <input value={playerDraft.memberSince} onChange={e=>setPlayerDraft(d=>({...d,memberSince:e.target.value}))} onBlur={e=>handleMemberSinceBlur(playerDraft,e.target.value)} />
-                  <select value={playerDraft.isTrainer?'Trainer':'Spieler'} onChange={e=>setPlayerDraft(d=>({...d,isTrainer:e.target.value==='Trainer'}))} />
+                  <input value={playerDraft.note} onChange={e=>setPlayerDraft(d=>({...d,note:e.target.value}))} onBlur={e=>handlePlayerNoteBlur(playerDraft,e.target.value)} placeholder="Notiz"/>
+                  <input value={playerDraft.memberSince} onChange={e=>setPlayerDraft(d=>({...d,memberSince:e.target.value}))} onBlur={e=>handleMemberSinceBlur(playerDraft,e.target.value)} placeholder="Mitglied seit"/>
+                  <select value={playerDraft.isTrainer?'Trainer':'Spieler'} onChange={e=>setPlayerDraft(d=>({...d,isTrainer:e.target.value==='Trainer'}))}/>
                   <button onClick={saveEditPlayer}>💾</button>
                   <button onClick={cancelEditPlayer}>✖️</button>
                 </li>
@@ -478,7 +550,7 @@ export default function App() {
                   <span className={p.isTrainer?'role-trainer':'role-player'}>{p.name}</span>
                   <span className="note">[{p.note}]</span>
                   <span className="memberSince">({p.memberSince||'-'})</span>
-                  <select value={p.isTrainer?'Trainer':'Spieler'} onChange={e=>changeRole(p,e.target.value)} />
+                  <select value={p.isTrainer?'Trainer':'Spieler'} onChange={e=>changeRole(p,e.target.value)}/>
                   <button onClick={()=>startEditPlayer(p)}>✏️</button>
                   <button onClick={()=>deletePlayer(p)}>❌</button>
                 </li>
@@ -516,9 +588,9 @@ export default function App() {
                 <textarea rows={2} placeholder="Notiz"
                   value={t.note}
                   onChange={e=>{const u=[...trainings];u[i].note=e.target.value;setTrainings(u);}}
-                  onBlur={e=>saveTrainingNote(t,e.target.value)} />
+                  onBlur={e=>saveTrainingNote(t,e.target.value)}
+                />
 
-                {/* Teilnehmer */}
                 {players.map(p=>(
                   p.isTrainer
                   ? <div key={p.name+'t'} className="participant">
@@ -544,7 +616,7 @@ export default function App() {
         </section>
       )}
 
-      {/* Report */}
+      {/* Auswertung */}
       {showReport && (
         <section className="report-section">
           <h2>Auswertung</h2>
@@ -570,7 +642,6 @@ export default function App() {
         </section>
       )}
 
-      {/* Footer */}
       <footer>
         <p>Ersteller: <strong>Matthias Kopf</strong> | <a href="mailto:matthias@head-mail.com">matthias@head-mail.com</a></p>
         <button onClick={handleLogout}>Logout</button>
@@ -579,11 +650,11 @@ export default function App() {
   );
 }
 
-// Hilfsfunktion sortTrainings
-function sortTrainings(arr) {
-  return arr.slice().sort((a, b) => {
-    const ad = (a.date||'').split(', ')[1]?.split('.').reverse().join('')||'';
-    const bd = (b.date||'').split(', ')[1]?.split('.').reverse().join('')||'';
+// Hilfsfunktion
+function sortTrainings(arr){
+  return arr.slice().sort((a,b)=>{
+    const ad=(a.date||'').split(', ')[1]?.split('.').reverse().join('')||'';
+    const bd=(b.date||'').split(', ')[1]?.split('.').reverse().join('')||'';
     return bd.localeCompare(ad);
   });
 }
