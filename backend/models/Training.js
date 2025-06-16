@@ -1,3 +1,4 @@
+// backend/models/Training.js
 const mongoose = require('mongoose');
 
 const TrainingSchema = new mongoose.Schema({
@@ -5,7 +6,7 @@ const TrainingSchema = new mongoose.Schema({
   participants:  { type: Object, default: {} },
   trainerStatus: { type: Object, default: {} },
   note:          { type: String, default: "" },
-  playerNotes:   { type: Object, default: {} }, // NEU!
+  playerNotes:   { type: Object, default: {} }, // <--- WICHTIG für Notizen pro Spieler*in!
   createdBy:     { type: String, default: "" },
   lastEdited:    { type: Object, default: null }
 });

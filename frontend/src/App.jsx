@@ -1,4 +1,4 @@
-// Teil 1 – Imports, Hilfsfunktionen, States, Daten laden, Login, Userverwaltung
+// Teil 1 – Imports, States, Hilfsfunktionen, Login & Userverwaltung
 import React, { useEffect, useState } from 'react';
 import './App.css';
 
@@ -59,7 +59,7 @@ export default function App() {
   const [showTrainings, setShowTrainings] = useState(false);
   const [showReport, setShowReport] = useState(false);
 
-  const version = '2.2';
+  const version = '2.3';
 
   // Daten laden
   useEffect(() => {
@@ -99,7 +99,7 @@ export default function App() {
     setLoginError('');
   };
 
-  // Nutzer anlegen
+  // Nutzer anlegen, Passwort ändern, löschen
   const addNewUser = () => {
     const name = newUserName.trim();
     if (!name || !newUserPass) {
@@ -164,7 +164,7 @@ export default function App() {
         .catch(() => alert('Fehler beim Löschen des Benutzers.'));
     }
   };
-  // Teamverwaltung (mit Bearbeiten & Notiz speichern onBlur)
+  // Teamverwaltung (Bearbeiten, Notiz/Mitglied seit speichern)
   const startEditPlayer = (player) => {
     setEditPlayerId(player.name);
     setPlayerDraft({ ...player, note: player.note || '', memberSince: player.memberSince || '' });
@@ -231,7 +231,7 @@ export default function App() {
     setNewMemberSince('');
   };
 
-  // Notiz – SPEICHERT DAUERHAFT onBlur
+  // Notiz/Mitglied seit – SPEICHERT DAUERHAFT onBlur
   const handlePlayerNoteBlur = (player, noteValue) => {
     const idx = players.findIndex(p => p.name === player.name);
     if (idx === -1) return;
@@ -249,8 +249,6 @@ export default function App() {
       })
       .catch(() => alert('Fehler beim Speichern der Notiz.'));
   };
-
-  // Mitglied seit – SPEICHERT DAUERHAFT onBlur
   const handlePlayerMemberSinceBlur = (player, memberSinceValue) => {
     const idx = players.findIndex(p => p.name === player.name);
     if (idx === -1) return;
@@ -266,7 +264,7 @@ export default function App() {
         setPlayers(playersFromServer);
         alert('Mitglied seit gespeichert.');
       })
-      .catch(() => alert('Fehler beim Speichern des Felds „Mitglied seit“.'));
+      .catch(() => alert('Fehler beim Speichern von „Mitglied seit“.'));
   };
 
   // Rolle ändern
@@ -362,12 +360,16 @@ export default function App() {
       .catch(() => alert('Fehler beim Anlegen des Trainings.'));
   };
 
-  // Notiz pro Person im Training speichern
+  // --- PATCH: Spieler-Notiz bleibt erhalten, wird IMMER mitgespeichert! ---
+
   const savePlayerNote = (training, playerName, noteValue) => {
     const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
     if (idx === -1) return;
     const updated = [...trainings];
-    updated[idx].playerNotes = { ...updated[idx].playerNotes, [playerName]: noteValue };
+    updated[idx] = {
+      ...updated[idx],
+      playerNotes: { ...updated[idx].playerNotes, [playerName]: noteValue },
+    };
     fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -386,12 +388,15 @@ export default function App() {
       .catch(() => alert('Fehler beim Speichern der Notiz.'));
   };
 
-  // Notiz fürs Training speichern
   const saveTrainingNote = (training, noteValue) => {
     const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
     if (idx === -1) return;
     const updated = [...trainings];
-    updated[idx].note = noteValue;
+    updated[idx] = {
+      ...updated[idx],
+      note: noteValue,
+      playerNotes: updated[idx].playerNotes || {},
+    };
     fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -410,7 +415,6 @@ export default function App() {
       .catch(() => alert('Fehler beim Speichern der Notiz.'));
   };
 
-  // Trainingsdatum editieren
   const saveEditedDate = (training, newDateValue) => {
     if (!newDateValue) return;
     const [year, month, day] = newDateValue.split('-');
@@ -423,9 +427,13 @@ export default function App() {
     const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
     if (idx === -1) return;
     const updated = [...trainings];
-    updated[idx].date = formatted;
-    updated[idx].isEditing = false;
-    updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
+    updated[idx] = {
+      ...updated[idx],
+      date: formatted,
+      isEditing: false,
+      lastEdited: { by: loggedInUser, at: timestamp },
+      playerNotes: updated[idx].playerNotes || {},
+    };
 
     fetch(API + '/trainings', {
       method: 'POST',
@@ -446,7 +454,7 @@ export default function App() {
       .catch(() => alert('Fehler beim Aktualisieren des Datums.'));
   };
 
-  // Teilnahme-Status für Person im Training
+  // --- PATCH: Statuswechsel/Teilnahme speichert Spieler-Notizen IMMER mit! ---
   const updateParticipation = (training, name, statusIcon) => {
     const now = new Date();
     const timestamp = formatDateTime(now);
@@ -454,9 +462,12 @@ export default function App() {
     const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
     if (idx === -1) return;
     const updated = [...trainings];
-    updated[idx].participants = updated[idx].participants || {};
-    updated[idx].participants[name] = statusIcon;
-    updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
+    updated[idx] = {
+      ...updated[idx],
+      participants: { ...(updated[idx].participants || {}), [name]: statusIcon },
+      playerNotes: updated[idx].playerNotes || {},
+      lastEdited: { by: loggedInUser, at: timestamp },
+    };
 
     fetch(API + '/trainings', {
       method: 'POST',
@@ -479,7 +490,6 @@ export default function App() {
       .catch(() => alert('Fehler beim Aktualisieren des Status.'));
   };
 
-  // Status für Trainer*in im Training
   const updateTrainerStatus = (training, name, newStatus) => {
     const now = new Date();
     const timestamp = formatDateTime(now);
@@ -487,9 +497,12 @@ export default function App() {
     const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
     if (idx === -1) return;
     const updated = [...trainings];
-    updated[idx].trainerStatus = updated[idx].trainerStatus || {};
-    updated[idx].trainerStatus[name] = newStatus;
-    updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
+    updated[idx] = {
+      ...updated[idx],
+      trainerStatus: { ...(updated[idx].trainerStatus || {}), [name]: newStatus },
+      playerNotes: updated[idx].playerNotes || {},
+      lastEdited: { by: loggedInUser, at: timestamp },
+    };
 
     fetch(API + '/trainings', {
       method: 'POST',
@@ -628,7 +641,7 @@ export default function App() {
         )}
       </div>
 
-      {/* === Adminbereich (nur für Matthias) === */}
+      {/* === Adminbereich === */}
       {loggedInUser === 'Matthias' && showAdmin && (
         <section className="admin-section">
           <h2>Adminbereich</h2>
@@ -895,7 +908,7 @@ export default function App() {
                     />
                   </div>
 
-                  {/* Team-Liste inkl. Notiz pro Person */}
+                  {/* Team-Liste inkl. Notiz pro Person (mobile-optimiert, Notiz unter Name, Buttonzeile darunter) */}
                   {!t.isEditing &&
                     players
                       .sort((a, b) => a.name.localeCompare(b.name))
@@ -904,20 +917,10 @@ export default function App() {
                         if (p.isTrainer) {
                           const trainerStatus = (t.trainerStatus && t.trainerStatus[p.name]) || 'Abgemeldet';
                           return (
-                            <div key={p.name + 'trainer'} className="participant">
+                            <div key={p.name + 'trainer'} className="participant participant-col">
                               <span>
                                 {p.name} <em>({trainerStatus})</em>
                               </span>
-                              <select
-                                className="trainer-status-dropdown"
-                                value={trainerStatus}
-                                onChange={(e) =>
-                                  updateTrainerStatus(t, p.name, e.target.value)
-                                }
-                              >
-                                <option value="Zugesagt">Zugesagt</option>
-                                <option value="Abgemeldet">Abgemeldet</option>
-                              </select>
                               <input
                                 type="text"
                                 placeholder="Notiz"
@@ -930,45 +933,62 @@ export default function App() {
                                   setTrainings(updated);
                                 }}
                                 onBlur={e => savePlayerNote(t, p.name, e.target.value)}
-                                style={{marginLeft: 10, minWidth: 120, background:'#222c', color:'#fff', border:'1px solid #226', borderRadius:'4px', padding:'0.2rem'}}
+                                style={{
+                                  width: "100%",
+                                  margin: "0.4rem 0 0.7rem 0",
+                                  background: '#232942', color: '#fff', border: '1px solid #226', borderRadius: '4px', padding: '0.3rem'
+                                }}
                               />
+                              <select
+                                className="trainer-status-dropdown"
+                                value={trainerStatus}
+                                onChange={(e) =>
+                                  updateTrainerStatus(t, p.name, e.target.value)
+                                }
+                                style={{width:"60%",marginTop:"0.1rem"}}
+                              >
+                                <option value="Zugesagt">Zugesagt</option>
+                                <option value="Abgemeldet">Abgemeldet</option>
+                              </select>
                             </div>
                           );
                         } else {
                           const statusIcon = (t.participants && t.participants[p.name]) || '—';
                           return (
-                            <div key={p.name} className="participant">
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', width: '100%' }}>
-                                <span>
-                                  {p.name}
-                                  <em className="status-text">{iconToText(statusIcon)}</em>
-                                </span>
-                                <div className="btn-part-status">
-                                  {['✅', '❌', '⏳', '⁉️', '—'].map((icon, idx) => (
-                                    <button
-                                      key={idx}
-                                      className={statusIcon === icon ? 'active' : ''}
-                                      onClick={() => updateParticipation(t, p.name, icon)}
-                                      title={iconToText(icon).trim()}
-                                    >
-                                      {icon}
-                                    </button>
-                                  ))}
-                                </div>
-                                <input
-                                  type="text"
-                                  placeholder="Notiz"
-                                  value={t.playerNotes?.[p.name] || ""}
-                                  onChange={e => {
-                                    const idx2 = trainings.findIndex(tr => tr.date + (tr.createdBy || '') === t.date + (t.createdBy || ''));
-                                    if (idx2 === -1) return;
-                                    const updated = [...trainings];
-                                    updated[idx2].playerNotes = { ...updated[idx2].playerNotes, [p.name]: e.target.value };
-                                    setTrainings(updated);
-                                  }}
-                                  onBlur={e => savePlayerNote(t, p.name, e.target.value)}
-                                  style={{marginLeft: 10, minWidth: 120, background:'#222c', color:'#fff', border:'1px solid #226', borderRadius:'4px', padding:'0.2rem'}}
-                                />
+                            <div key={p.name} className="participant participant-col">
+                              <span>
+                                {p.name}
+                                <em className="status-text">{iconToText(statusIcon)}</em>
+                              </span>
+                              <input
+                                type="text"
+                                placeholder="Notiz"
+                                value={t.playerNotes?.[p.name] || ""}
+                                onChange={e => {
+                                  const idx2 = trainings.findIndex(tr => tr.date + (tr.createdBy || '') === t.date + (t.createdBy || ''));
+                                  if (idx2 === -1) return;
+                                  const updated = [...trainings];
+                                  updated[idx2].playerNotes = { ...updated[idx2].playerNotes, [p.name]: e.target.value };
+                                  setTrainings(updated);
+                                }}
+                                onBlur={e => savePlayerNote(t, p.name, e.target.value)}
+                                style={{
+                                  width: "100%",
+                                  margin: "0.4rem 0 0.6rem 0",
+                                  background: '#232942', color: '#fff', border: '1px solid #226', borderRadius: '4px', padding: '0.3rem'
+                                }}
+                              />
+                              <div className="btn-part-status status-btn-row">
+                                {['✅', '❌', '⏳', '⁉️', '—'].map((icon, idx) => (
+                                  <button
+                                    key={idx}
+                                    className={statusIcon === icon ? 'active' : ''}
+                                    onClick={() => updateParticipation(t, p.name, icon)}
+                                    title={iconToText(icon).trim()}
+                                  >
+                                    {icon}
+                                  </button>
+                                ))}
                               </div>
                             </div>
                           );
