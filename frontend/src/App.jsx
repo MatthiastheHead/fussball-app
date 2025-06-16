@@ -1,4 +1,3 @@
-// Teil 1 – Imports, States, Hilfsfunktionen, Login & Userverwaltung
 import React, { useEffect, useState } from 'react';
 import './App.css';
 
@@ -9,8 +8,8 @@ const iconToText = (icon) => {
     case '✅': return ' Teilnehmend';
     case '❌': return ' Abgemeldet';
     case '⏳': return ' Keine Rückmeldung';
-    case '⁉️': return ' Keine Rückmeldung – teilnehmend';
-    default:   return ' Zugesagt aber abwesend';
+    case '⁉️': return ' Keine Rückmeldung-teilnehmend';
+    default: return ' Zugesagt aber Abwesend';
   }
 };
 const formatDateTime = (dateObj) => {
@@ -44,7 +43,7 @@ export default function App() {
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState('Spieler');
   const [newNote, setNewNote] = useState('');
-  const [newMemberSince, setNewMemberSince] = useState('');
+  const [newHinweis, setNewHinweis] = useState('');
   const [trainings, setTrainings] = useState([]);
   const [showAdmin, setShowAdmin] = useState(false);
   const [expandedTraining, setExpandedTraining] = useState(null);
@@ -59,7 +58,7 @@ export default function App() {
   const [showTrainings, setShowTrainings] = useState(false);
   const [showReport, setShowReport] = useState(false);
 
-  const version = '2.3';
+  const version = '2.2';
 
   // Daten laden
   useEffect(() => {
@@ -71,14 +70,13 @@ export default function App() {
         participants: t.participants || {},
         trainerStatus: t.trainerStatus || {},
         note: typeof t.note === 'string' ? t.note : '',
-        playerNotes: t.playerNotes || {},
         createdBy: t.createdBy || '',
         lastEdited: t.lastEdited || null,
+        playerNotes: t.playerNotes || {},
       })) : []);
     }).catch(() => setTrainings([]));
   }, []);
-
-  // Login-Handler
+  // === Login-Handler ===
   const handleLogin = () => {
     const trimmedName = loginName.trim();
     const user = users.find((u) => u.name === trimmedName && u.password === loginPass);
@@ -99,7 +97,7 @@ export default function App() {
     setLoginError('');
   };
 
-  // Nutzer anlegen, Passwort ändern, löschen
+  // Nutzer anlegen
   const addNewUser = () => {
     const name = newUserName.trim();
     if (!name || !newUserPass) {
@@ -164,10 +162,11 @@ export default function App() {
         .catch(() => alert('Fehler beim Löschen des Benutzers.'));
     }
   };
-  // Teamverwaltung (Bearbeiten, Notiz/Mitglied seit speichern)
+
+  // Teamverwaltung (Bearbeiten & Notiz/Hinweis speichern onBlur)
   const startEditPlayer = (player) => {
     setEditPlayerId(player.name);
-    setPlayerDraft({ ...player, note: player.note || '', memberSince: player.memberSince || '' });
+    setPlayerDraft({ ...player, note: player.note || '', hinweis: player.hinweis || '' });
   };
   const saveEditPlayer = () => {
     const idx = players.findIndex(p => p.name === editPlayerId);
@@ -176,7 +175,7 @@ export default function App() {
     updated[idx] = {
       ...playerDraft,
       note: typeof playerDraft.note === 'string' ? playerDraft.note : '',
-      memberSince: typeof playerDraft.memberSince === 'string' ? playerDraft.memberSince : ''
+      hinweis: typeof playerDraft.hinweis === 'string' ? playerDraft.hinweis : ''
     };
     fetch(API + '/players', {
       method: 'POST',
@@ -197,7 +196,7 @@ export default function App() {
     setPlayerDraft({});
   };
 
-  // Spieler*in/Trainer*in anlegen (Teamverwaltung)
+  // Spieler/Trainer anlegen (Teamverwaltung)
   const addPlayer = () => {
     const trimmed = newName.trim();
     if (trimmed === '') {
@@ -211,7 +210,7 @@ export default function App() {
         name: trimmed,
         isTrainer,
         note: typeof newNote === 'string' ? newNote : '',
-        memberSince: typeof newMemberSince === 'string' ? newMemberSince : ''
+        hinweis: typeof newHinweis === 'string' ? newHinweis : ''
       },
     ];
     fetch(API + '/players', {
@@ -228,10 +227,10 @@ export default function App() {
     setNewName('');
     setNewRole('Spieler');
     setNewNote('');
-    setNewMemberSince('');
+    setNewHinweis('');
   };
 
-  // Notiz/Mitglied seit – SPEICHERT DAUERHAFT onBlur
+  // Notiz in der Teamverwaltung – SPEICHERT DAUERHAFT onBlur
   const handlePlayerNoteBlur = (player, noteValue) => {
     const idx = players.findIndex(p => p.name === player.name);
     if (idx === -1) return;
@@ -249,11 +248,13 @@ export default function App() {
       })
       .catch(() => alert('Fehler beim Speichern der Notiz.'));
   };
-  const handlePlayerMemberSinceBlur = (player, memberSinceValue) => {
+
+  // Hinweis in der Teamverwaltung – SPEICHERT DAUERHAFT onBlur
+  const handlePlayerHinweisBlur = (player, hinweisValue) => {
     const idx = players.findIndex(p => p.name === player.name);
     if (idx === -1) return;
     const updated = [...players];
-    updated[idx].memberSince = memberSinceValue;
+    updated[idx].hinweis = hinweisValue;
     fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -262,9 +263,9 @@ export default function App() {
       .then(res => res.json())
       .then(playersFromServer => {
         setPlayers(playersFromServer);
-        alert('Mitglied seit gespeichert.');
+        alert('Hinweis gespeichert.');
       })
-      .catch(() => alert('Fehler beim Speichern von „Mitglied seit“.'));
+      .catch(() => alert('Fehler beim Speichern des Hinweises.'));
   };
 
   // Rolle ändern
@@ -286,7 +287,7 @@ export default function App() {
       .catch(() => alert('Fehler beim Ändern der Rolle.'));
   };
 
-  // Team-Mitglied löschen
+  // Spieler/Trainer löschen
   const deletePlayer = (player) => {
     if (window.confirm(`Team-Mitglied "${player.name}" wirklich löschen?`)) {
       const idx = players.findIndex(p => p.name === player.name);
@@ -306,6 +307,9 @@ export default function App() {
         .catch(() => alert('Fehler beim Löschen des Team-Mitglieds.'));
     }
   };
+
+  const sortedPlayers = [...players].sort((a, b) => a.name.localeCompare(b.name));
+  const trainersFirst = [...sortedPlayers].sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0));
   // Trainings nach Datum absteigend sortieren
   function sortTrainings(arr) {
     return [...arr].sort((a, b) => {
@@ -315,7 +319,7 @@ export default function App() {
     });
   }
 
-  // Neues Training (inkl. Notizfeld und playerNotes)
+  // Training anlegen
   const addTraining = () => {
     if (!loggedInUser) {
       alert('Bitte zuerst einloggen.');
@@ -335,10 +339,10 @@ export default function App() {
         date: formatted,
         participants: {},
         trainerStatus: {},
-        note: '',
-        playerNotes: {},
         createdBy: loggedInUser,
         lastEdited: { by: loggedInUser, at: timestamp },
+        note: '',
+        playerNotes: {}
       },
     ];
     fetch(API + '/trainings', {
@@ -360,43 +364,39 @@ export default function App() {
       .catch(() => alert('Fehler beim Anlegen des Trainings.'));
   };
 
-  // --- PATCH: Spieler-Notiz bleibt erhalten, wird IMMER mitgespeichert! ---
-
-  const savePlayerNote = (training, playerName, noteValue) => {
-    const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
-    if (idx === -1) return;
-    const updated = [...trainings];
-    updated[idx] = {
-      ...updated[idx],
-      playerNotes: { ...updated[idx].playerNotes, [playerName]: noteValue },
-    };
-    fetch(API + '/trainings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then(trainingsFromServer => {
-        setTrainings(trainingsFromServer.map(t => ({
-          ...t,
-          participants: t.participants || {},
-          trainerStatus: t.trainerStatus || {},
-          note: typeof t.note === 'string' ? t.note : '',
-          playerNotes: t.playerNotes || {},
-        })));
+  // Training löschen
+  const deleteTraining = (training) => {
+    if (window.confirm('Training wirklich löschen?')) {
+      const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
+      if (idx === -1) return;
+      const updated = [...trainings];
+      updated.splice(idx, 1);
+      fetch(API + '/trainings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reset: true, list: updated }),
       })
-      .catch(() => alert('Fehler beim Speichern der Notiz.'));
+        .then(res => res.json())
+        .then(trainingsFromServer => {
+          setTrainings(trainingsFromServer.map(t => ({
+            ...t,
+            participants: t.participants || {},
+            trainerStatus: t.trainerStatus || {},
+            note: typeof t.note === 'string' ? t.note : '',
+            playerNotes: t.playerNotes || {},
+          })));
+          alert('Training gelöscht.');
+        })
+        .catch(() => alert('Fehler beim Löschen des Trainings.'));
+    }
   };
 
+  // Notiz Training – SPEICHERT DAUERHAFT onBlur
   const saveTrainingNote = (training, noteValue) => {
     const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
     if (idx === -1) return;
     const updated = [...trainings];
-    updated[idx] = {
-      ...updated[idx],
-      note: noteValue,
-      playerNotes: updated[idx].playerNotes || {},
-    };
+    updated[idx].note = noteValue;
     fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -411,30 +411,17 @@ export default function App() {
           note: typeof t.note === 'string' ? t.note : '',
           playerNotes: t.playerNotes || {},
         })));
+        alert('Trainingsnotiz gespeichert.');
       })
       .catch(() => alert('Fehler beim Speichern der Notiz.'));
   };
 
-  const saveEditedDate = (training, newDateValue) => {
-    if (!newDateValue) return;
-    const [year, month, day] = newDateValue.split('-');
-    const dateObj = new Date(Number(year), Number(month) - 1, Number(day));
-    const weekday = ['So','Mo','Di','Mi','Do','Fr','Sa'][dateObj.getDay()];
-    const formatted = `${weekday}, ${String(day).padStart(2, '0')}.${String(month).padStart(2, '0')}.${year}`;
-    const now = new Date();
-    const timestamp = formatDateTime(now);
-
+  // Spieler-Notiz im Training speichern
+  const savePlayerNote = (training, playerName, noteValue) => {
     const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
     if (idx === -1) return;
     const updated = [...trainings];
-    updated[idx] = {
-      ...updated[idx],
-      date: formatted,
-      isEditing: false,
-      lastEdited: { by: loggedInUser, at: timestamp },
-      playerNotes: updated[idx].playerNotes || {},
-    };
-
+    updated[idx].playerNotes = { ...updated[idx].playerNotes, [playerName]: noteValue };
     fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -449,12 +436,12 @@ export default function App() {
           note: typeof t.note === 'string' ? t.note : '',
           playerNotes: t.playerNotes || {},
         })));
-        alert('Datum wurde aktualisiert.');
+        alert('Notiz gespeichert.');
       })
-      .catch(() => alert('Fehler beim Aktualisieren des Datums.'));
+      .catch(() => alert('Fehler beim Speichern der Spieler-Notiz.'));
   };
 
-  // --- PATCH: Statuswechsel/Teilnahme speichert Spieler-Notizen IMMER mit! ---
+  // Teilnahme-Status (Spieler)
   const updateParticipation = (training, name, statusIcon) => {
     const now = new Date();
     const timestamp = formatDateTime(now);
@@ -462,12 +449,9 @@ export default function App() {
     const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
     if (idx === -1) return;
     const updated = [...trainings];
-    updated[idx] = {
-      ...updated[idx],
-      participants: { ...(updated[idx].participants || {}), [name]: statusIcon },
-      playerNotes: updated[idx].playerNotes || {},
-      lastEdited: { by: loggedInUser, at: timestamp },
-    };
+    updated[idx].participants = updated[idx].participants || {};
+    updated[idx].participants[name] = statusIcon;
+    updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
 
     fetch(API + '/trainings', {
       method: 'POST',
@@ -487,9 +471,10 @@ export default function App() {
           `Status von "${name}" im Training vom "${updated[idx].date}" wurde auf "${iconToText(statusIcon).trim()}" gesetzt.`
         );
       })
-      .catch(() => alert('Fehler beim Aktualisieren des Status.'));
+      .catch(() => alert('Fehler beim Aktualisieren des Teilnahme-Status.'));
   };
 
+  // Trainer-Status (Dropdown)
   const updateTrainerStatus = (training, name, newStatus) => {
     const now = new Date();
     const timestamp = formatDateTime(now);
@@ -497,12 +482,9 @@ export default function App() {
     const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
     if (idx === -1) return;
     const updated = [...trainings];
-    updated[idx] = {
-      ...updated[idx],
-      trainerStatus: { ...(updated[idx].trainerStatus || {}), [name]: newStatus },
-      playerNotes: updated[idx].playerNotes || {},
-      lastEdited: { by: loggedInUser, at: timestamp },
-    };
+    updated[idx].trainerStatus = updated[idx].trainerStatus || {};
+    updated[idx].trainerStatus[name] = newStatus;
+    updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
 
     fetch(API + '/trainings', {
       method: 'POST',
@@ -519,82 +501,12 @@ export default function App() {
           playerNotes: t.playerNotes || {},
         })));
         alert(
-          `Status von "${name}" im Training vom "${updated[idx].date}" wurde auf "${newStatus}" gesetzt.`
+          `Trainer-Status von "${name}" im Training vom "${updated[idx].date}" wurde auf "${newStatus}" gesetzt.`
         );
       })
-      .catch(() => alert('Fehler beim Aktualisieren des Status.'));
+      .catch(() => alert('Fehler beim Aktualisieren des Trainer-Status.'));
   };
-  // Spieler*innen sortieren (Trainer*innen oben)
-  const sortedPlayers = [...players].sort((a, b) => a.name.localeCompare(b.name));
-  const trainersFirst = [...sortedPlayers].sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0));
-
-  // Such-/Filterfunktion für Trainings
-  const trainingsToShow = sortTrainings(
-    trainings.filter((t) => {
-      let dateOk = true;
-      if (filterDate && t.date) {
-        const datePart = t.date.split(', ')[1];
-        const [y, m, d] = filterDate.split('-');
-        const comp = `${d}.${m}.${y}`;
-        dateOk = datePart === comp;
-      }
-      let searchOk = true;
-      if (searchText.trim()) {
-        const search = searchText.trim().toLowerCase();
-        searchOk =
-          (t.date && t.date.toLowerCase().includes(search)) ||
-          (t.note && t.note.toLowerCase().includes(search));
-      }
-      return dateOk && searchOk;
-    })
-  );
-
-  // Auswertung: Nur „Teilnehmend“ und „Keine Rückmeldung – teilnehmend“ zählen als teilgenommen
-  const computeReport = () => {
-    if (!fromDate || !toDate) {
-      alert('Bitte Start- und Enddatum auswählen.');
-      return;
-    }
-    const start = new Date(fromDate);
-    const end = new Date(toDate);
-    if (end < start) {
-      alert('Enddatum muss nach dem Startdatum liegen.');
-      return;
-    }
-    const trainingsInRange = trainings.filter((t) => {
-      const d = parseGermanDate(t.date);
-      return d >= start && d <= end;
-    });
-    const totalCount = trainingsInRange.length;
-    if (totalCount === 0) {
-      alert('In diesem Zeitraum wurden keine Trainings gefunden.');
-      setReportData(null);
-      return;
-    }
-    const report = trainersFirst
-      .filter((p) => !p.isTrainer)
-      .map((player) => {
-        let attendCount = 0;
-        const details = trainingsInRange.map((t) => {
-          const icon = (t.participants && t.participants[player.name]) || '—';
-          const text = iconToText(icon);
-          if (icon === '✅' || icon === '⁉️') attendCount += 1;
-          return { date: t.date, statusText: text };
-        });
-        const percent = Math.round((attendCount / totalCount) * 100);
-        return {
-          name: player.name,
-          percent,
-          details,
-          showDetails: false,
-          note: player.note || '',
-        };
-      });
-    setReportData({ totalTrainings: totalCount, data: report });
-    alert("Auswertung aktualisiert.");
-  };
-  // === RENDERING ===
-
+  // --- RENDERING ---
   if (!loggedInUser) {
     return (
       <div className="login-screen modern-dark-blue">
@@ -624,7 +536,7 @@ export default function App() {
   return (
     <div className="App">
       <header>
-        <h1>⚽ Fußball-App <span className="blue-version">{version}</span> Trainingsteilnahme</h1>
+        <h1>⚽ Fußball‐App <span className="blue-version">{version}</span> Trainingsteilnahme</h1>
       </header>
 
       <div className="controls mobile-controls">
@@ -641,7 +553,7 @@ export default function App() {
         )}
       </div>
 
-      {/* === Adminbereich === */}
+      {/* === Adminbereich (nur für Matthias) === */}
       {loggedInUser === 'Matthias' && showAdmin && (
         <section className="admin-section">
           <h2>Adminbereich</h2>
@@ -686,7 +598,7 @@ export default function App() {
         </section>
       )}
 
-      {/* === Teamverwaltung === */}
+      {/* === Teamverwaltung für alle === */}
       {showTeam && (
         <section className="player-management">
           <h2>Teamverwaltung</h2>
@@ -709,9 +621,9 @@ export default function App() {
             />
             <input
               type="text"
-              placeholder="Mitglied seit"
-              value={newMemberSince}
-              onChange={(e) => setNewMemberSince(e.target.value)}
+              placeholder="Hinweis"
+              value={newHinweis}
+              onChange={(e) => setNewHinweis(e.target.value)}
             />
             <button onClick={addPlayer}>➕ Hinzufügen</button>
           </div>
@@ -733,10 +645,10 @@ export default function App() {
                   />
                   <input
                     type="text"
-                    value={playerDraft.memberSince}
-                    onChange={e => setPlayerDraft(draft => ({ ...draft, memberSince: e.target.value }))}
-                    onBlur={e => handlePlayerMemberSinceBlur(playerDraft, e.target.value)}
-                    placeholder="Mitglied seit"
+                    value={playerDraft.hinweis}
+                    onChange={e => setPlayerDraft(draft => ({ ...draft, hinweis: e.target.value }))}
+                    onBlur={e => handlePlayerHinweisBlur(playerDraft, e.target.value)}
+                    placeholder="Hinweis"
                   />
                   <select
                     className="role-dropdown"
@@ -772,16 +684,16 @@ export default function App() {
                   />
                   <input
                     type="text"
-                    value={p.memberSince || ""}
-                    placeholder="Mitglied seit"
+                    value={p.hinweis || ""}
+                    placeholder="Hinweis"
                     style={{marginLeft: '1rem', background:'#222c', color:'#fff', border:'1px solid #226', borderRadius:'4px', padding:'0.2rem', minWidth: '90px'}}
                     onChange={e => {
                       const idx = players.findIndex(x => x.name === p.name);
                       const updated = [...players];
-                      updated[idx].memberSince = e.target.value;
+                      updated[idx].hinweis = e.target.value;
                       setPlayers(updated);
                     }}
-                    onBlur={e => handlePlayerMemberSinceBlur(p, e.target.value)}
+                    onBlur={e => handlePlayerHinweisBlur(p, e.target.value)}
                   />
                   <div>
                     <select
@@ -891,11 +803,11 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* Notizfeld Training */}
+                  {/* Notizfeld zum Training */}
                   <div className="note-field">
                     <textarea
                       rows={2}
-                      placeholder="Notiz zum Training"
+                      placeholder="Notiz zum Training (z.B. was gemacht wurde...)"
                       value={typeof t.note === 'string' ? t.note : ''}
                       onChange={(e) => {
                         const idx2 = trainings.findIndex(tr => tr.date + (tr.createdBy || '') === t.date + (t.createdBy || ''));
@@ -908,21 +820,37 @@ export default function App() {
                     />
                   </div>
 
-                  {/* Team-Liste inkl. Notiz pro Person (mobile-optimiert, Notiz unter Name, Buttonzeile darunter) */}
-                  {!t.isEditing &&
-                    players
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0))
-                      .map((p) => {
-                        if (p.isTrainer) {
-                          const trainerStatus = (t.trainerStatus && t.trainerStatus[p.name]) || 'Abgemeldet';
-                          return (
-                            <div key={p.name + 'trainer'} className="participant participant-col">
-                              <span>
-                                {p.name} <em>({trainerStatus})</em>
-                              </span>
-                              <input
-                                type="text"
+                  {/* --- Teilnehmer*innen mit Hinweis und Notiz --- */}
+                  {players
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0))
+                    .map((p) => {
+                      const isTrainer = p.isTrainer;
+                      const trainerStatus = (t.trainerStatus && t.trainerStatus[p.name]) || 'Abgemeldet';
+                      const statusIcon = (t.participants && t.participants[p.name]) || '—';
+
+                      return (
+                        <div key={p.name + (isTrainer ? 'trainer' : '')} className="participant">
+                          <div className="participant-col" style={{width: "100%"}}>
+                            <span>
+                              {p.name} {isTrainer ? <em>({trainerStatus})</em> : <em className="status-text">{iconToText(statusIcon)}</em>}
+                            </span>
+                            {/* Hinweis schreibgeschützt */}
+                            <input
+                              type="text"
+                              value={p.hinweis || ""}
+                              readOnly
+                              disabled
+                              style={{
+                                background: '#181b24', color: '#bbd1e7', border: '1px solid #224a',
+                                borderRadius: '4px', margin: '0.09rem 0 0.32rem 0', fontStyle: "italic", width: "100%"
+                              }}
+                              tabIndex={-1}
+                            />
+                            {/* Notiz je Trainingsteilnahme – scrollbar */}
+                            {!isTrainer && (
+                              <textarea
+                                rows={2}
                                 placeholder="Notiz"
                                 value={t.playerNotes?.[p.name] || ""}
                                 onChange={e => {
@@ -934,66 +862,41 @@ export default function App() {
                                 }}
                                 onBlur={e => savePlayerNote(t, p.name, e.target.value)}
                                 style={{
-                                  width: "100%",
-                                  margin: "0.4rem 0 0.7rem 0",
-                                  background: '#232942', color: '#fff', border: '1px solid #226', borderRadius: '4px', padding: '0.3rem'
+                                  width: "100%", margin: "0.4rem 0 0.6rem 0", background: '#232942',
+                                  color: '#fff', border: '1px solid #226', borderRadius: '4px', padding: '0.3rem',
+                                  resize: 'vertical', minHeight: 38, maxHeight: 110, overflowY: 'auto'
                                 }}
                               />
+                            )}
+                            {/* Status/Buttonleiste */}
+                            {!isTrainer ? (
+                              <div className="status-btn-row">
+                                <div className="btn-part-status">
+                                  {['✅', '❌', '⏳', '⁉️', '—'].map((icon, idxBtn) => (
+                                    <button
+                                      key={idxBtn}
+                                      className={statusIcon === icon ? 'active' : ''}
+                                      onClick={() => updateParticipation(t, p.name, icon)}
+                                    >
+                                      {icon}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : (
                               <select
                                 className="trainer-status-dropdown"
                                 value={trainerStatus}
-                                onChange={(e) =>
-                                  updateTrainerStatus(t, p.name, e.target.value)
-                                }
-                                style={{width:"60%",marginTop:"0.1rem"}}
+                                onChange={e => updateTrainerStatus(t, p.name, e.target.value)}
                               >
                                 <option value="Zugesagt">Zugesagt</option>
                                 <option value="Abgemeldet">Abgemeldet</option>
                               </select>
-                            </div>
-                          );
-                        } else {
-                          const statusIcon = (t.participants && t.participants[p.name]) || '—';
-                          return (
-                            <div key={p.name} className="participant participant-col">
-                              <span>
-                                {p.name}
-                                <em className="status-text">{iconToText(statusIcon)}</em>
-                              </span>
-                              <input
-                                type="text"
-                                placeholder="Notiz"
-                                value={t.playerNotes?.[p.name] || ""}
-                                onChange={e => {
-                                  const idx2 = trainings.findIndex(tr => tr.date + (tr.createdBy || '') === t.date + (t.createdBy || ''));
-                                  if (idx2 === -1) return;
-                                  const updated = [...trainings];
-                                  updated[idx2].playerNotes = { ...updated[idx2].playerNotes, [p.name]: e.target.value };
-                                  setTrainings(updated);
-                                }}
-                                onBlur={e => savePlayerNote(t, p.name, e.target.value)}
-                                style={{
-                                  width: "100%",
-                                  margin: "0.4rem 0 0.6rem 0",
-                                  background: '#232942', color: '#fff', border: '1px solid #226', borderRadius: '4px', padding: '0.3rem'
-                                }}
-                              />
-                              <div className="btn-part-status status-btn-row">
-                                {['✅', '❌', '⏳', '⁉️', '—'].map((icon, idx) => (
-                                  <button
-                                    key={idx}
-                                    className={statusIcon === icon ? 'active' : ''}
-                                    onClick={() => updateParticipation(t, p.name, icon)}
-                                    title={iconToText(icon).trim()}
-                                  >
-                                    {icon}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        }
-                      })}
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
 
                   {!t.isEditing && (
                     <button
@@ -1007,31 +910,7 @@ export default function App() {
                   {!t.isEditing && (
                     <button
                       className="btn-delete-training"
-                      onClick={() => {
-                        if (window.confirm('Training wirklich löschen?')) {
-                          const idx = trainings.findIndex(tr => tr.date + (tr.createdBy || '') === t.date + (t.createdBy || ''));
-                          if (idx === -1) return;
-                          const updated = [...trainings];
-                          updated.splice(idx, 1);
-                          fetch(API + '/trainings', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ reset: true, list: updated }),
-                          })
-                            .then(res => res.json())
-                            .then(trainingsFromServer => {
-                              setTrainings(trainingsFromServer.map(t => ({
-                                ...t,
-                                participants: t.participants || {},
-                                trainerStatus: t.trainerStatus || {},
-                                note: typeof t.note === 'string' ? t.note : '',
-                                playerNotes: t.playerNotes || {},
-                              })));
-                              alert('Training gelöscht.');
-                            })
-                            .catch(() => alert('Fehler beim Löschen des Trainings.'));
-                        }
-                      }}
+                      onClick={() => deleteTraining(t)}
                     >
                       🗑️ Training löschen
                     </button>
@@ -1046,7 +925,6 @@ export default function App() {
           )}
         </section>
       )}
-
       {/* === Auswertung === */}
       {showReport && (
         <section className="report-section">
@@ -1081,38 +959,55 @@ export default function App() {
                 <thead>
                   <tr>
                     <th>Name</th>
+                    <th>Hinweis</th>
                     <th>Notiz</th>
                     <th>Teilnahme (%)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {reportData.data.map((row, idx) => (
-                    <React.Fragment key={row.name}>
-                      <tr
-                        className={`report-row ${expandedReportRow === row.name ? 'expanded' : ''}`}
-                        onClick={() => setExpandedReportRow(
-                          expandedReportRow === row.name ? null : row.name
-                        )}
-                      >
-                        <td className="clickable">{row.name}</td>
-                        <td>{row.note || ''}</td>
-                        <td>{row.percent}%</td>
-                      </tr>
-                      {expandedReportRow === row.name && (
-                        <tr className="report-details-row">
-                          <td colSpan="3">
-                            <ul>
-                              {row.details.map((d, dIdx) => (
-                                <li key={dIdx}>
-                                  {d.date}: <strong>{d.statusText.trim()}</strong>
-                                </li>
-                              ))}
-                            </ul>
-                          </td>
+                  {reportData.data.map((row, idx) => {
+                    const player = players.find(p => p.name === row.name);
+                    return (
+                      <React.Fragment key={row.name}>
+                        <tr
+                          className={`report-row ${expandedReportRow === row.name ? 'expanded' : ''}`}
+                          onClick={() => setExpandedReportRow(
+                            expandedReportRow === row.name ? null : row.name
+                          )}
+                        >
+                          <td className="clickable">{row.name}</td>
+                          <td>{player?.hinweis || ''}</td>
+                          <td>{row.note || ''}</td>
+                          <td>{row.percent}%</td>
                         </tr>
-                      )}
-                    </React.Fragment>
-                  ))}
+                        {expandedReportRow === row.name && (
+                          <tr className="report-details-row">
+                            <td colSpan="4">
+                              <ul>
+                                {row.details.map((d, dIdx) => (
+                                  <li
+                                    key={dIdx}
+                                    style={{ cursor: "pointer", textDecoration: "underline", color: "#6acaff" }}
+                                    onClick={() => {
+                                      const t = trainings.find(tt => tt.date === d.date);
+                                      if (t) {
+                                        setShowTrainings(true);
+                                        setExpandedTraining(t.date + (t.createdBy || ""));
+                                        window.scrollTo({ top: 0, behavior: "smooth" });
+                                      }
+                                    }}
+                                    title="Dieses Training anzeigen"
+                                  >
+                                    {d.date}: <strong>{d.statusText.trim()}</strong>
+                                  </li>
+                                ))}
+                              </ul>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1120,7 +1015,7 @@ export default function App() {
         </section>
       )}
 
-      {/* Footer und Logout */}
+      {/* Footer und Logout ganz unten */}
       <footer>
         <p>
           Ersteller: <strong>Matthias Kopf</strong> | Mail:{' '}

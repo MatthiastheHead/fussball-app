@@ -586,7 +586,6 @@ footer a {
   .controls, .mobile-controls {
     flex-direction: column;
     gap: 0.7rem;
-  }
 }
 
 @media (max-width: 370px) {
@@ -594,5 +593,12 @@ footer a {
   .participant-col span { font-size: 1.01rem; }
 }
 
-/* Übernehme die restlichen Regeln aus deiner bisherigen CSS
-   (NICHT entfernen! Nur drüberkopieren und ergänzen, damit alles zusammen bleibt) */
+.participant-col textarea {
+  resize: vertical;
+  min-height: 38px;
+  max-height: 110px;
+  overflow-y: auto;
+  font-family: inherit;
+  font-size: 1.06rem;
+}
+
