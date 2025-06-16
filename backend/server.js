@@ -18,8 +18,8 @@ mongoose
     useUnifiedTopology: true,
   })
   .then(() => {
-  console.log('✅ Mit MongoDB verbunden');
-  console.log('Aktuell verbundene DB:', mongoose.connection.name);
+    console.log('✅ Mit MongoDB verbunden');
+    console.log('Aktuell verbundene DB:', mongoose.connection.name);
   })
   .catch((err) => {
     console.error('❌ Fehler beim Verbinden mit MongoDB:', err);
@@ -140,6 +140,7 @@ app.post('/trainings', async (req, res) => {
           participants: t.participants || {},
           trainerStatus: t.trainerStatus || {},
           note: typeof t.note === 'string' ? t.note : "",
+          playerNotes: t.playerNotes || {},   // <---- WICHTIG: Notizen pro Spieler*in!
           createdBy: t.createdBy || '',
           lastEdited: t.lastEdited || null
         }))
