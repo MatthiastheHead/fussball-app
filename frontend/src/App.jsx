@@ -42,6 +42,7 @@ export default function App() {
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState('Spieler');
   const [newNote, setNewNote] = useState('');
+  const [newMemberSince, setNewMemberSince] = useState('');
   const [trainings, setTrainings] = useState([]);
   const [showAdmin, setShowAdmin] = useState(false);
   const [expandedTraining, setExpandedTraining] = useState(null);
@@ -56,7 +57,7 @@ export default function App() {
   const [showTrainings, setShowTrainings] = useState(false);
   const [showReport, setShowReport] = useState(false);
 
-  const version = '1.9';
+  const version = '2.0';
 
   // Daten laden
   useEffect(() => {
@@ -164,7 +165,7 @@ export default function App() {
   // Teamverwaltung (mit Bearbeiten & Notiz speichern onBlur)
   const startEditPlayer = (player) => {
     setEditPlayerId(player.name);
-    setPlayerDraft({ ...player, note: player.note || '' });
+    setPlayerDraft({ ...player, note: player.note || '', memberSince: player.memberSince || '' });
   };
   const saveEditPlayer = () => {
     const idx = players.findIndex(p => p.name === editPlayerId);
@@ -172,7 +173,8 @@ export default function App() {
     const updated = [...players];
     updated[idx] = {
       ...playerDraft,
-      note: typeof playerDraft.note === 'string' ? playerDraft.note : ''
+      note: typeof playerDraft.note === 'string' ? playerDraft.note : '',
+      memberSince: typeof playerDraft.memberSince === 'string' ? playerDraft.memberSince : ''
     };
     fetch(API + '/players', {
       method: 'POST',
@@ -206,7 +208,8 @@ export default function App() {
       {
         name: trimmed,
         isTrainer,
-        note: typeof newNote === 'string' ? newNote : ''
+        note: typeof newNote === 'string' ? newNote : '',
+        memberSince: typeof newMemberSince === 'string' ? newMemberSince : ''
       },
     ];
     fetch(API + '/players', {
@@ -223,6 +226,7 @@ export default function App() {
     setNewName('');
     setNewRole('Spieler');
     setNewNote('');
+    setNewMemberSince('');
   };
 
   // Notiz in der Teamverwaltung – SPEICHERT DAUERHAFT onBlur
@@ -242,6 +246,25 @@ export default function App() {
         alert('Spieler-Notiz gespeichert.');
       })
       .catch(() => alert('Fehler beim Speichern der Notiz.'));
+  };
+
+  // Mitglied seit in der Teamverwaltung – SPEICHERT DAUERHAFT onBlur
+  const handlePlayerMemberSinceBlur = (player, memberSinceValue) => {
+    const idx = players.findIndex(p => p.name === player.name);
+    if (idx === -1) return;
+    const updated = [...players];
+    updated[idx].memberSince = memberSinceValue;
+    fetch(API + '/players', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then(playersFromServer => {
+        setPlayers(playersFromServer);
+        alert('Mitglied seit gespeichert.');
+      })
+      .catch(() => alert('Fehler beim Speichern des Mitglied seit.'));
   };
 
   // Rolle ändern
@@ -667,6 +690,12 @@ export default function App() {
               value={newNote}
               onChange={(e) => setNewNote(e.target.value)}
             />
+            <input
+              type="text"
+              placeholder="Mitglied seit"
+              value={newMemberSince}
+              onChange={(e) => setNewMemberSince(e.target.value)}
+            />
             <button onClick={addPlayer}>➕ Hinzufügen</button>
           </div>
           <ul className="player-list">
@@ -684,6 +713,13 @@ export default function App() {
                     onChange={e => setPlayerDraft(draft => ({ ...draft, note: e.target.value }))}
                     onBlur={e => handlePlayerNoteBlur(playerDraft, e.target.value)}
                     placeholder="Notiz / Bemerkung"
+                  />
+                  <input
+                    type="text"
+                    value={playerDraft.memberSince}
+                    onChange={e => setPlayerDraft(draft => ({ ...draft, memberSince: e.target.value }))}
+                    onBlur={e => handlePlayerMemberSinceBlur(playerDraft, e.target.value)}
+                    placeholder="Mitglied seit"
                   />
                   <select
                     className="role-dropdown"
@@ -716,6 +752,19 @@ export default function App() {
                       setPlayers(updated);
                     }}
                     onBlur={e => handlePlayerNoteBlur(p, e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    value={p.memberSince || ""}
+                    placeholder="Mitglied seit"
+                    style={{marginLeft: '1rem', background:'#222c', color:'#fff', border:'1px solid #226', borderRadius:'4px', padding:'0.2rem', minWidth: '90px'}}
+                    onChange={e => {
+                      const idx = players.findIndex(x => x.name === p.name);
+                      const updated = [...players];
+                      updated[idx].memberSince = e.target.value;
+                      setPlayers(updated);
+                    }}
+                    onBlur={e => handlePlayerMemberSinceBlur(p, e.target.value)}
                   />
                   <div>
                     <select

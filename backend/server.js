@@ -5,7 +5,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 
-// === 1) Überprüfung der Umgebung ===
+// === 1) Überprüfung der Umgebung ===
 if (!process.env.MONGODB_URI) {
   console.error('❌ Keine MONGODB_URI in .env gefunden!');
   process.exit(1);
@@ -18,40 +18,24 @@ mongoose
     useUnifiedTopology: true,
   })
   .then(() => {
-    console.log('✅ Mit MongoDB verbunden');
+  console.log('✅ Mit MongoDB verbunden');
+  console.log('Aktuell verbundene DB:', mongoose.connection.name);
   })
   .catch((err) => {
     console.error('❌ Fehler beim Verbinden mit MongoDB:', err);
     process.exit(1);
   });
 
-// === 3) Mongoose-Schemas und Models definieren ===
-// 3.1 Schema für Benutzer (Users)
+// === 3) Mongoose-Modelle importieren ===
+const Player = require('./models/Player');
+const Training = require('./models/Training');
+
+// Users-Schema (bleibt wie gehabt)
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, unique: true },
   password: { type: String, required: true },
 });
 const User = mongoose.model('User', userSchema);
-
-// 3.2 Schema für Spieler/Trainer (Players)
-const playerSchema = new mongoose.Schema({
-  name: { type: String, required: true, unique: true },
-  isTrainer: { type: Boolean, required: true },
-});
-const Player = mongoose.model('Player', playerSchema);
-
-// 3.3 Schema für Trainings (Trainings)
-const trainingSchema = new mongoose.Schema({
-  date: { type: String, required: true },
-  participants: { type: Object, default: {} },
-  trainerStatus: { type: Object, default: {} },
-  createdBy: { type: String, default: '' },
-  lastEdited: {
-    by: { type: String, default: '' },
-    at: { type: String, default: '' },
-  },
-});
-const Training = mongoose.model('Training', trainingSchema);
 
 // === 4) Express-App konfigurieren ===
 const app = express();
@@ -78,16 +62,11 @@ app.post('/users', async (req, res) => {
   if (!reset || !Array.isArray(list)) {
     return res.status(400).json({ error: 'Ungültige Anfrage: { reset: true, list: [...] } erwartet.' });
   }
-
   try {
-    // 1) Sammlung komplett löschen
     await User.deleteMany({});
-    // 2) Neue User-Dokumente anlegen
-    //    → Wir gehen davon aus, dass jedes Objekt in `list` mindestens { name, password } enthält.
     if (list.length > 0) {
       await User.insertMany(list.map(u => ({ name: u.name, password: u.password })));
     }
-    // 3) Alle neuen Benutzer aus DB holen und zurücksenden
     const saved = await User.find().lean();
     res.json(saved);
   } catch (err) {
@@ -118,7 +97,12 @@ app.post('/players', async (req, res) => {
   try {
     await Player.deleteMany({});
     if (list.length > 0) {
-      await Player.insertMany(list.map(p => ({ name: p.name, isTrainer: p.isTrainer })));
+      await Player.insertMany(list.map(p => ({
+        name: p.name,
+        isTrainer: !!p.isTrainer,
+        note: typeof p.note === 'string' ? p.note : "",
+        memberSince: typeof p.memberSince === 'string' ? p.memberSince : ""
+      })));
     }
     const saved = await Player.find().lean();
     res.json(saved);
@@ -150,14 +134,14 @@ app.post('/trainings', async (req, res) => {
   try {
     await Training.deleteMany({});
     if (list.length > 0) {
-      // list ist ein Array von Objekten mit: { date, participants, trainerStatus, createdBy, lastEdited }
       await Training.insertMany(
         list.map(t => ({
           date: t.date,
           participants: t.participants || {},
           trainerStatus: t.trainerStatus || {},
+          note: typeof t.note === 'string' ? t.note : "",
           createdBy: t.createdBy || '',
-          lastEdited: t.lastEdited || { by: '', at: '' },
+          lastEdited: t.lastEdited || null
         }))
       );
     }
