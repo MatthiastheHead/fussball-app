@@ -383,7 +383,6 @@ export default function App() {
           note: typeof t.note === 'string' ? t.note : '',
           playerNotes: t.playerNotes || {},
         })));
-        // alert('Spielerinnen-Notiz gespeichert.');
       })
       .catch(() => alert('Fehler beim Speichern der Notiz.'));
   };
@@ -408,12 +407,11 @@ export default function App() {
           note: typeof t.note === 'string' ? t.note : '',
           playerNotes: t.playerNotes || {},
         })));
-        // alert('Trainingsnotiz gespeichert.');
       })
       .catch(() => alert('Fehler beim Speichern der Notiz.'));
   };
 
-  // Trainingsdatum editieren (Abbrechen robust)
+  // Trainingsdatum editieren
   const saveEditedDate = (training, newDateValue) => {
     if (!newDateValue) return;
     const [year, month, day] = newDateValue.split('-');
@@ -585,7 +583,8 @@ export default function App() {
     alert("Auswertung aktualisiert.");
   };
 
-  // RENDERING
+  // === RENDERING ===
+
   if (!loggedInUser) {
     return (
       <div className="login-screen modern-dark-blue">
@@ -635,14 +634,161 @@ export default function App() {
       {/* === Adminbereich (nur für Matthias) === */}
       {loggedInUser === 'Matthias' && showAdmin && (
         <section className="admin-section">
-          {/* ... (unverändert) ... */}
+          <h2>Adminbereich</h2>
+          <div className="add-player-form">
+            <input
+              type="text"
+              placeholder="Neuer Benutzername"
+              value={newUserName}
+              onChange={(e) => setNewUserName(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="Passwort"
+              value={newUserPass}
+              onChange={(e) => setNewUserPass(e.target.value)}
+            />
+            <button onClick={addNewUser}>➕ Erstellen</button>
+          </div>
+          <ul className="player-list">
+            {users.map((u, idx) => (
+              <li key={u.name}>
+                <span style={{ color: '#e0e0e0' }}>{u.name}</span>
+                <input
+                  type="text"
+                  value={u.password}
+                  onChange={(e) => updateUserPassword(idx, e.target.value)}
+                  style={{
+                    marginLeft: '0.5rem',
+                    backgroundColor: '#232942',
+                    color: '#f1f1f1',
+                    border: '1px solid #2d385b',
+                    borderRadius: '4px',
+                    padding: '0.3rem 0.6rem',
+                  }}
+                />
+                <button className="btn-delete" onClick={() => deleteUser(idx)}>
+                  ❌ Löschen
+                </button>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
       {/* === Teamverwaltung für alle === */}
       {showTeam && (
         <section className="player-management">
-          {/* ... (unverändert) ... */}
+          <h2>Teamverwaltung</h2>
+          <div className="add-player-form">
+            <input
+              type="text"
+              placeholder="Name eingeben"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+            />
+            <select value={newRole} onChange={(e) => setNewRole(e.target.value)}>
+              <option value="Spieler">Spieler</option>
+              <option value="Trainer">Trainer</option>
+            </select>
+            <input
+              type="text"
+              placeholder="Notiz / Bemerkung"
+              value={newNote}
+              onChange={(e) => setNewNote(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="Mitglied seit"
+              value={newMemberSince}
+              onChange={(e) => setNewMemberSince(e.target.value)}
+            />
+            <button onClick={addPlayer}>➕ Hinzufügen</button>
+          </div>
+          <ul className="player-list">
+            {trainersFirst.map((p) =>
+              editPlayerId === p.name ? (
+                <li key={p.name} className="edit-player-row">
+                  <input
+                    type="text"
+                    value={playerDraft.name}
+                    onChange={e => setPlayerDraft(draft => ({ ...draft, name: e.target.value }))}
+                  />
+                  <input
+                    type="text"
+                    value={playerDraft.note}
+                    onChange={e => setPlayerDraft(draft => ({ ...draft, note: e.target.value }))}
+                    onBlur={e => handlePlayerNoteBlur(playerDraft, e.target.value)}
+                    placeholder="Notiz / Bemerkung"
+                  />
+                  <input
+                    type="text"
+                    value={playerDraft.memberSince}
+                    onChange={e => setPlayerDraft(draft => ({ ...draft, memberSince: e.target.value }))}
+                    onBlur={e => handlePlayerMemberSinceBlur(playerDraft, e.target.value)}
+                    placeholder="Mitglied seit"
+                  />
+                  <select
+                    className="role-dropdown"
+                    value={playerDraft.isTrainer ? 'Trainer' : 'Spieler'}
+                    onChange={e => setPlayerDraft(draft => ({
+                      ...draft,
+                      isTrainer: e.target.value === 'Trainer',
+                    }))}
+                  >
+                    <option value="Spieler">Spieler</option>
+                    <option value="Trainer">Trainer</option>
+                  </select>
+                  <button className="btn-save-players" onClick={saveEditPlayer}>💾 Speichern</button>
+                  <button className="btn-delete" onClick={cancelEditPlayer}>Abbrechen</button>
+                </li>
+              ) : (
+                <li key={p.name}>
+                  <span className={p.isTrainer ? 'role-trainer' : 'role-player'}>
+                    {p.name}
+                  </span>
+                  <input
+                    type="text"
+                    value={p.note || ""}
+                    placeholder="Notiz / Bemerkung"
+                    style={{marginLeft: '1rem', background:'#222c', color:'#fff', border:'1px solid #226', borderRadius:'4px', padding:'0.2rem'}}
+                    onChange={e => {
+                      const idx = players.findIndex(x => x.name === p.name);
+                      const updated = [...players];
+                      updated[idx].note = e.target.value;
+                      setPlayers(updated);
+                    }}
+                    onBlur={e => handlePlayerNoteBlur(p, e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    value={p.memberSince || ""}
+                    placeholder="Mitglied seit"
+                    style={{marginLeft: '1rem', background:'#222c', color:'#fff', border:'1px solid #226', borderRadius:'4px', padding:'0.2rem', minWidth: '90px'}}
+                    onChange={e => {
+                      const idx = players.findIndex(x => x.name === p.name);
+                      const updated = [...players];
+                      updated[idx].memberSince = e.target.value;
+                      setPlayers(updated);
+                    }}
+                    onBlur={e => handlePlayerMemberSinceBlur(p, e.target.value)}
+                  />
+                  <div>
+                    <select
+                      className="role-dropdown"
+                      value={p.isTrainer ? 'Trainer' : 'Spieler'}
+                      onChange={e => changeRole(p, e.target.value)}
+                    >
+                      <option value="Spieler">Spieler</option>
+                      <option value="Trainer">Trainer</option>
+                    </select>
+                    <button className="btn-edit" onClick={() => startEditPlayer(p)}>✏️ Bearbeiten</button>
+                    <button className="btn-delete" onClick={() => deletePlayer(p)}>❌ Löschen</button>
+                  </div>
+                </li>
+              )
+            )}
+          </ul>
         </section>
       )}
 
@@ -775,7 +921,6 @@ export default function App() {
                                 <option value="Zugesagt">Zugesagt</option>
                                 <option value="Abgemeldet">Abgemeldet</option>
                               </select>
-                              {/* Trainer-Notiz optional */}
                               <input
                                 type="text"
                                 placeholder="Notiz zur Trainerin"
@@ -863,7 +1008,73 @@ export default function App() {
       {/* === Auswertung === */}
       {showReport && (
         <section className="report-section">
-          {/* ... (unverändert, nur iconToText/Teilnahmewertung wie oben!) ... */}
+          <h2>Auswertung</h2>
+          <div className="report-form">
+            <label>
+              Von:{' '}
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
+            </label>
+            <label>
+              Bis:{' '}
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+              />
+            </label>
+            <button onClick={computeReport}>Auswertung anzeigen</button>
+          </div>
+
+          {reportData && (
+            <div className="report-results">
+              <p>
+                {reportData.totalTrainings} Training
+                {reportData.totalTrainings !== 1 ? 's' : ''} im Zeitraum.
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Spieler</th>
+                    <th>Bemerkung</th>
+                    <th>Teilnahme (%)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reportData.data.map((row, idx) => (
+                    <React.Fragment key={row.name}>
+                      <tr
+                        className={`report-row ${expandedReportRow === row.name ? 'expanded' : ''}`}
+                        onClick={() => setExpandedReportRow(
+                          expandedReportRow === row.name ? null : row.name
+                        )}
+                      >
+                        <td className="clickable">{row.name}</td>
+                        <td>{row.note || ''}</td>
+                        <td>{row.percent}%</td>
+                      </tr>
+                      {expandedReportRow === row.name && (
+                        <tr className="report-details-row">
+                          <td colSpan="3">
+                            <ul>
+                              {row.details.map((d, dIdx) => (
+                                <li key={dIdx}>
+                                  {d.date}: <strong>{d.statusText.trim()}</strong>
+                                </li>
+                              ))}
+                            </ul>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       )}
 
@@ -894,3 +1105,5 @@ export default function App() {
     </div>
   );
 }
+
+
