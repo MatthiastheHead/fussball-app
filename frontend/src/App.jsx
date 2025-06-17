@@ -58,13 +58,12 @@ export default function App() {
   const [showTrainings, setShowTrainings] = useState(false);
   const [showReport, setShowReport] = useState(false);
 
-  const version = '2.3';
+  const version = '2.4';
 
   // Daten laden: memberSince → hinweis!
   useEffect(() => {
     fetch(API + '/users').then(res => res.json()).then(setUsers).catch(() => setUsers([]));
     fetch(API + '/players').then(res => res.json()).then(data => {
-      // memberSince => hinweis für UI
       setPlayers(data.map(p => ({
         ...p,
         hinweis: p.memberSince || ""
@@ -82,6 +81,36 @@ export default function App() {
       })) : []);
     }).catch(() => setTrainings([]));
   }, []);
+
+  // Trainings nach Datum absteigend sortieren (hilfsfunktion)
+  function sortTrainings(arr) {
+    return [...arr].sort((a, b) => {
+      const ad = (a.date || '').split(', ')[1]?.split('.').reverse().join('') || '';
+      const bd = (b.date || '').split(', ')[1]?.split('.').reverse().join('') || '';
+      return bd.localeCompare(ad);
+    });
+  }
+
+  // **DEFINITION DER trainingsToShow** (HIER war das Problem!!)
+  const trainingsToShow = sortTrainings(
+    trainings.filter((t) => {
+      let dateOk = true;
+      if (filterDate && t.date) {
+        const datePart = t.date.split(', ')[1];
+        const [y, m, d] = filterDate.split('-');
+        const comp = `${d}.${m}.${y}`;
+        dateOk = datePart === comp;
+      }
+      let searchOk = true;
+      if (searchText.trim()) {
+        const search = searchText.trim().toLowerCase();
+        searchOk =
+          (t.date && t.date.toLowerCase().includes(search)) ||
+          (t.note && t.note.toLowerCase().includes(search));
+      }
+      return dateOk && searchOk;
+    })
+  );
   // === Login-Handler ===
   const handleLogin = () => {
     const trimmedName = loginName.trim();
@@ -169,7 +198,7 @@ export default function App() {
     }
   };
 
-  // Helper: Spieler für das Backend in memberSince zurück mappen
+  // Spieler für das Backend: hinweis -> memberSince mappen
   const preparePlayersForBackend = (arr) => arr.map(({ hinweis, ...rest }) => ({
     ...rest,
     memberSince: hinweis || ""
@@ -322,15 +351,6 @@ export default function App() {
 
   const sortedPlayers = [...players].sort((a, b) => a.name.localeCompare(b.name));
   const trainersFirst = [...sortedPlayers].sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0));
-  // Trainings nach Datum absteigend sortieren
-  function sortTrainings(arr) {
-    return [...arr].sort((a, b) => {
-      const ad = (a.date || '').split(', ')[1]?.split('.').reverse().join('') || '';
-      const bd = (b.date || '').split(', ')[1]?.split('.').reverse().join('') || '';
-      return bd.localeCompare(ad);
-    });
-  }
-
   // Neues Training (mit SpielerNotes)
   const addTraining = () => {
     if (!loggedInUser) {
@@ -1060,4 +1080,49 @@ export default function App() {
       </footer>
     </div>
   );
+}
+
+// ==== Auswertung LOGIK ====
+function computeReport() {
+  if (!fromDate || !toDate) {
+    alert('Bitte Start- und Enddatum auswählen.');
+    return;
+  }
+  const start = new Date(fromDate);
+  const end = new Date(toDate);
+  if (end < start) {
+    alert('Enddatum muss nach dem Startdatum liegen.');
+    return;
+  }
+  const trainingsInRange = trainings.filter((t) => {
+    const d = parseGermanDate(t.date);
+    return d >= start && d <= end;
+  });
+  const totalCount = trainingsInRange.length;
+  if (totalCount === 0) {
+    alert('In diesem Zeitraum wurden keine Trainings gefunden.');
+    setReportData(null);
+    return;
+  }
+  const report = trainersFirst
+    .filter((p) => !p.isTrainer)
+    .map((player) => {
+      let attendCount = 0;
+      const details = trainingsInRange.map((t) => {
+        const icon = (t.participants && t.participants[player.name]) || '—';
+        const text = iconToText(icon);
+        if (icon === '✅' || icon === '⁉️') attendCount += 1;
+        return { date: t.date, statusText: text };
+      });
+      const percent = Math.round((attendCount / totalCount) * 100);
+      return {
+        name: player.name,
+        percent,
+        details,
+        showDetails: false,
+        note: player.note || '',
+      };
+    });
+  setReportData({ totalTrainings: totalCount, data: report });
+  alert("Auswertung aktualisiert.");
 }
