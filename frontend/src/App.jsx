@@ -58,12 +58,18 @@ export default function App() {
   const [showTrainings, setShowTrainings] = useState(false);
   const [showReport, setShowReport] = useState(false);
 
-  const version = '2.2';
+  const version = '2.3';
 
-  // Daten laden
+  // Daten laden: memberSince → hinweis!
   useEffect(() => {
     fetch(API + '/users').then(res => res.json()).then(setUsers).catch(() => setUsers([]));
-    fetch(API + '/players').then(res => res.json()).then(setPlayers).catch(() => setPlayers([]));
+    fetch(API + '/players').then(res => res.json()).then(data => {
+      // memberSince => hinweis für UI
+      setPlayers(data.map(p => ({
+        ...p,
+        hinweis: p.memberSince || ""
+      })));
+    }).catch(() => setPlayers([]));
     fetch(API + '/trainings').then(res => res.json()).then(data => {
       setTrainings(Array.isArray(data) ? data.map(t => ({
         ...t,
@@ -163,6 +169,12 @@ export default function App() {
     }
   };
 
+  // Helper: Spieler für das Backend in memberSince zurück mappen
+  const preparePlayersForBackend = (arr) => arr.map(({ hinweis, ...rest }) => ({
+    ...rest,
+    memberSince: hinweis || ""
+  }));
+
   // Teamverwaltung (Bearbeiten & Notiz/Hinweis speichern onBlur)
   const startEditPlayer = (player) => {
     setEditPlayerId(player.name);
@@ -180,11 +192,11 @@ export default function App() {
     fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reset: true, list: updated }),
+      body: JSON.stringify({ reset: true, list: preparePlayersForBackend(updated) }),
     })
       .then(res => res.json())
       .then(playersFromServer => {
-        setPlayers(playersFromServer);
+        setPlayers(playersFromServer.map(p => ({ ...p, hinweis: p.memberSince || "" })));
         alert('Änderung gespeichert.');
       })
       .catch(() => alert('Fehler beim Bearbeiten.'));
@@ -216,11 +228,11 @@ export default function App() {
     fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reset: true, list: updated }),
+      body: JSON.stringify({ reset: true, list: preparePlayersForBackend(updated) }),
     })
       .then(res => res.json())
       .then(playersFromServer => {
-        setPlayers(playersFromServer);
+        setPlayers(playersFromServer.map(p => ({ ...p, hinweis: p.memberSince || "" })));
         alert('Team-Mitglied hinzugefügt.');
       })
       .catch(() => alert('Fehler beim Hinzufügen des Team-Mitglieds.'));
@@ -239,11 +251,11 @@ export default function App() {
     fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reset: true, list: updated }),
+      body: JSON.stringify({ reset: true, list: preparePlayersForBackend(updated) }),
     })
       .then(res => res.json())
       .then(playersFromServer => {
-        setPlayers(playersFromServer);
+        setPlayers(playersFromServer.map(p => ({ ...p, hinweis: p.memberSince || "" })));
         alert('Notiz gespeichert.');
       })
       .catch(() => alert('Fehler beim Speichern der Notiz.'));
@@ -258,11 +270,11 @@ export default function App() {
     fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reset: true, list: updated }),
+      body: JSON.stringify({ reset: true, list: preparePlayersForBackend(updated) }),
     })
       .then(res => res.json())
       .then(playersFromServer => {
-        setPlayers(playersFromServer);
+        setPlayers(playersFromServer.map(p => ({ ...p, hinweis: p.memberSince || "" })));
         alert('Hinweis gespeichert.');
       })
       .catch(() => alert('Fehler beim Speichern des Hinweises.'));
@@ -277,11 +289,11 @@ export default function App() {
     fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reset: true, list: updated }),
+      body: JSON.stringify({ reset: true, list: preparePlayersForBackend(updated) }),
     })
       .then(res => res.json())
       .then(playersFromServer => {
-        setPlayers(playersFromServer);
+        setPlayers(playersFromServer.map(p => ({ ...p, hinweis: p.memberSince || "" })));
         alert('Rolle geändert.');
       })
       .catch(() => alert('Fehler beim Ändern der Rolle.'));
@@ -297,11 +309,11 @@ export default function App() {
       fetch(API + '/players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset: true, list: updated }),
+        body: JSON.stringify({ reset: true, list: preparePlayersForBackend(updated) }),
       })
         .then(res => res.json())
         .then(playersFromServer => {
-          setPlayers(playersFromServer);
+          setPlayers(playersFromServer.map(p => ({ ...p, hinweis: p.memberSince || "" })));
           alert('Team-Mitglied gelöscht.');
         })
         .catch(() => alert('Fehler beim Löschen des Team-Mitglieds.'));
@@ -319,7 +331,7 @@ export default function App() {
     });
   }
 
-  // Training anlegen
+  // Neues Training (mit SpielerNotes)
   const addTraining = () => {
     if (!loggedInUser) {
       alert('Bitte zuerst einloggen.');
@@ -820,7 +832,7 @@ export default function App() {
                     />
                   </div>
 
-                  {/* --- Teilnehmer*innen mit Hinweis und Notiz --- */}
+                  {/* --- Teilnehmer*innen mit Hinweis (readonly) und Notiz pro Trainingsteilnahme --- */}
                   {players
                     .sort((a, b) => a.name.localeCompare(b.name))
                     .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0))
@@ -977,7 +989,14 @@ export default function App() {
                         >
                           <td className="clickable">{row.name}</td>
                           <td>{player?.hinweis || ''}</td>
-                          <td>{row.note || ''}</td>
+                          <td>
+                            <div style={{
+                              maxHeight: "3.5em", overflowY: "auto", minWidth: 80, maxWidth: 210,
+                              background: "#232942", borderRadius: 4, color: "#79e0b7", fontSize: "0.97em", padding: "0.14em 0.5em"
+                            }}>
+                              {row.note || ''}
+                            </div>
+                          </td>
                           <td>{row.percent}%</td>
                         </tr>
                         {expandedReportRow === row.name && (
