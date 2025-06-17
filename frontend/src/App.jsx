@@ -58,7 +58,7 @@ export default function App() {
   const [showTrainings, setShowTrainings] = useState(false);
   const [showReport, setShowReport] = useState(false);
 
-  const version = '2.4';
+  const version = '2.5';
 
   // Daten laden: memberSince → hinweis!
   useEffect(() => {
@@ -1080,49 +1080,49 @@ export default function App() {
       </footer>
     </div>
   );
-}
 
-// ==== Auswertung LOGIK ====
-function computeReport() {
-  if (!fromDate || !toDate) {
-    alert('Bitte Start- und Enddatum auswählen.');
-    return;
-  }
-  const start = new Date(fromDate);
-  const end = new Date(toDate);
-  if (end < start) {
-    alert('Enddatum muss nach dem Startdatum liegen.');
-    return;
-  }
-  const trainingsInRange = trainings.filter((t) => {
-    const d = parseGermanDate(t.date);
-    return d >= start && d <= end;
-  });
-  const totalCount = trainingsInRange.length;
-  if (totalCount === 0) {
-    alert('In diesem Zeitraum wurden keine Trainings gefunden.');
-    setReportData(null);
-    return;
-  }
-  const report = trainersFirst
-    .filter((p) => !p.isTrainer)
-    .map((player) => {
-      let attendCount = 0;
-      const details = trainingsInRange.map((t) => {
-        const icon = (t.participants && t.participants[player.name]) || '—';
-        const text = iconToText(icon);
-        if (icon === '✅' || icon === '⁉️') attendCount += 1;
-        return { date: t.date, statusText: text };
-      });
-      const percent = Math.round((attendCount / totalCount) * 100);
-      return {
-        name: player.name,
-        percent,
-        details,
-        showDetails: false,
-        note: player.note || '',
-      };
+  // === ComputeReport Funktion IM Scope ===
+  function computeReport() {
+    if (!fromDate || !toDate) {
+      alert('Bitte Start- und Enddatum auswählen.');
+      return;
+    }
+    const start = new Date(fromDate);
+    const end = new Date(toDate);
+    if (end < start) {
+      alert('Enddatum muss nach dem Startdatum liegen.');
+      return;
+    }
+    const trainingsInRange = trainings.filter((t) => {
+      const d = parseGermanDate(t.date);
+      return d >= start && d <= end;
     });
-  setReportData({ totalTrainings: totalCount, data: report });
-  alert("Auswertung aktualisiert.");
+    const totalCount = trainingsInRange.length;
+    if (totalCount === 0) {
+      alert('In diesem Zeitraum wurden keine Trainings gefunden.');
+      setReportData(null);
+      return;
+    }
+    const report = trainersFirst
+      .filter((p) => !p.isTrainer)
+      .map((player) => {
+        let attendCount = 0;
+        const details = trainingsInRange.map((t) => {
+          const icon = (t.participants && t.participants[player.name]) || '—';
+          const text = iconToText(icon);
+          if (icon === '✅' || icon === '⁉️') attendCount += 1;
+          return { date: t.date, statusText: text };
+        });
+        const percent = Math.round((attendCount / totalCount) * 100);
+        return {
+          name: player.name,
+          percent,
+          details,
+          showDetails: false,
+          note: player.note || '',
+        };
+      });
+    setReportData({ totalTrainings: totalCount, data: report });
+    alert("Auswertung aktualisiert.");
+  }
 }
