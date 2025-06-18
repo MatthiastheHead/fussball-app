@@ -58,7 +58,7 @@ export default function App() {
   const [showTrainings, setShowTrainings] = useState(false);
   const [showReport, setShowReport] = useState(false);
 
-  const version = '2.5';
+  const version = '2.6';
 
   // Daten laden: memberSince → hinweis!
   useEffect(() => {
@@ -82,7 +82,6 @@ export default function App() {
     }).catch(() => setTrainings([]));
   }, []);
 
-  // Trainings nach Datum absteigend sortieren (hilfsfunktion)
   function sortTrainings(arr) {
     return [...arr].sort((a, b) => {
       const ad = (a.date || '').split(', ')[1]?.split('.').reverse().join('') || '';
@@ -91,7 +90,6 @@ export default function App() {
     });
   }
 
-  // **DEFINITION DER trainingsToShow** (HIER war das Problem!!)
   const trainingsToShow = sortTrainings(
     trainings.filter((t) => {
       let dateOk = true;
@@ -538,6 +536,45 @@ export default function App() {
       })
       .catch(() => alert('Fehler beim Aktualisieren des Trainer-Status.'));
   };
+
+  // === Trainingsdatum ändern (Bugfix) ===
+  const saveEditedDate = (training, newDateValue) => {
+    if (!newDateValue) return;
+    // Datum in YYYY-MM-DD vom Input-Feld → umwandeln in deutsches Format
+    const [year, month, day] = newDateValue.split('-');
+    const dateObj = new Date(Number(year), Number(month) - 1, Number(day));
+    const weekday = ['So','Mo','Di','Mi','Do','Fr','Sa'][dateObj.getDay()];
+    const formatted = `${weekday}, ${String(day).padStart(2, '0')}.${String(month).padStart(2, '0')}.${year}`;
+    const now = new Date();
+    const timestamp = formatDateTime(now);
+
+    const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
+    if (idx === -1) return;
+    const updated = [...trainings];
+    updated[idx].date = formatted;
+    updated[idx].isEditing = false;
+    updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
+
+    fetch(API + '/trainings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then(trainingsFromServer => {
+        setTrainings(trainingsFromServer.map(t => ({
+          ...t,
+          participants: t.participants || {},
+          trainerStatus: t.trainerStatus || {},
+          note: typeof t.note === 'string' ? t.note : '',
+          playerNotes: t.playerNotes || {},
+        })));
+        alert('Datum wurde aktualisiert.');
+      })
+      .catch(() => alert('Fehler beim Aktualisieren des Datums.'));
+    setEditDateIdx(null);
+    setEditDateValue('');
+  };
   // --- RENDERING ---
   if (!loggedInUser) {
     return (
@@ -547,6 +584,12 @@ export default function App() {
         </div>
         <h1 className="login-headline">Fußball-App</h1>
         <div className="login-version">Version {version}</div>
+        <div className="login-hint" style={{
+          color: "#e0c97c", fontSize: "1.02rem", marginBottom: "0.9rem", fontStyle: "italic"
+        }}>
+          Nach längerer Inaktivität muss der Server aktiviert werden. Dies dauert einen Moment.
+          Beim Start des Servers ist kein Login möglich.
+        </div>
         <input
           type="text"
           placeholder="Benutzername"
@@ -1059,6 +1102,11 @@ export default function App() {
         <p>
           Ersteller: <strong>Matthias Kopf</strong> | Mail:{' '}
           <a href="mailto:matthias@head-mail.com">matthias@head-mail.com</a>
+        </p>
+        <p style={{
+          fontSize: "0.93rem", color: "#8bb2f4", marginTop: "0.4rem", marginBottom: "1.3rem"
+        }}>
+          © 2025 Matthias Kopf. Alle Rechte vorbehalten.
         </p>
         <button
           style={{
