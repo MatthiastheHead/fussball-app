@@ -60,7 +60,11 @@ export default function App() {
   const [showTrainings, setShowTrainings] = useState(false);
   const [showReport, setShowReport] = useState(false);
 
-  const version = '2.7';
+  // NEU: Menü-States
+  const [showStartMenu, setShowStartMenu] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+
+  const version = '2.8';
 
   // Daten laden
   useEffect(() => {
@@ -87,6 +91,8 @@ export default function App() {
       setLoginError('');
       setLoginName('');
       setLoginPass('');
+      setShowStartMenu(true);
+      setShowSettings(false);
     } else {
       setLoginError('Falscher Benutzername oder Passwort.');
     }
@@ -94,224 +100,270 @@ export default function App() {
 
   const handleLogout = () => {
     setLoggedInUser(null);
+    setShowStartMenu(true);
+    setShowSettings(false);
     setShowTeam(false);
     setShowAdmin(false);
     setLoginError('');
   };
 
-  // Nutzer anlegen
-  const addNewUser = () => {
-    const name = newUserName.trim();
-    if (!name || !newUserPass) {
-      alert('Bitte Benutzername und Passwort eingeben.');
-      return;
-    }
-    if (users.some((u) => u.name === name)) {
-      alert('Dieser Benutzername existiert bereits.');
-      return;
-    }
-    const updated = [...users, { name, password: newUserPass }];
-    fetch(API + '/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then((saved) => {
-        setUsers(saved);
-        setNewUserName('');
-        setNewUserPass('');
-        alert('Neuer Benutzer angelegt.');
-      })
-      .catch(() => alert('Fehler beim Anlegen des Benutzers.'));
-  };
+  // ...restliche States und Funktionen wie gehabt...
 
-  const updateUserPassword = (index, newPass) => {
-    const updated = [...users];
-    updated[index].password = newPass;
-    fetch(API + '/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then((saved) => {
-        setUsers(saved);
-        alert(`Passwort für ${saved[index].name} geändert.`);
-      })
-      .catch(() => alert('Fehler beim Aktualisieren des Passworts.'));
-  };
+  // ------------- NEU: RENDERING: Login, Startmenü, Settings ------------
 
-  const deleteUser = (index) => {
-    const userToDelete = users[index];
-    if (userToDelete.name === 'Matthias') {
-      alert('Den Administrator kann man nicht löschen.');
-      return;
-    }
-    if (window.confirm(`Benutzer "${userToDelete.name}" wirklich löschen?`)) {
-      const updated = [...users];
-      updated.splice(index, 1);
-      fetch(API + '/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset: true, list: updated }),
-      })
-        .then(res => res.json())
-        .then((saved) => {
-          setUsers(saved);
-          alert('Benutzer gelöscht.');
-        })
-        .catch(() => alert('Fehler beim Löschen des Benutzers.'));
-    }
-  };
+  // 1. Login
+  if (!loggedInUser) {
+    return (
+      <div className="login-screen modern-dark-blue">
+        <div className="login-icon-row">
+          <span className="login-icon" role="img" aria-label="fußball">⚽</span>
+        </div>
+        <h1 className="login-headline">Fußball-App</h1>
+        <div className="login-version">Version {version}</div>
+        <div className="login-hint">
+          Nach längerer Inaktivität muss der Server aktiviert werden. Dies dauert einen Moment. Beim Start des Servers ist kein Login möglich.
+        </div>
+        <input
+          type="text"
+          placeholder="Benutzername"
+          value={loginName}
+          onChange={(e) => setLoginName(e.target.value)}
+        />
+        <input
+          type="password"
+          placeholder="Passwort"
+          value={loginPass}
+          onChange={(e) => setLoginPass(e.target.value)}
+        />
+        <button onClick={handleLogin}>Einloggen</button>
+        {loginError && <p className="login-error">{loginError}</p>}
+      </div>
+    );
+  }
 
-  // Teamverwaltung (mit Bearbeiten & Notiz/Hinweis speichern onBlur)
-  const startEditPlayer = (player) => {
-    setEditPlayerId(player.name);
-    setPlayerDraft({ ...player, note: player.note || '', hinweis: player.hinweis || '' });
-  };
-  const saveEditPlayer = () => {
-    const idx = players.findIndex(p => p.name === editPlayerId);
-    if (idx === -1) return;
-    const updated = [...players];
-    updated[idx] = {
-      ...playerDraft,
-      note: typeof playerDraft.note === 'string' ? playerDraft.note : '',
-      hinweis: typeof playerDraft.hinweis === 'string' ? playerDraft.hinweis : ''
-    };
-    fetch(API + '/players', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then(playersFromServer => {
-        setPlayers(playersFromServer);
-        alert('Änderung gespeichert.');
-      })
-      .catch(() => alert('Fehler beim Bearbeiten.'));
-    setEditPlayerId(null);
-    setPlayerDraft({});
-  };
-  const cancelEditPlayer = () => {
-    setEditPlayerId(null);
-    setPlayerDraft({});
-  };
+  // 2. Startmenü (nach Login)
+  if (showStartMenu) {
+    return (
+      <div className="start-menu modern-dark-blue">
+        <h2 style={{color:'#7dc4ff', marginTop:'1.3em'}}>Willkommen, {loggedInUser}!</h2>
+        <button
+          className="main-func-btn"
+          style={{margin:'2.2em auto 0 auto', fontSize:'1.3rem', minWidth:260}}
+          onClick={() => { setShowStartMenu(false); setShowSettings(false); }}
+        >
+          ⚽ Trainingsteilnahme
+        </button>
+        <button
+          className="main-func-btn"
+          style={{margin:'0.9em auto 0 auto', fontSize:'1.13rem', minWidth:260}}
+          onClick={() => { setShowSettings(true); setShowStartMenu(false); }}
+        >
+          ⚙️ Einstellungen
+        </button>
+        <div style={{marginTop:'3.5em', textAlign:'center', color:'#8bb2f4', fontSize:'1.04rem'}}>© 2025 Matthias Kopf</div>
+        <button
+          style={{
+            margin: '2.5em auto 0 auto',
+            display: 'block',
+            backgroundColor: '#1363d2',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '4px',
+            padding: '0.7rem 1.4rem',
+            cursor: 'pointer',
+            fontSize: '1.05rem',
+            boxShadow: '0 2px 10px #222a4477',
+          }}
+          onClick={handleLogout}
+        >
+          Logout
+        </button>
+      </div>
+    );
+  }
 
-  // Spieler/Trainer anlegen (Teamverwaltung)
-  const addPlayer = () => {
-    const trimmed = newName.trim();
-    if (trimmed === '') {
-      alert('Bitte einen Namen eingeben.');
-      return;
-    }
-    const isTrainer = newRole === 'Trainer';
-    const updated = [
-      ...players,
-      {
-        name: trimmed,
-        isTrainer,
-        note: typeof newNote === 'string' ? newNote : '',
-        hinweis: typeof newHinweis === 'string' ? newHinweis : ''
-      },
-    ];
-    fetch(API + '/players', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then(playersFromServer => {
-        setPlayers(playersFromServer);
-        alert('Team-Mitglied hinzugefügt.');
-      })
-      .catch(() => alert('Fehler beim Hinzufügen des Team-Mitglieds.'));
-    setNewName('');
-    setNewRole('Spieler');
-    setNewNote('');
-    setNewHinweis('');
-  };
-
-  // Notiz in der Teamverwaltung – SPEICHERT DAUERHAFT onBlur
-  const handlePlayerNoteBlur = (player, noteValue) => {
-    const idx = players.findIndex(p => p.name === player.name);
-    if (idx === -1) return;
-    const updated = [...players];
-    updated[idx].note = noteValue;
-    fetch(API + '/players', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then(playersFromServer => {
-        setPlayers(playersFromServer);
-        alert('Notiz gespeichert.');
-      })
-      .catch(() => alert('Fehler beim Speichern der Notiz.'));
-  };
-
-  // Hinweis in der Teamverwaltung – SPEICHERT DAUERHAFT onBlur
-  const handlePlayerHinweisBlur = (player, hinweisValue) => {
-    const idx = players.findIndex(p => p.name === player.name);
-    if (idx === -1) return;
-    const updated = [...players];
-    updated[idx].hinweis = hinweisValue;
-    fetch(API + '/players', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then(playersFromServer => {
-        setPlayers(playersFromServer);
-        alert('Hinweis gespeichert.');
-      })
-      .catch(() => alert('Fehler beim Speichern des Hinweises.'));
-  };
-
-  // Rolle ändern
-  const changeRole = (player, role) => {
-    const idx = players.findIndex(p => p.name === player.name);
-    if (idx === -1) return;
-    const updated = [...players];
-    updated[idx].isTrainer = role === 'Trainer';
-    fetch(API + '/players', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then(playersFromServer => {
-        setPlayers(playersFromServer);
-        alert('Rolle geändert.');
-      })
-      .catch(() => alert('Fehler beim Ändern der Rolle.'));
-  };
-
-  // Spieler/Trainer löschen
-  const deletePlayer = (player) => {
-    if (window.confirm(`Team-Mitglied "${player.name}" wirklich löschen?`)) {
-      const idx = players.findIndex(p => p.name === player.name);
-      if (idx === -1) return;
-      const updated = [...players];
-      updated.splice(idx, 1);
-      fetch(API + '/players', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset: true, list: updated }),
-      })
-        .then(res => res.json())
-        .then(playersFromServer => {
-          setPlayers(playersFromServer);
-          alert('Team-Mitglied gelöscht.');
-        })
-        .catch(() => alert('Fehler beim Löschen des Team-Mitglieds.'));
-    }
-  };
-
-  const sortedPlayers = [...players].sort((a, b) => a.name.localeCompare(b.name));
-  const trainersFirst = [...sortedPlayers].sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0));
+  // 3. Einstellungen (Settings-Menü)
+  if (showSettings) {
+    return (
+      <div className="App">
+        <header>
+          <h1>⚙️ Einstellungen</h1>
+        </header>
+        {/* Teamverwaltung */}
+        <section className="player-management">
+          <h2>Teamverwaltung</h2>
+          <div className="add-player-form">
+            <input
+              type="text"
+              placeholder="Name eingeben"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+            />
+            <select value={newRole} onChange={(e) => setNewRole(e.target.value)}>
+              <option value="Spieler">Spieler</option>
+              <option value="Trainer">Trainer</option>
+            </select>
+            <input
+              type="text"
+              placeholder="Notiz"
+              value={newNote}
+              onChange={(e) => setNewNote(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="Hinweis"
+              value={newHinweis}
+              onChange={(e) => setNewHinweis(e.target.value)}
+            />
+            <button onClick={addPlayer}>➕ Hinzufügen</button>
+          </div>
+          <ul className="player-list">
+            {players
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0))
+              .map((p) =>
+                editPlayerId === p.name ? (
+                  <li key={p.name} className="edit-player-row">
+                    <input
+                      type="text"
+                      value={playerDraft.name}
+                      onChange={e => setPlayerDraft(draft => ({ ...draft, name: e.target.value }))}
+                    />
+                    <input
+                      type="text"
+                      value={playerDraft.note}
+                      onChange={e => setPlayerDraft(draft => ({ ...draft, note: e.target.value }))}
+                      onBlur={e => handlePlayerNoteBlur(playerDraft, e.target.value)}
+                      placeholder="Notiz"
+                    />
+                    <input
+                      type="text"
+                      value={playerDraft.hinweis}
+                      onChange={e => setPlayerDraft(draft => ({ ...draft, hinweis: e.target.value }))}
+                      onBlur={e => handlePlayerHinweisBlur(playerDraft, e.target.value)}
+                      placeholder="Hinweis"
+                    />
+                    <select
+                      className="role-dropdown"
+                      value={playerDraft.isTrainer ? 'Trainer' : 'Spieler'}
+                      onChange={e => setPlayerDraft(draft => ({
+                        ...draft,
+                        isTrainer: e.target.value === 'Trainer',
+                      }))}
+                    >
+                      <option value="Spieler">Spieler</option>
+                      <option value="Trainer">Trainer</option>
+                    </select>
+                    <button className="btn-save-players" onClick={saveEditPlayer}>💾 Speichern</button>
+                    <button className="btn-delete" onClick={cancelEditPlayer}>Abbrechen</button>
+                  </li>
+                ) : (
+                  <li key={p.name}>
+                    <span className={p.isTrainer ? 'role-trainer' : 'role-player'}>
+                      {p.name}
+                    </span>
+                    <input
+                      type="text"
+                      value={p.note || ""}
+                      placeholder="Notiz"
+                      style={{marginLeft: '1rem', background:'#222c', color:'#fff', border:'1px solid #226', borderRadius:'4px', padding:'0.2rem'}}
+                      onChange={e => {
+                        const idx = players.findIndex(x => x.name === p.name);
+                        const updated = [...players];
+                        updated[idx].note = e.target.value;
+                        setPlayers(updated);
+                      }}
+                      onBlur={e => handlePlayerNoteBlur(p, e.target.value)}
+                    />
+                    <input
+                      type="text"
+                      value={p.hinweis || ""}
+                      placeholder="Hinweis"
+                      style={{marginLeft: '1rem', background:'#222c', color:'#fff', border:'1px solid #226', borderRadius:'4px', padding:'0.2rem', minWidth: '90px'}}
+                      onChange={e => {
+                        const idx = players.findIndex(x => x.name === p.name);
+                        const updated = [...players];
+                        updated[idx].hinweis = e.target.value;
+                        setPlayers(updated);
+                      }}
+                      onBlur={e => handlePlayerHinweisBlur(p, e.target.value)}
+                    />
+                    <div>
+                      <select
+                        className="role-dropdown"
+                        value={p.isTrainer ? 'Trainer' : 'Spieler'}
+                        onChange={e => changeRole(p, e.target.value)}
+                      >
+                        <option value="Spieler">Spieler</option>
+                        <option value="Trainer">Trainer</option>
+                      </select>
+                      <button className="btn-edit" onClick={() => startEditPlayer(p)}>✏️ Bearbeiten</button>
+                      <button className="btn-delete" onClick={() => deletePlayer(p)}>❌ Löschen</button>
+                    </div>
+                  </li>
+                )
+              )}
+          </ul>
+        </section>
+        {/* Admin-Bereich nur für Matthias */}
+        {loggedInUser === 'Matthias' && (
+          <section className="admin-section">
+            <h2>Adminbereich</h2>
+            <div className="add-player-form">
+              <input
+                type="text"
+                placeholder="Neuer Benutzername"
+                value={newUserName}
+                onChange={(e) => setNewUserName(e.target.value)}
+              />
+              <input
+                type="text"
+                placeholder="Passwort"
+                value={newUserPass}
+                onChange={(e) => setNewUserPass(e.target.value)}
+              />
+              <button onClick={addNewUser}>➕ Erstellen</button>
+            </div>
+            <ul className="player-list">
+              {users.map((u, idx) => (
+                <li key={u.name}>
+                  <span style={{ color: '#e0e0e0' }}>{u.name}</span>
+                  <input
+                    type="text"
+                    value={u.password}
+                    onChange={(e) => updateUserPassword(idx, e.target.value)}
+                    style={{
+                      marginLeft: '0.5rem',
+                      backgroundColor: '#232942',
+                      color: '#f1f1f1',
+                      border: '1px solid #2d385b',
+                      borderRadius: '4px',
+                      padding: '0.3rem 0.6rem',
+                    }}
+                  />
+                  <button className="btn-delete" onClick={() => deleteUser(idx)}>
+                    ❌ Löschen
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        <button
+          className="main-func-btn"
+          style={{margin:'2em auto 0 auto', width:'260px'}}
+          onClick={() => { setShowSettings(false); setShowStartMenu(true); }}
+        >
+          Zurück zum Startmenü
+        </button>
+        <footer>
+          <div style={{marginTop:'2.5em', color:'#8bb2f4', fontSize:'0.97rem'}}>
+            © 2025 Matthias Kopf
+          </div>
+        </footer>
+      </div>
+    );
+  }
   // Trainings nach Datum absteigend sortieren
   function sortTrainings(arr) {
     return [...arr].sort((a, b) => {
@@ -481,7 +533,6 @@ export default function App() {
       })
       .catch(() => alert('Fehler beim Aktualisieren des Datums.'));
   };
-
   // Teilnahme-Status (Spieler)
   const updateParticipation = (training, name, statusIcon) => {
     const now = new Date();
@@ -509,7 +560,7 @@ export default function App() {
           note: typeof t.note === 'string' ? t.note : '',
         })));
         alert(
-          `Teilnahme-Status von "${name}" im Training vom "${updated[idx].date}" wurde auf "${iconToText(statusIcon).trim()}" gesetzt.`
+          `Teilnahmestatus von "${name}" im Training vom "${updated[idx].date}" wurde auf "${iconToText(statusIcon).trim()}" gesetzt.`
         );
       })
       .catch(() => alert('Fehler beim Aktualisieren des Teilnahme-Status.'));
@@ -547,6 +598,10 @@ export default function App() {
       })
       .catch(() => alert('Fehler beim Aktualisieren des Trainer-Status.'));
   };
+
+  const sortedPlayers = [...players].sort((a, b) => a.name.localeCompare(b.name));
+  const trainersFirst = [...sortedPlayers].sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0));
+
   // Such-/Filterfunktion für Trainings
   const trainingsToShow = sortTrainings(
     trainings.filter((t) => {
@@ -568,36 +623,7 @@ export default function App() {
     })
   );
 
-  // === RENDERING ===
-  if (!loggedInUser) {
-    return (
-      <div className="login-screen modern-dark-blue">
-        <div className="login-icon-row">
-          <span className="login-icon" role="img" aria-label="fußball">⚽</span>
-        </div>
-        <h1 className="login-headline">Fußball-App</h1>
-        <div className="login-version">Version {version}</div>
-        <div className="login-hint">
-          Nach längerer Inaktivität muss der Server aktiviert werden. Dies dauert einen Moment. Beim Start des Servers ist kein Login möglich.
-        </div>
-        <input
-          type="text"
-          placeholder="Benutzername"
-          value={loginName}
-          onChange={(e) => setLoginName(e.target.value)}
-        />
-        <input
-          type="password"
-          placeholder="Passwort"
-          value={loginPass}
-          onChange={(e) => setLoginPass(e.target.value)}
-        />
-        <button onClick={handleLogin}>Einloggen</button>
-        {loginError && <p className="login-error">{loginError}</p>}
-      </div>
-    );
-  }
-
+  // === RENDERING: Hauptansicht ===
   return (
     <div className="App">
       <header>
@@ -606,178 +632,16 @@ export default function App() {
 
       <div className="controls mobile-controls">
         <button className="main-func-btn" onClick={addTraining}>➕ Training hinzufügen</button>
-        <button className="main-func-btn" onClick={() => setShowTeam(!showTeam)}>👥 Team verwalten</button>
+        <button className="main-func-btn" onClick={() => setShowStartMenu(true)}>
+          Zurück zum Startmenü
+        </button>
         <button className="main-func-btn" onClick={() => setShowTrainings(!showTrainings)}>
           {showTrainings ? "Trainingsliste verbergen" : "Gespeicherte Trainings anzeigen"}
         </button>
         <button className="main-func-btn" onClick={() => setShowReport(!showReport)}>
           {showReport ? "Auswertung verbergen" : "Auswertung anzeigen"}
         </button>
-        {loggedInUser === 'Matthias' && (
-          <button className="main-func-btn" onClick={() => setShowAdmin(!showAdmin)}>👤 Adminverwaltung</button>
-        )}
       </div>
-
-      {/* === Adminbereich (nur für Matthias) === */}
-      {loggedInUser === 'Matthias' && showAdmin && (
-        <section className="admin-section">
-          <h2>Adminbereich</h2>
-          <div className="add-player-form">
-            <input
-              type="text"
-              placeholder="Neuer Benutzername"
-              value={newUserName}
-              onChange={(e) => setNewUserName(e.target.value)}
-            />
-            <input
-              type="text"
-              placeholder="Passwort"
-              value={newUserPass}
-              onChange={(e) => setNewUserPass(e.target.value)}
-            />
-            <button onClick={addNewUser}>➕ Erstellen</button>
-          </div>
-          <ul className="player-list">
-            {users.map((u, idx) => (
-              <li key={u.name}>
-                <span style={{ color: '#e0e0e0' }}>{u.name}</span>
-                <input
-                  type="text"
-                  value={u.password}
-                  onChange={(e) => updateUserPassword(idx, e.target.value)}
-                  style={{
-                    marginLeft: '0.5rem',
-                    backgroundColor: '#232942',
-                    color: '#f1f1f1',
-                    border: '1px solid #2d385b',
-                    borderRadius: '4px',
-                    padding: '0.3rem 0.6rem',
-                  }}
-                />
-                <button className="btn-delete" onClick={() => deleteUser(idx)}>
-                  ❌ Löschen
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {/* === Teamverwaltung für alle === */}
-      {showTeam && (
-        <section className="player-management">
-          <h2>Teamverwaltung</h2>
-          <div className="add-player-form">
-            <input
-              type="text"
-              placeholder="Name eingeben"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-            />
-            <select value={newRole} onChange={(e) => setNewRole(e.target.value)}>
-              <option value="Spieler">Spieler</option>
-              <option value="Trainer">Trainer</option>
-            </select>
-            <input
-              type="text"
-              placeholder="Notiz"
-              value={newNote}
-              onChange={(e) => setNewNote(e.target.value)}
-            />
-            <input
-              type="text"
-              placeholder="Hinweis"
-              value={newHinweis}
-              onChange={(e) => setNewHinweis(e.target.value)}
-            />
-            <button onClick={addPlayer}>➕ Hinzufügen</button>
-          </div>
-          <ul className="player-list">
-            {trainersFirst.map((p) =>
-              editPlayerId === p.name ? (
-                <li key={p.name} className="edit-player-row">
-                  <input
-                    type="text"
-                    value={playerDraft.name}
-                    onChange={e => setPlayerDraft(draft => ({ ...draft, name: e.target.value }))}
-                  />
-                  <input
-                    type="text"
-                    value={playerDraft.note}
-                    onChange={e => setPlayerDraft(draft => ({ ...draft, note: e.target.value }))}
-                    onBlur={e => handlePlayerNoteBlur(playerDraft, e.target.value)}
-                    placeholder="Notiz"
-                  />
-                  <input
-                    type="text"
-                    value={playerDraft.hinweis}
-                    onChange={e => setPlayerDraft(draft => ({ ...draft, hinweis: e.target.value }))}
-                    onBlur={e => handlePlayerHinweisBlur(playerDraft, e.target.value)}
-                    placeholder="Hinweis"
-                  />
-                  <select
-                    className="role-dropdown"
-                    value={playerDraft.isTrainer ? 'Trainer' : 'Spieler'}
-                    onChange={e => setPlayerDraft(draft => ({
-                      ...draft,
-                      isTrainer: e.target.value === 'Trainer',
-                    }))}
-                  >
-                    <option value="Spieler">Spieler</option>
-                    <option value="Trainer">Trainer</option>
-                  </select>
-                  <button className="btn-save-players" onClick={saveEditPlayer}>💾 Speichern</button>
-                  <button className="btn-delete" onClick={cancelEditPlayer}>Abbrechen</button>
-                </li>
-              ) : (
-                <li key={p.name}>
-                  <span className={p.isTrainer ? 'role-trainer' : 'role-player'}>
-                    {p.name}
-                  </span>
-                  <input
-                    type="text"
-                    value={p.note || ""}
-                    placeholder="Notiz"
-                    style={{marginLeft: '1rem', background:'#222c', color:'#fff', border:'1px solid #226', borderRadius:'4px', padding:'0.2rem'}}
-                    onChange={e => {
-                      const idx = players.findIndex(x => x.name === p.name);
-                      const updated = [...players];
-                      updated[idx].note = e.target.value;
-                      setPlayers(updated);
-                    }}
-                    onBlur={e => handlePlayerNoteBlur(p, e.target.value)}
-                  />
-                  <input
-                    type="text"
-                    value={p.hinweis || ""}
-                    placeholder="Hinweis"
-                    style={{marginLeft: '1rem', background:'#222c', color:'#fff', border:'1px solid #226', borderRadius:'4px', padding:'0.2rem', minWidth: '90px'}}
-                    onChange={e => {
-                      const idx = players.findIndex(x => x.name === p.name);
-                      const updated = [...players];
-                      updated[idx].hinweis = e.target.value;
-                      setPlayers(updated);
-                    }}
-                    onBlur={e => handlePlayerHinweisBlur(p, e.target.value)}
-                  />
-                  <div>
-                    <select
-                      className="role-dropdown"
-                      value={p.isTrainer ? 'Trainer' : 'Spieler'}
-                      onChange={e => changeRole(p, e.target.value)}
-                    >
-                      <option value="Spieler">Spieler</option>
-                      <option value="Trainer">Trainer</option>
-                    </select>
-                    <button className="btn-edit" onClick={() => startEditPlayer(p)}>✏️ Bearbeiten</button>
-                    <button className="btn-delete" onClick={() => deletePlayer(p)}>❌ Löschen</button>
-                  </div>
-                </li>
-              )
-            )}
-          </ul>
-        </section>
-      )}
 
       {/* === Trainings-Liste === */}
       {showTrainings && (
@@ -812,6 +676,7 @@ export default function App() {
               >
                 📅 {t.date} {expandedTraining === t.date + (t.createdBy || '') ? '🔽' : '▶️'}
               </h3>
+
               {expandedTraining === t.date + (t.createdBy || '') && (
                 <>
                   <div className="created-by">
@@ -884,8 +749,7 @@ export default function App() {
                       onBlur={(e) => saveTrainingNote(t, e.target.value)}
                     />
                   </div>
-
-                  {/* Teilnehmerliste im Card-Design */}
+                  {/* Teilnehmerliste als Card */}
                   {players
                     .sort((a, b) => a.name.localeCompare(b.name))
                     .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0))
