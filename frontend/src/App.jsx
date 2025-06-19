@@ -47,7 +47,7 @@ export default function App() {
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState('Spieler');
   const [newNote, setNewNote] = useState('');
-  const [newHinweis, setNewHinweis] = useState('');
+  const [newMemberSince, setNewMemberSince] = useState('');
   const [trainings, setTrainings] = useState([]);
   const [showAdmin, setShowAdmin] = useState(false);
   const [expandedTraining, setExpandedTraining] = useState(null);
@@ -66,7 +66,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
 
-  const version = '3.0';
+  const version = '3.1';
 
   // Daten laden
   useEffect(() => {
@@ -181,7 +181,7 @@ export default function App() {
     setPlayerDraft({
       ...player,
       note: player.note || '',
-      hinweis: player.hinweis || ''
+      memberSince: player.memberSince || ''
     });
   };
   const saveEditPlayer = () => {
@@ -191,7 +191,7 @@ export default function App() {
     updated[idx] = {
       ...playerDraft,
       note: typeof playerDraft.note === 'string' ? playerDraft.note : '',
-      hinweis: typeof playerDraft.hinweis === 'string' ? playerDraft.hinweis : ''
+      memberSince: typeof playerDraft.memberSince === 'string' ? playerDraft.memberSince : ''
     };
     fetch(API + '/players', {
       method: 'POST',
@@ -226,7 +226,7 @@ export default function App() {
         name: trimmed,
         isTrainer,
         note: typeof newNote === 'string' ? newNote : '',
-        hinweis: typeof newHinweis === 'string' ? newHinweis : ''
+        memberSince: typeof newMemberSince === 'string' ? newMemberSince : ''
       },
     ];
     fetch(API + '/players', {
@@ -243,7 +243,7 @@ export default function App() {
     setNewName('');
     setNewRole('Spieler');
     setNewNote('');
-    setNewHinweis('');
+    setNewMemberSince('');
   };
 
   // Notiz in der Teamverwaltung – SPEICHERT DAUERHAFT onBlur
@@ -265,12 +265,12 @@ export default function App() {
       .catch(() => alert('Fehler beim Speichern der Notiz.'));
   };
 
-  // Hinweis in der Teamverwaltung – SPEICHERT DAUERHAFT onBlur
-  const handlePlayerHinweisBlur = (player, hinweisValue) => {
+  // Hinweis (memberSince) in der Teamverwaltung – SPEICHERT DAUERHAFT onBlur
+  const handlePlayerMemberSinceBlur = (player, memberSinceValue) => {
     const idx = players.findIndex(p => p.name === player.name);
     if (idx === -1) return;
     const updated = [...players];
-    updated[idx].hinweis = hinweisValue;
+    updated[idx].memberSince = memberSinceValue;
     fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -323,7 +323,7 @@ export default function App() {
         .catch(() => alert('Fehler beim Löschen des Team-Mitglieds.'));
     }
   };
-  // ------------- RENDERING: Login, Startmenü, Settings ------------
+  // ----------- UI: Login, Startmenü, Einstellungen ------------
 
   // 1. Login
   if (!loggedInUser) {
@@ -426,8 +426,8 @@ export default function App() {
             <input
               type="text"
               placeholder="Hinweis"
-              value={newHinweis}
-              onChange={(e) => setNewHinweis(e.target.value)}
+              value={newMemberSince}
+              onChange={(e) => setNewMemberSince(e.target.value)}
             />
             <button onClick={addPlayer}>➕ Hinzufügen</button>
           </div>
@@ -452,9 +452,9 @@ export default function App() {
                     />
                     <input
                       type="text"
-                      value={playerDraft.hinweis}
-                      onChange={e => setPlayerDraft(draft => ({ ...draft, hinweis: e.target.value }))}
-                      onBlur={e => handlePlayerHinweisBlur(playerDraft, e.target.value)}
+                      value={playerDraft.memberSince}
+                      onChange={e => setPlayerDraft(draft => ({ ...draft, memberSince: e.target.value }))}
+                      onBlur={e => handlePlayerMemberSinceBlur(playerDraft, e.target.value)}
                       placeholder="Hinweis"
                     />
                     <select
@@ -491,16 +491,16 @@ export default function App() {
                     />
                     <input
                       type="text"
-                      value={p.hinweis || ""}
+                      value={p.memberSince || ""}
                       placeholder="Hinweis"
                       style={{marginLeft: '1rem', background:'#222c', color:'#fff', border:'1px solid #226', borderRadius:'4px', padding:'0.2rem', minWidth: '90px'}}
                       onChange={e => {
                         const idx = players.findIndex(x => x.name === p.name);
                         const updated = [...players];
-                        updated[idx].hinweis = e.target.value;
+                        updated[idx].memberSince = e.target.value;
                         setPlayers(updated);
                       }}
-                      onBlur={e => handlePlayerHinweisBlur(p, e.target.value)}
+                      onBlur={e => handlePlayerMemberSinceBlur(p, e.target.value)}
                     />
                     <div>
                       <select
@@ -707,9 +707,9 @@ export default function App() {
           playerNotes: t.playerNotes || {},
           note: typeof t.note === 'string' ? t.note : '',
         })));
-        alert('Spieler-Notiz gespeichert.');
+        alert('Notiz gespeichert.');
       })
-      .catch(() => alert('Fehler beim Speichern der Spieler-Notiz.'));
+      .catch(() => alert('Fehler beim Speichern der Notiz.'));
   };
 
   // Trainingsdatum editieren
@@ -836,7 +836,7 @@ export default function App() {
     })
   );
 
-  // ==== Trainingsanzeige/Teilnehmerkarten ====
+  // Trainingsanzeige/Teilnehmerkarten
   if (!showStartMenu && !showSettings) {
     return (
       <div className="App">
@@ -963,7 +963,7 @@ export default function App() {
                       .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0))
                       .map((p, idxP) => {
                         const isTrainer = !!p.isTrainer;
-                        const teamHinweis = p.hinweis || "";
+                        const teamHinweis = p.memberSince || "";
                         const playerNote = (t.playerNotes && t.playerNotes[p.name]) || "";
                         // Zebra-Design: gerades idxP = hell, ungerade = dunkler
                         const cardBg = idxP % 2 === 0 ? "player-card even" : "player-card odd";
@@ -1113,7 +1113,6 @@ export default function App() {
                 </button>
               )}
             </div>
-
             {reportData && (
               <div className="report-results">
                 <p>
@@ -1140,7 +1139,7 @@ export default function App() {
                           style={{ cursor: "pointer" }}
                         >
                           <td className="clickable">{row.name}</td>
-                          <td>{row.hinweis || ''}</td>
+                          <td>{row.memberSince || ''}</td>
                           <td style={{maxWidth: '200px', whiteSpace: 'pre-line', overflowWrap: 'anywhere'}}>{row.note || ''}</td>
                           <td>{row.percent}%</td>
                         </tr>
@@ -1169,7 +1168,7 @@ export default function App() {
         {/* Footer und Logout ganz unten */}
         <footer>
           <p>
-            Entwickler: <strong>Matthias Kopf</strong> | Mail:{' '}
+            Ersteller: <strong>Matthias Kopf</strong> | Mail:{' '}
             <a href="mailto:matthias@head-mail.com">matthias@head-mail.com</a>
           </p>
           <p style={{
@@ -1199,7 +1198,7 @@ export default function App() {
     );
   }
 
-  // Auswertung berechnen
+  // --- Auswertung berechnen
   function computeReport() {
     if (!fromDate || !toDate) {
       alert('Bitte Start- und Enddatum auswählen.');
@@ -1234,7 +1233,7 @@ export default function App() {
         const percent = Math.round((attendCount / totalCount) * 100);
         return {
           name: player.name,
-          hinweis: player.hinweis || '',
+          memberSince: player.memberSince || '',
           note: player.note || '',
           percent,
           details,
@@ -1250,18 +1249,16 @@ export default function App() {
     if (!reportData) return;
     const doc = new jsPDF();
 
-    // Überschrift und Version mit Abstand
     doc.setFontSize(18);
     doc.text('⚽ Fußball-App – Trainingsteilnahme', 14, 18);
 
     doc.setFontSize(12);
     doc.text(`Version ${version}`, 14, 27);
 
-    // Tabelle darunter
     const tableColumn = ["Spieler", "Hinweis", "Notiz", "Teilnahme (%)"];
     const tableRows = reportData.data.map(r => [
       r.name,
-      r.hinweis,
+      r.memberSince,
       r.note,
       r.percent + "%"
     ]);
