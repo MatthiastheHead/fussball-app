@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import './App.css';
+// Importiere jsPDF für PDF-Export
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 const API = 'https://fussball-api.onrender.com';
 
@@ -60,11 +63,11 @@ export default function App() {
   const [showTrainings, setShowTrainings] = useState(false);
   const [showReport, setShowReport] = useState(false);
 
-  // NEU: Menü-States
+  // Menü-States
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
 
-  const version = '2.8';
+  const version = '2.9';
 
   // Daten laden
   useEffect(() => {
@@ -107,9 +110,221 @@ export default function App() {
     setLoginError('');
   };
 
-  // ...restliche States und Funktionen wie gehabt...
+  // Nutzer anlegen
+  const addNewUser = () => {
+    const name = newUserName.trim();
+    if (!name || !newUserPass) {
+      alert('Bitte Benutzername und Passwort eingeben.');
+      return;
+    }
+    if (users.some((u) => u.name === name)) {
+      alert('Dieser Benutzername existiert bereits.');
+      return;
+    }
+    const updated = [...users, { name, password: newUserPass }];
+    fetch(API + '/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then((saved) => {
+        setUsers(saved);
+        setNewUserName('');
+        setNewUserPass('');
+        alert('Neuer Benutzer angelegt.');
+      })
+      .catch(() => alert('Fehler beim Anlegen des Benutzers.'));
+  };
 
-  // ------------- NEU: RENDERING: Login, Startmenü, Settings ------------
+  const updateUserPassword = (index, newPass) => {
+    const updated = [...users];
+    updated[index].password = newPass;
+    fetch(API + '/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then((saved) => {
+        setUsers(saved);
+        alert(`Passwort für ${saved[index].name} geändert.`);
+      })
+      .catch(() => alert('Fehler beim Aktualisieren des Passworts.'));
+  };
+
+  const deleteUser = (index) => {
+    const userToDelete = users[index];
+    if (userToDelete.name === 'Matthias') {
+      alert('Den Administrator kann man nicht löschen.');
+      return;
+    }
+    if (window.confirm(`Benutzer "${userToDelete.name}" wirklich löschen?`)) {
+      const updated = [...users];
+      updated.splice(index, 1);
+      fetch(API + '/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reset: true, list: updated }),
+      })
+        .then(res => res.json())
+        .then((saved) => {
+          setUsers(saved);
+          alert('Benutzer gelöscht.');
+        })
+        .catch(() => alert('Fehler beim Löschen des Benutzers.'));
+    }
+  };
+
+  // Teamverwaltung (mit Bearbeiten & Notiz speichern onBlur)
+  const startEditPlayer = (player) => {
+    setEditPlayerId(player.name);
+    setPlayerDraft({
+      ...player,
+      note: player.note || '',
+      hinweis: player.hinweis || ''
+    });
+  };
+  const saveEditPlayer = () => {
+    const idx = players.findIndex(p => p.name === editPlayerId);
+    if (idx === -1) return;
+    const updated = [...players];
+    updated[idx] = {
+      ...playerDraft,
+      note: typeof playerDraft.note === 'string' ? playerDraft.note : '',
+      hinweis: typeof playerDraft.hinweis === 'string' ? playerDraft.hinweis : ''
+    };
+    fetch(API + '/players', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then(playersFromServer => {
+        setPlayers(playersFromServer);
+        alert('Änderung gespeichert.');
+      })
+      .catch(() => alert('Fehler beim Bearbeiten.'));
+    setEditPlayerId(null);
+    setPlayerDraft({});
+  };
+  const cancelEditPlayer = () => {
+    setEditPlayerId(null);
+    setPlayerDraft({});
+  };
+
+  // Spieler/Trainer anlegen (Teamverwaltung)
+  const addPlayer = () => {
+    const trimmed = newName.trim();
+    if (trimmed === '') {
+      alert('Bitte einen Namen eingeben.');
+      return;
+    }
+    const isTrainer = newRole === 'Trainer';
+    const updated = [
+      ...players,
+      {
+        name: trimmed,
+        isTrainer,
+        note: typeof newNote === 'string' ? newNote : '',
+        hinweis: typeof newHinweis === 'string' ? newHinweis : ''
+      },
+    ];
+    fetch(API + '/players', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then(playersFromServer => {
+        setPlayers(playersFromServer);
+        alert('Team-Mitglied hinzugefügt.');
+      })
+      .catch(() => alert('Fehler beim Hinzufügen des Team-Mitglieds.'));
+    setNewName('');
+    setNewRole('Spieler');
+    setNewNote('');
+    setNewHinweis('');
+  };
+
+  // Notiz in der Teamverwaltung – SPEICHERT DAUERHAFT onBlur
+  const handlePlayerNoteBlur = (player, noteValue) => {
+    const idx = players.findIndex(p => p.name === player.name);
+    if (idx === -1) return;
+    const updated = [...players];
+    updated[idx].note = noteValue;
+    fetch(API + '/players', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then(playersFromServer => {
+        setPlayers(playersFromServer);
+        alert('Notiz gespeichert.');
+      })
+      .catch(() => alert('Fehler beim Speichern der Notiz.'));
+  };
+
+  // Hinweis in der Teamverwaltung – SPEICHERT DAUERHAFT onBlur
+  const handlePlayerHinweisBlur = (player, hinweisValue) => {
+    const idx = players.findIndex(p => p.name === player.name);
+    if (idx === -1) return;
+    const updated = [...players];
+    updated[idx].hinweis = hinweisValue;
+    fetch(API + '/players', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then(playersFromServer => {
+        setPlayers(playersFromServer);
+        alert('Hinweis gespeichert.');
+      })
+      .catch(() => alert('Fehler beim Speichern des Hinweises.'));
+  };
+
+  // Rolle ändern
+  const changeRole = (player, role) => {
+    const idx = players.findIndex(p => p.name === player.name);
+    if (idx === -1) return;
+    const updated = [...players];
+    updated[idx].isTrainer = role === 'Trainer';
+    fetch(API + '/players', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    })
+      .then(res => res.json())
+      .then(playersFromServer => {
+        setPlayers(playersFromServer);
+        alert('Rolle geändert.');
+      })
+      .catch(() => alert('Fehler beim Ändern der Rolle.'));
+  };
+
+  // Spieler/Trainer löschen
+  const deletePlayer = (player) => {
+    if (window.confirm(`Team-Mitglied "${player.name}" wirklich löschen?`)) {
+      const idx = players.findIndex(p => p.name === player.name);
+      if (idx === -1) return;
+      const updated = [...players];
+      updated.splice(idx, 1);
+      fetch(API + '/players', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reset: true, list: updated }),
+      })
+        .then(res => res.json())
+        .then(playersFromServer => {
+          setPlayers(playersFromServer);
+          alert('Team-Mitglied gelöscht.');
+        })
+        .catch(() => alert('Fehler beim Löschen des Team-Mitglieds.'));
+    }
+  };
+  // ------------- RENDERING: Login, Startmenü, Settings ------------
 
   // 1. Login
   if (!loggedInUser) {
@@ -533,6 +748,7 @@ export default function App() {
       })
       .catch(() => alert('Fehler beim Aktualisieren des Datums.'));
   };
+
   // Teilnahme-Status (Spieler)
   const updateParticipation = (training, name, statusIcon) => {
     const now = new Date();
@@ -598,7 +814,6 @@ export default function App() {
       })
       .catch(() => alert('Fehler beim Aktualisieren des Trainer-Status.'));
   };
-
   const sortedPlayers = [...players].sort((a, b) => a.name.localeCompare(b.name));
   const trainersFirst = [...sortedPlayers].sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0));
 
@@ -623,301 +838,444 @@ export default function App() {
     })
   );
 
-  // === RENDERING: Hauptansicht ===
-  return (
-    <div className="App">
-      <header>
-        <h1>⚽ Fußball‐App <span className="blue-version">{version}</span> Trainingsteilnahme</h1>
-      </header>
+  // === RENDERING: Trainingsansicht ===
+  if (!showStartMenu && !showSettings) {
+    return (
+      <div className="App">
+        <header>
+          <h1>⚽ Fußball‐App <span className="blue-version">{version}</span> Trainingsteilnahme</h1>
+        </header>
+        <div className="controls mobile-controls">
+          <button className="main-func-btn" onClick={addTraining}>➕ Training hinzufügen</button>
+          <button className="main-func-btn" onClick={() => setShowTrainings(!showTrainings)}>
+            {showTrainings ? "Trainingsliste verbergen" : "Gespeicherte Trainings anzeigen"}
+          </button>
+          <button className="main-func-btn" onClick={() => setShowReport(!showReport)}>
+            {showReport ? "Auswertung verbergen" : "Auswertung anzeigen"}
+          </button>
+          <button className="main-func-btn" onClick={() => { setShowStartMenu(true); setShowSettings(false); }}>
+            Zurück zum Startmenü
+          </button>
+        </div>
+        {/* === Trainings-Liste === */}
+        {showTrainings && (
+          <section className="trainings-list">
+            <div className="training-filter">
+              <label>
+                Nach Datum filtern:{' '}
+                <input
+                  type="date"
+                  value={filterDate}
+                  onChange={(e) => setFilterDate(e.target.value)}
+                />
+              </label>
+              <label>
+                Suchen:{' '}
+                <input
+                  type="text"
+                  placeholder="Datum oder Text"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  style={{ minWidth: 140 }}
+                />
+              </label>
+              <button onClick={() => { setFilterDate(''); setSearchText(''); }}>Filter zurücksetzen</button>
+            </div>
 
-      <div className="controls mobile-controls">
-        <button className="main-func-btn" onClick={addTraining}>➕ Training hinzufügen</button>
-        <button className="main-func-btn" onClick={() => setShowStartMenu(true)}>
-          Zurück zum Startmenü
-        </button>
-        <button className="main-func-btn" onClick={() => setShowTrainings(!showTrainings)}>
-          {showTrainings ? "Trainingsliste verbergen" : "Gespeicherte Trainings anzeigen"}
-        </button>
-        <button className="main-func-btn" onClick={() => setShowReport(!showReport)}>
-          {showReport ? "Auswertung verbergen" : "Auswertung anzeigen"}
-        </button>
-      </div>
-
-      {/* === Trainings-Liste === */}
-      {showTrainings && (
-        <section className="trainings-list">
-          <div className="training-filter">
-            <label>
-              Nach Datum filtern:{' '}
-              <input
-                type="date"
-                value={filterDate}
-                onChange={(e) => setFilterDate(e.target.value)}
-              />
-            </label>
-            <label>
-              Suchen:{' '}
-              <input
-                type="text"
-                placeholder="Datum oder Text"
-                value={searchText}
-                onChange={(e) => setSearchText(e.target.value)}
-                style={{ minWidth: 140 }}
-              />
-            </label>
-            <button onClick={() => { setFilterDate(''); setSearchText(''); }}>Filter zurücksetzen</button>
-          </div>
-
-          {trainingsToShow.map((t, idx) => (
-            <div key={t.date + (t.createdBy || '')} className="training">
-              <h3
-                className={`training-header ${expandedTraining === t.date + (t.createdBy || '') ? 'expanded' : ''}`}
-                onClick={() => setExpandedTraining(expandedTraining === t.date + (t.createdBy || '') ? null : t.date + (t.createdBy || ''))}
-              >
-                📅 {t.date} {expandedTraining === t.date + (t.createdBy || '') ? '🔽' : '▶️'}
-              </h3>
-
-              {expandedTraining === t.date + (t.createdBy || '') && (
-                <>
-                  <div className="created-by">
-                    Ersteller: <strong>{t.createdBy || ''}</strong>
-                  </div>
-                  {t.lastEdited && (
-                    <div className="last-edited">
-                      Zuletzt bearbeitet: <strong>{t.lastEdited.at}</strong> von{' '}
-                      <strong>{t.lastEdited.by}</strong>
+            {trainingsToShow.map((t, idx) => (
+              <div key={t.date + (t.createdBy || '')} className="training">
+                <h3
+                  className={`training-header ${expandedTraining === t.date + (t.createdBy || '') ? 'expanded' : ''}`}
+                  onClick={() => setExpandedTraining(expandedTraining === t.date + (t.createdBy || '') ? null : t.date + (t.createdBy || ''))}
+                >
+                  📅 {t.date} {expandedTraining === t.date + (t.createdBy || '') ? '🔽' : '▶️'}
+                </h3>
+                {expandedTraining === t.date + (t.createdBy || '') && (
+                  <>
+                    <div className="created-by">
+                      Ersteller: <strong>{t.createdBy || ''}</strong>
                     </div>
-                  )}
+                    {t.lastEdited && (
+                      <div className="last-edited">
+                        Zuletzt bearbeitet: <strong>{t.lastEdited.at}</strong> von{' '}
+                        <strong>{t.lastEdited.by}</strong>
+                      </div>
+                    )}
 
-                  {editDateIdx === idx ? (
-                    <div className="edit-date-row">
-                      <input
-                        type="date"
-                        className="edit-date-input"
-                        value={editDateValue}
-                        onChange={e => setEditDateValue(e.target.value)}
+                    {editDateIdx === idx ? (
+                      <div className="edit-date-row">
+                        <input
+                          type="date"
+                          className="edit-date-input"
+                          value={editDateValue}
+                          onChange={e => setEditDateValue(e.target.value)}
+                        />
+                        <button
+                          className="btn-save-date"
+                          onClick={() => {
+                            saveEditedDate(t, editDateValue);
+                            setEditDateIdx(null);
+                            setEditDateValue('');
+                          }}
+                        >
+                          Speichern
+                        </button>
+                        <button
+                          className="btn-save-date"
+                          onClick={() => {
+                            setEditDateIdx(null);
+                            setEditDateValue('');
+                          }}
+                        >
+                          Abbrechen
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="edit-date-row">
+                        <button
+                          className="btn-edit-date"
+                          onClick={() => {
+                            const parts = (t.date || '').split(', ')[1]?.split('.') || [];
+                            setEditDateValue(parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : '');
+                            setEditDateIdx(idx);
+                          }}
+                        >
+                          ✏️ Datum anpassen
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Notizfeld */}
+                    <div className="note-field">
+                      <textarea
+                        rows={2}
+                        placeholder="Notiz zum Training (z.B. was gemacht wurde...)"
+                        value={typeof t.note === 'string' ? t.note : ''}
+                        onChange={(e) => {
+                          const idx2 = trainings.findIndex(tr => tr.date + (tr.createdBy || '') === t.date + (t.createdBy || ''));
+                          if (idx2 === -1) return;
+                          const updated = [...trainings];
+                          updated[idx2].note = e.target.value;
+                          setTrainings(updated);
+                        }}
+                        onBlur={(e) => saveTrainingNote(t, e.target.value)}
                       />
-                      <button
-                        className="btn-save-date"
-                        onClick={() => {
-                          saveEditedDate(t, editDateValue);
-                          setEditDateIdx(null);
-                          setEditDateValue('');
-                        }}
-                      >
-                        Speichern
-                      </button>
-                      <button
-                        className="btn-save-date"
-                        onClick={() => {
-                          setEditDateIdx(null);
-                          setEditDateValue('');
-                        }}
-                      >
-                        Abbrechen
-                      </button>
                     </div>
-                  ) : (
-                    <div className="edit-date-row">
-                      <button
-                        className="btn-edit-date"
-                        onClick={() => {
-                          // Setze das Datumsfeld für dieses Training
-                          const parts = (t.date || '').split(', ')[1]?.split('.') || [];
-                          setEditDateValue(parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : '');
-                          setEditDateIdx(idx);
-                        }}
-                      >
-                        ✏️ Datum anpassen
-                      </button>
-                    </div>
-                  )}
 
-                  {/* Notizfeld zum Training */}
-                  <div className="note-field">
-                    <textarea
-                      rows={2}
-                      placeholder="Notiz zum Training (z.B. was gemacht wurde...)"
-                      value={typeof t.note === 'string' ? t.note : ''}
-                      onChange={(e) => {
-                        const idx2 = trainings.findIndex(tr => tr.date + (tr.createdBy || '') === t.date + (t.createdBy || ''));
-                        if (idx2 === -1) return;
-                        const updated = [...trainings];
-                        updated[idx2].note = e.target.value;
-                        setTrainings(updated);
-                      }}
-                      onBlur={(e) => saveTrainingNote(t, e.target.value)}
-                    />
-                  </div>
-                  {/* Teilnehmerliste als Card */}
-                  {players
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0))
-                    .map((p) => {
-                      const isTrainer = !!p.isTrainer;
-                      // Hinweis aus Teamverwaltung holen:
-                      const teamHinweis = p.hinweis || "";
-
-                      // Trainingsnotiz für diesen Spieler
-                      const playerNote = (t.playerNotes && t.playerNotes[p.name]) || "";
-
-                      if (isTrainer) {
-                        const trainerStatus = (t.trainerStatus && t.trainerStatus[p.name]) || 'Abgemeldet';
-                        return (
-                          <div key={p.name + 'trainer'} className="player-card">
-                            <div className="participant-col">
-                              <span>
-                                <b>{p.name}</b> <em style={{color:"#ffe548", fontWeight:500}}>(Trainer:in)</em>
-                              </span>
-                              {teamHinweis && (
-                                <div style={{ fontSize: "0.93em", color: "#9cc6ff", marginBottom: "0.2em" }}>
-                                  Hinweis: {teamHinweis}
+                    {players
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0))
+                      .map((p) => {
+                        const isTrainer = !!p.isTrainer;
+                        const teamHinweis = p.hinweis || "";
+                        const playerNote = (t.playerNotes && t.playerNotes[p.name]) || "";
+                        if (isTrainer) {
+                          const trainerStatus = (t.trainerStatus && t.trainerStatus[p.name]) || 'Abgemeldet';
+                          return (
+                            <div key={p.name + 'trainer'} className="player-card">
+                              <div className="participant-col">
+                                <span>
+                                  <b>{p.name}</b> <em style={{color:"#ffe548", fontWeight:500}}>(Trainer:in)</em>
+                                </span>
+                                {teamHinweis && (
+                                  <div style={{ fontSize: "0.93em", color: "#9cc6ff", marginBottom: "0.2em" }}>
+                                    Hinweis: {teamHinweis}
+                                  </div>
+                                )}
+                                <div style={{margin: "0.3em 0"}}>
+                                  <span>Status: </span>
+                                  <select
+                                    className="trainer-status-dropdown"
+                                    value={trainerStatus}
+                                    onChange={(e) =>
+                                      updateTrainerStatus(t, p.name, e.target.value)
+                                    }
+                                  >
+                                    <option value="Zugesagt">Zugesagt</option>
+                                    <option value="Abgemeldet">Abgemeldet</option>
+                                  </select>
                                 </div>
-                              )}
-                              <div style={{margin: "0.3em 0"}}>
-                                <span>Status: </span>
-                                <select
-                                  className="trainer-status-dropdown"
-                                  value={trainerStatus}
-                                  onChange={(e) =>
-                                    updateTrainerStatus(t, p.name, e.target.value)
-                                  }
-                                >
-                                  <option value="Zugesagt">Zugesagt</option>
-                                  <option value="Abgemeldet">Abgemeldet</option>
-                                </select>
                               </div>
                             </div>
-                          </div>
-                        );
-                      } else {
-                        const statusIcon = (t.participants && t.participants[p.name]) || '—';
-                        return (
-                          <div key={p.name} className="player-card">
-                            <div className="participant-col">
-                              <span><b>{p.name}</b></span>
-                              {teamHinweis && (
-                                <div style={{ fontSize: "0.93em", color: "#9cc6ff", marginBottom: "0.2em" }}>
-                                  Hinweis: {teamHinweis}
+                          );
+                        } else {
+                          const statusIcon = (t.participants && t.participants[p.name]) || '—';
+                          return (
+                            <div key={p.name} className="player-card">
+                              <div className="participant-col">
+                                <span><b>{p.name}</b></span>
+                                {teamHinweis && (
+                                  <div style={{ fontSize: "0.93em", color: "#9cc6ff", marginBottom: "0.2em" }}>
+                                    Hinweis: {teamHinweis}
+                                  </div>
+                                )}
+                                <div style={{margin: "0.3em 0"}}>
+                                  <span>Status:</span>
+                                  <div className="btn-part-status status-btn-row">
+                                    {['✅', '❌', '⏳', '⁉️', '—'].map((icon, idx) => (
+                                      <button
+                                        key={idx}
+                                        className={statusIcon === icon ? 'active' : ''}
+                                        onClick={() => updateParticipation(t, p.name, icon)}
+                                      >
+                                        {icon}
+                                      </button>
+                                    ))}
+                                    <span className="status-text">{iconToText(statusIcon)}</span>
+                                  </div>
                                 </div>
-                              )}
-                              <div style={{margin: "0.3em 0"}}>
-                                <span>Status:</span>
-                                <div className="btn-part-status status-btn-row">
-                                  {['✅', '❌', '⏳', '⁉️', '—'].map((icon, idx) => (
-                                    <button
-                                      key={idx}
-                                      className={statusIcon === icon ? 'active' : ''}
-                                      onClick={() => updateParticipation(t, p.name, icon)}
-                                    >
-                                      {icon}
-                                    </button>
-                                  ))}
-                                  <span className="status-text">{iconToText(statusIcon)}</span>
+                                <div style={{ margin: "0.35em 0 0.1em 0" }}>
+                                  <textarea
+                                    rows={1}
+                                    placeholder="Notiz (Training)"
+                                    style={{
+                                      width: "99%",
+                                      minHeight: "38px",
+                                      maxHeight: "60px",
+                                      fontSize: "1em",
+                                      background: "#232942",
+                                      color: "#96ffc4",
+                                      border: "1.2px solid #2d385b",
+                                      borderRadius: "5px",
+                                      resize: "vertical",
+                                      overflowY: "auto"
+                                    }}
+                                    value={playerNote}
+                                    onChange={e => {
+                                      const idxT = trainings.findIndex(tr => tr.date + (tr.createdBy || '') === t.date + (t.createdBy || ''));
+                                      if (idxT === -1) return;
+                                      const updatedTrainings = [...trainings];
+                                      updatedTrainings[idxT].playerNotes = {
+                                        ...updatedTrainings[idxT].playerNotes,
+                                        [p.name]: e.target.value
+                                      };
+                                      setTrainings(updatedTrainings);
+                                    }}
+                                    onBlur={e => savePlayerNote(t, p.name, e.target.value)}
+                                  />
                                 </div>
-                              </div>
-                              {/* Notizfeld zum Spieler für dieses Training */}
-                              <div style={{ margin: "0.35em 0 0.1em 0" }}>
-                                <textarea
-                                  rows={1}
-                                  placeholder="Notiz zum Spieler (Training)"
-                                  style={{
-                                    width: "99%",
-                                    minHeight: "38px",
-                                    maxHeight: "60px",
-                                    fontSize: "1em",
-                                    background: "#232942",
-                                    color: "#96ffc4",
-                                    border: "1.2px solid #2d385b",
-                                    borderRadius: "5px",
-                                    resize: "vertical",
-                                    overflowY: "auto"
-                                  }}
-                                  value={playerNote}
-                                  onChange={e => {
-                                    // Sofort lokal, dann DB bei Blur:
-                                    const idxT = trainings.findIndex(tr => tr.date + (tr.createdBy || '') === t.date + (t.createdBy || ''));
-                                    if (idxT === -1) return;
-                                    const updatedTrainings = [...trainings];
-                                    updatedTrainings[idxT].playerNotes = {
-                                      ...updatedTrainings[idxT].playerNotes,
-                                      [p.name]: e.target.value
-                                    };
-                                    setTrainings(updatedTrainings);
-                                  }}
-                                  onBlur={e => savePlayerNote(t, p.name, e.target.value)}
-                                />
                               </div>
                             </div>
-                          </div>
-                        );
-                      }
-                    })}
+                          );
+                        }
+                      })}
 
-                  {!t.isEditing && (
-                    <button
-                      className="btn-save-training"
-                      onClick={() => alert('Änderungen im Training wurden gespeichert.')}
-                    >
-                      💾 Speichern
-                    </button>
-                  )}
+                    {!t.isEditing && (
+                      <button
+                        className="btn-save-training"
+                        onClick={() => alert('Änderungen im Training wurden gespeichert.')}
+                      >
+                        💾 Speichern
+                      </button>
+                    )}
 
-                  {!t.isEditing && (
-                    <button
-                      className="btn-delete-training"
-                      onClick={() => deleteTraining(t)}
-                    >
-                      🗑️ Training löschen
-                    </button>
-                  )}
-                </>
+                    {!t.isEditing && (
+                      <button
+                        className="btn-delete-training"
+                        onClick={() => deleteTraining(t)}
+                      >
+                        🗑️ Training löschen
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
+            {trainingsToShow.length === 0 && (
+              <p className="no-trainings">Keine Trainings gefunden{filterDate || searchText ? ' für diesen Filter.' : '.'}</p>
+            )}
+          </section>
+        )}
+        {/* === Auswertung === */}
+        {showReport && (
+          <section className="report-section">
+            <h2>Auswertung</h2>
+            <div className="report-form">
+              <label>
+                Von:{' '}
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                />
+              </label>
+              <label>
+                Bis:{' '}
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                />
+              </label>
+              <button onClick={computeReport}>Auswertung anzeigen</button>
+              {reportData && (
+                <button
+                  style={{ marginLeft: '2em', background: "#46a8f7", color: "#fff", borderRadius: 5, padding: "0.5em 1.4em", fontWeight: 600, border: 0, cursor: 'pointer'}}
+                  onClick={exportPDF}
+                >
+                  Tabelle als PDF exportieren
+                </button>
               )}
             </div>
-          ))}
 
-          {trainingsToShow.length === 0 && (
-            <p className="no-trainings">Keine Trainings gefunden{filterDate || searchText ? ' für diesen Filter.' : '.'}</p>
-          )}
-        </section>
-      )}
+            {reportData && (
+              <div className="report-results">
+                <p>
+                  {reportData.totalTrainings} Training
+                  {reportData.totalTrainings !== 1 ? 's' : ''} im Zeitraum.
+                </p>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Spieler</th>
+                      <th>Hinweis</th>
+                      <th>Notiz</th>
+                      <th>Teilnahme (%)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportData.data.map((row, idx) => (
+                      <React.Fragment key={row.name}>
+                        <tr
+                          className={`report-row ${expandedReportRow === row.name ? 'expanded' : ''}`}
+                          onClick={() => setExpandedReportRow(
+                            expandedReportRow === row.name ? null : row.name
+                          )}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <td className="clickable">{row.name}</td>
+                          <td>{row.hinweis || ''}</td>
+                          <td style={{maxWidth: '200px', whiteSpace: 'pre-line', overflowWrap: 'anywhere'}}>{row.note || ''}</td>
+                          <td>{row.percent}%</td>
+                        </tr>
+                        {expandedReportRow === row.name && (
+                          <tr className="report-details-row">
+                            <td colSpan="4">
+                              <ul>
+                                {row.details.map((d, dIdx) => (
+                                  <li key={dIdx}>
+                                    {d.date}: <strong>{d.statusText.trim()}</strong>
+                                  </li>
+                                ))}
+                              </ul>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
 
-      {/* === Auswertung === */}
-      {showReport && (
-        <section className="report-section">
-          {/* ...wie gehabt, ggf. von vorher übernehmen... */}
-        </section>
-      )}
+        {/* Footer und Logout ganz unten */}
+        <footer>
+          <p>
+            Entwickler: <strong>Matthias Kopf</strong> | Mail:{' '}
+            <a href="mailto:matthias@head-mail.com">matthias@head-mail.com</a>
+          </p>
+          <p style={{
+            fontSize: "0.93rem", color: "#8bb2f4", marginTop: "0.4rem", marginBottom: "1.3rem"
+          }}>
+            © 2025 Matthias Kopf. Alle Rechte vorbehalten.
+          </p>
+          <button
+            style={{
+              margin: '2rem auto 0 auto',
+              display: 'block',
+              backgroundColor: '#1363d2',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '4px',
+              padding: '0.7rem 1.4rem',
+              cursor: 'pointer',
+              fontSize: '1.05rem',
+              boxShadow: '0 2px 10px #222a4477',
+            }}
+            onClick={handleLogout}
+          >
+            Logout
+          </button>
+        </footer>
+      </div>
+    );
+  }
 
-      {/* Footer und Logout ganz unten */}
-      <footer>
-        <p>
-          Ersteller: <strong>Matthias Kopf</strong> | Mail:{' '}
-          <a href="mailto:matthias@head-mail.com">matthias@head-mail.com</a>
-        </p>
-        <p style={{
-          fontSize: "0.93rem", color: "#8bb2f4", marginTop: "0.4rem", marginBottom: "1.3rem"
-        }}>
-          © 2025 Matthias Kopf. Alle Rechte vorbehalten.
-        </p>
-        <button
-          style={{
-            margin: '2rem auto 0 auto',
-            display: 'block',
-            backgroundColor: '#1363d2',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '4px',
-            padding: '0.7rem 1.4rem',
-            cursor: 'pointer',
-            fontSize: '1.05rem',
-            boxShadow: '0 2px 10px #222a4477',
-          }}
-          onClick={handleLogout}
-        >
-          Logout
-        </button>
-      </footer>
-    </div>
-  );
+  // Auswertung berechnen
+  function computeReport() {
+    if (!fromDate || !toDate) {
+      alert('Bitte Start- und Enddatum auswählen.');
+      return;
+    }
+    const start = new Date(fromDate);
+    const end = new Date(toDate);
+    if (end < start) {
+      alert('Enddatum muss nach dem Startdatum liegen.');
+      return;
+    }
+    const trainingsInRange = trainings.filter((t) => {
+      const d = parseGermanDate(t.date);
+      return d >= start && d <= end;
+    });
+    const totalCount = trainingsInRange.length;
+    if (totalCount === 0) {
+      alert('In diesem Zeitraum wurden keine Trainings gefunden.');
+      setReportData(null);
+      return;
+    }
+    const report = trainersFirst
+      .filter((p) => !p.isTrainer)
+      .map((player) => {
+        let attendCount = 0;
+        const details = trainingsInRange.map((t) => {
+          const icon = (t.participants && t.participants[player.name]) || '—';
+          const text = iconToText(icon);
+          if (icon === '✅' || icon === '⁉️') attendCount += 1;
+          return { date: t.date, statusText: text };
+        });
+        const percent = Math.round((attendCount / totalCount) * 100);
+        return {
+          name: player.name,
+          hinweis: player.hinweis || '',
+          note: player.note || '',
+          percent,
+          details,
+          showDetails: false,
+        };
+      });
+    setReportData({ totalTrainings: totalCount, data: report });
+    alert("Auswertung aktualisiert.");
+  }
+
+  // PDF-Export für Auswertung
+  function exportPDF() {
+    if (!reportData) return;
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text(`⚽ Fußball-App - Trainingsteilnahme`, 10, 15);
+    doc.setFontSize(12);
+    doc.text(`Version ${version}`, 150, 15, { align: "right" });
+
+    const tableColumn = ["Spieler", "Hinweis", "Notiz", "Teilnahme (%)"];
+    const tableRows = reportData.data.map(r => [
+      r.name,
+      r.hinweis,
+      r.note,
+      r.percent + "%"
+    ]);
+    doc.autoTable({
+      head: [tableColumn],
+      body: tableRows,
+      startY: 25,
+      theme: 'grid',
+      headStyles: { fillColor: [49, 169, 255], textColor: 255 },
+      bodyStyles: { fillColor: [36, 40, 62], textColor: 255 },
+      styles: { fontSize: 10, cellPadding: 2, minCellHeight: 7 }
+    });
+    doc.setFontSize(11);
+    doc.text(`© 2025 Matthias Kopf. Alle Rechte vorbehalten.`, 10, doc.internal.pageSize.height - 10);
+    doc.save(`Training-Auswertung-${fromDate}-bis-${toDate}.pdf`);
+  }
 }
