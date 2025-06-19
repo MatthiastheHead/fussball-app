@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import './App.css';
-// Importiere jsPDF für PDF-Export
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
@@ -67,7 +66,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
 
-  const version = '2.9';
+  const version = '3.0';
 
   // Daten laden
   useEffect(() => {
@@ -176,7 +175,7 @@ export default function App() {
     }
   };
 
-  // Teamverwaltung (mit Bearbeiten & Notiz speichern onBlur)
+  // Teamverwaltung (mit Bearbeiten & Notiz/Hinweis speichern onBlur)
   const startEditPlayer = (player) => {
     setEditPlayerId(player.name);
     setPlayerDraft({
@@ -748,7 +747,6 @@ export default function App() {
       })
       .catch(() => alert('Fehler beim Aktualisieren des Datums.'));
   };
-
   // Teilnahme-Status (Spieler)
   const updateParticipation = (training, name, statusIcon) => {
     const now = new Date();
@@ -776,7 +774,7 @@ export default function App() {
           note: typeof t.note === 'string' ? t.note : '',
         })));
         alert(
-          `Teilnahmestatus von "${name}" im Training vom "${updated[idx].date}" wurde auf "${iconToText(statusIcon).trim()}" gesetzt.`
+          `Status von "${name}" im Training "${updated[idx].date}" wurde gesetzt auf "${iconToText(statusIcon).trim()}".`
         );
       })
       .catch(() => alert('Fehler beim Aktualisieren des Teilnahme-Status.'));
@@ -809,15 +807,15 @@ export default function App() {
           note: typeof t.note === 'string' ? t.note : '',
         })));
         alert(
-          `Trainer-Status von "${name}" im Training vom "${updated[idx].date}" wurde auf "${newStatus}" gesetzt.`
+          `Trainer-Status von "${name}" im Training "${updated[idx].date}" wurde gesetzt auf "${newStatus}".`
         );
       })
       .catch(() => alert('Fehler beim Aktualisieren des Trainer-Status.'));
   };
+
+  // Trainingsliste sortiert und filterbar
   const sortedPlayers = [...players].sort((a, b) => a.name.localeCompare(b.name));
   const trainersFirst = [...sortedPlayers].sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0));
-
-  // Such-/Filterfunktion für Trainings
   const trainingsToShow = sortTrainings(
     trainings.filter((t) => {
       let dateOk = true;
@@ -838,7 +836,7 @@ export default function App() {
     })
   );
 
-  // === RENDERING: Trainingsansicht ===
+  // ==== Trainingsanzeige/Teilnehmerkarten ====
   if (!showStartMenu && !showSettings) {
     return (
       <div className="App">
@@ -881,7 +879,6 @@ export default function App() {
               </label>
               <button onClick={() => { setFilterDate(''); setSearchText(''); }}>Filter zurücksetzen</button>
             </div>
-
             {trainingsToShow.map((t, idx) => (
               <div key={t.date + (t.createdBy || '')} className="training">
                 <h3
@@ -944,7 +941,6 @@ export default function App() {
                         </button>
                       </div>
                     )}
-
                     {/* Notizfeld */}
                     <div className="note-field">
                       <textarea
@@ -961,18 +957,20 @@ export default function App() {
                         onBlur={(e) => saveTrainingNote(t, e.target.value)}
                       />
                     </div>
-
+                    {/* Teilnehmerliste */}
                     {players
                       .sort((a, b) => a.name.localeCompare(b.name))
                       .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0))
-                      .map((p) => {
+                      .map((p, idxP) => {
                         const isTrainer = !!p.isTrainer;
                         const teamHinweis = p.hinweis || "";
                         const playerNote = (t.playerNotes && t.playerNotes[p.name]) || "";
+                        // Zebra-Design: gerades idxP = hell, ungerade = dunkler
+                        const cardBg = idxP % 2 === 0 ? "player-card even" : "player-card odd";
                         if (isTrainer) {
                           const trainerStatus = (t.trainerStatus && t.trainerStatus[p.name]) || 'Abgemeldet';
                           return (
-                            <div key={p.name + 'trainer'} className="player-card">
+                            <div key={p.name + 'trainer'} className={cardBg}>
                               <div className="participant-col">
                                 <span>
                                   <b>{p.name}</b> <em style={{color:"#ffe548", fontWeight:500}}>(Trainer:in)</em>
@@ -1001,7 +999,7 @@ export default function App() {
                         } else {
                           const statusIcon = (t.participants && t.participants[p.name]) || '—';
                           return (
-                            <div key={p.name} className="player-card">
+                            <div key={p.name} className={cardBg}>
                               <div className="participant-col">
                                 <span><b>{p.name}</b></span>
                                 {teamHinweis && (
@@ -1012,9 +1010,9 @@ export default function App() {
                                 <div style={{margin: "0.3em 0"}}>
                                   <span>Status:</span>
                                   <div className="btn-part-status status-btn-row">
-                                    {['✅', '❌', '⏳', '⁉️', '—'].map((icon, idx) => (
+                                    {['✅', '❌', '⏳', '⁉️', '—'].map((icon, idxIcon) => (
                                       <button
-                                        key={idx}
+                                        key={idxIcon}
                                         className={statusIcon === icon ? 'active' : ''}
                                         onClick={() => updateParticipation(t, p.name, icon)}
                                       >
@@ -1059,7 +1057,6 @@ export default function App() {
                           );
                         }
                       })}
-
                     {!t.isEditing && (
                       <button
                         className="btn-save-training"
@@ -1068,7 +1065,6 @@ export default function App() {
                         💾 Speichern
                       </button>
                     )}
-
                     {!t.isEditing && (
                       <button
                         className="btn-delete-training"
@@ -1253,11 +1249,15 @@ export default function App() {
   function exportPDF() {
     if (!reportData) return;
     const doc = new jsPDF();
-    doc.setFontSize(18);
-    doc.text(`⚽ Fußball-App - Trainingsteilnahme`, 10, 15);
-    doc.setFontSize(12);
-    doc.text(`Version ${version}`, 150, 15, { align: "right" });
 
+    // Überschrift und Version mit Abstand
+    doc.setFontSize(18);
+    doc.text('⚽ Fußball-App – Trainingsteilnahme', 14, 18);
+
+    doc.setFontSize(12);
+    doc.text(`Version ${version}`, 14, 27);
+
+    // Tabelle darunter
     const tableColumn = ["Spieler", "Hinweis", "Notiz", "Teilnahme (%)"];
     const tableRows = reportData.data.map(r => [
       r.name,
@@ -1268,14 +1268,16 @@ export default function App() {
     doc.autoTable({
       head: [tableColumn],
       body: tableRows,
-      startY: 25,
+      startY: 33,
       theme: 'grid',
       headStyles: { fillColor: [49, 169, 255], textColor: 255 },
       bodyStyles: { fillColor: [36, 40, 62], textColor: 255 },
       styles: { fontSize: 10, cellPadding: 2, minCellHeight: 7 }
     });
+
     doc.setFontSize(11);
-    doc.text(`© 2025 Matthias Kopf. Alle Rechte vorbehalten.`, 10, doc.internal.pageSize.height - 10);
+    doc.text(`© 2025 Matthias Kopf. Alle Rechte vorbehalten.`, 14, doc.internal.pageSize.height - 10);
+
     doc.save(`Training-Auswertung-${fromDate}-bis-${toDate}.pdf`);
   }
 }
