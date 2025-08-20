@@ -5,6 +5,11 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 
+// === Modelle ===
+const Checklist = require('./models/Checklist');
+const Player = require('./models/Player');
+const Training = require('./models/Training');
+
 // === 1) Überprüfung der Umgebung ===
 if (!process.env.MONGODB_URI) {
   console.error('❌ Keine MONGODB_URI in .env gefunden!');
@@ -26,11 +31,7 @@ mongoose
     process.exit(1);
   });
 
-// === 3) Mongoose-Modelle importieren ===
-const Player = require('./models/Player');
-const Training = require('./models/Training');
-
-// Users-Schema (bleibt wie gehabt)
+// === 3) Users-Schema (bleibt wie gehabt) ===
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, unique: true },
   password: { type: String, required: true },
@@ -45,7 +46,6 @@ app.use(bodyParser.json());
 // === 5) API-Endpunkte ===
 
 // ---- 5.1 Users ----
-// GET /users → gibt alle Benutzer zurück
 app.get('/users', async (req, res) => {
   try {
     const allUsers = await User.find().lean();
@@ -56,9 +56,8 @@ app.get('/users', async (req, res) => {
   }
 });
 
-// POST /users → ersetzt die gesamte Sammlung users, wenn { reset: true, list: [...] }
 app.post('/users', async (req, res) => {
-  const { reset, list } = req.body;
+  const { reset, list } = req.body || {};
   if (!reset || !Array.isArray(list)) {
     return res.status(400).json({ error: 'Ungültige Anfrage: { reset: true, list: [...] } erwartet.' });
   }
@@ -76,7 +75,6 @@ app.post('/users', async (req, res) => {
 });
 
 // ---- 5.2 Players ----
-// GET /players → gibt alle Spieler/Trainer zurück
 app.get('/players', async (req, res) => {
   try {
     const allPlayers = await Player.find().lean();
@@ -87,9 +85,8 @@ app.get('/players', async (req, res) => {
   }
 });
 
-// POST /players → ersetzt die gesamte players-Sammlung
 app.post('/players', async (req, res) => {
-  const { reset, list } = req.body;
+  const { reset, list } = req.body || {};
   if (!reset || !Array.isArray(list)) {
     return res.status(400).json({ error: 'Ungültige Anfrage: { reset: true, list: [...] } erwartet.' });
   }
@@ -113,7 +110,6 @@ app.post('/players', async (req, res) => {
 });
 
 // ---- 5.3 Trainings ----
-// GET /trainings → gibt alle Trainings zurück
 app.get('/trainings', async (req, res) => {
   try {
     const allTrainings = await Training.find().lean();
@@ -124,9 +120,8 @@ app.get('/trainings', async (req, res) => {
   }
 });
 
-// POST /trainings → ersetzt die gesamte trainings-Sammlung
 app.post('/trainings', async (req, res) => {
-  const { reset, list } = req.body;
+  const { reset, list } = req.body || {};
   if (!reset || !Array.isArray(list)) {
     return res.status(400).json({ error: 'Ungültige Anfrage: { reset: true, list: [...] } erwartet.' });
   }
@@ -140,7 +135,7 @@ app.post('/trainings', async (req, res) => {
           participants: t.participants || {},
           trainerStatus: t.trainerStatus || {},
           note: typeof t.note === 'string' ? t.note : "",
-          playerNotes: t.playerNotes || {},   // <---- WICHTIG: Notizen pro Spieler*in!
+          playerNotes: t.playerNotes || {},   // Notizen pro Spieler*in
           createdBy: t.createdBy || '',
           lastEdited: t.lastEdited || null
         }))
@@ -151,6 +146,44 @@ app.post('/trainings', async (req, res) => {
   } catch (err) {
     console.error('Fehler POST /trainings:', err);
     res.status(500).json({ error: 'Datenbankfehler beim Speichern der Trainings' });
+  }
+});
+
+// ---- 5.4 Checklists (NEU) ----
+// GET /checklists → alle Checklisten, neueste zuerst
+app.get('/checklists', async (req, res) => {
+  try {
+    const list = await Checklist.find({}).sort({ createdAt: -1 }).lean();
+    res.json(list);
+  } catch (e) {
+    console.error('Fehler GET /checklists:', e);
+    res.status(500).json({ error: 'Datenbankfehler beim Laden der Checklisten' });
+  }
+});
+
+// POST /checklists → ersetzt die gesamte Sammlung (reset/list), wie bei /players
+app.post('/checklists', async (req, res) => {
+  const { reset, list } = req.body || {};
+  if (!reset || !Array.isArray(list)) {
+    return res.status(400).json({ error: 'Ungültige Anfrage: { reset: true, list: [...] } erwartet.' });
+  }
+  try {
+    await Checklist.deleteMany({});
+    let inserted = [];
+    if (list.length > 0) {
+      // defensive mapping, falls jemand Mist schickt
+      inserted = await Checklist.insertMany(list.map(cl => ({
+        title: typeof cl.title === 'string' ? cl.title : 'Unbenannt',
+        items: typeof cl.items === 'object' && cl.items !== null ? cl.items : {},
+        createdBy: cl.createdBy || '',
+        createdAt: cl.createdAt ? new Date(cl.createdAt) : new Date()
+      })));
+    }
+    const saved = await Checklist.find({}).sort({ createdAt: -1 }).lean();
+    res.json(saved);
+  } catch (e) {
+    console.error('Fehler POST /checklists:', e);
+    res.status(500).json({ error: 'Datenbankfehler beim Speichern der Checklisten' });
   }
 });
 
