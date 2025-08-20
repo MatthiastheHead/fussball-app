@@ -48,6 +48,11 @@ export default function App() {
   const [newNote, setNewNote] = useState('');
   const [newMemberSince, setNewMemberSince] = useState('');
   const [trainings, setTrainings] = useState([]);
+
+  // NEW: Checklisten
+  const [checklists, setChecklists] = useState([]);
+  const [newChecklistTitle, setNewChecklistTitle] = useState('');
+
   const [showAdmin, setShowAdmin] = useState(false);
   const [expandedTraining, setExpandedTraining] = useState(null);
   const [editDateIdx, setEditDateIdx] = useState(null);
@@ -64,6 +69,7 @@ export default function App() {
   // Menü-States
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
+  const [showChecklists, setShowChecklists] = useState(false); // NEW
 
   const version = '3.1';
 
@@ -82,6 +88,10 @@ export default function App() {
         lastEdited: t.lastEdited || null,
       })) : []);
     }).catch(() => setTrainings([]));
+    // NEW: Checklisten laden
+    fetch(API + '/checklists').then(res => res.json()).then(list => {
+      setChecklists(Array.isArray(list) ? list : []);
+    }).catch(() => setChecklists([]));
   }, []);
 
   // Login-Handler
@@ -95,6 +105,7 @@ export default function App() {
       setLoginPass('');
       setShowStartMenu(true);
       setShowSettings(false);
+      setShowChecklists(false);
     } else {
       setLoginError('Falscher Benutzername oder Passwort.');
     }
@@ -106,6 +117,7 @@ export default function App() {
     setShowSettings(false);
     setShowTeam(false);
     setShowAdmin(false);
+    setShowChecklists(false);
     setLoginError('');
   };
 
@@ -324,7 +336,7 @@ export default function App() {
     }
   };
 
-  // ----------- UI: Login, Startmenü, Einstellungen ------------
+  // ----------- UI: Login, Startmenü, Einstellungen, Checklisten ------------
 
   // 1. Login
   if (!loggedInUser) {
@@ -364,16 +376,23 @@ export default function App() {
         <button
           className="main-func-btn"
           style={{margin:'2.2em auto 0 auto', fontSize:'1.3rem', minWidth:260}}
-          onClick={() => { setShowStartMenu(false); setShowSettings(false); }}
+          onClick={() => { setShowStartMenu(false); setShowSettings(false); setShowChecklists(false); }}
         >
           ⚽ Trainingsteilnahme
         </button>
         <button
           className="main-func-btn"
           style={{margin:'0.9em auto 0 auto', fontSize:'1.13rem', minWidth:260}}
-          onClick={() => { setShowSettings(true); setShowStartMenu(false); }}
+          onClick={() => { setShowSettings(true); setShowStartMenu(false); setShowChecklists(false); }}
         >
           ⚙️ Einstellungen
+        </button>
+        <button
+          className="main-func-btn"
+          style={{margin:'0.9em auto 0 auto', fontSize:'1.13rem', minWidth:260}}
+          onClick={() => { setShowChecklists(true); setShowStartMenu(false); setShowSettings(false); }}
+        >
+          ✔️ Checklisten
         </button>
         <div style={{marginTop:'3.5em', textAlign:'center', color:'#8bb2f4', fontSize:'1.04rem'}}>© 2025 Matthias Kopf</div>
         <button
@@ -580,6 +599,201 @@ export default function App() {
     );
   }
 
+  // 4. Checklisten-Seite
+  if (showChecklists) {
+    const sortedPlayers = [...players]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0));
+
+    const saveChecklistList = (updatedList) => {
+      fetch(API + '/checklists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reset: true, list: updatedList }),
+      })
+        .then(res => res.json())
+        .then(serverList => setChecklists(serverList))
+        .catch(() => alert('Fehler beim Speichern der Checklisten.'));
+    };
+
+    const createChecklist = () => {
+      const title = newChecklistTitle.trim() || 'Neue Checkliste';
+      // Default: alle Spieler unchecked
+      const items = {};
+      sortedPlayers.filter(p => !p.isTrainer).forEach(p => { items[p.name] = false; });
+      const updated = [
+        ...checklists,
+        { title, items, createdBy: loggedInUser, createdAt: new Date().toISOString() }
+      ];
+      saveChecklistList(updated);
+      setNewChecklistTitle('');
+    };
+
+    const renameChecklist = (idx, newTitle) => {
+      const updated = [...checklists];
+      updated[idx] = { ...updated[idx], title: newTitle };
+      saveChecklistList(updated);
+    };
+
+    const deleteChecklist = (idx) => {
+      if (!window.confirm('Checkliste wirklich löschen?')) return;
+      const updated = [...checklists];
+      updated.splice(idx, 1);
+      saveChecklistList(updated);
+    };
+
+    const toggleItem = (idx, playerName) => {
+      const updated = [...checklists];
+      const cl = { ...updated[idx] };
+      cl.items = { ...cl.items, [playerName]: !cl.items[playerName] };
+      updated[idx] = cl;
+      setChecklists(updated);
+      // sofort speichern
+      saveChecklistList(updated);
+    };
+
+    const markAll = (idx, value) => {
+      const updated = [...checklists];
+      const cl = { ...updated[idx] };
+      const newItems = { ...cl.items };
+      Object.keys(newItems).forEach(k => { newItems[k] = value; });
+      cl.items = newItems;
+      updated[idx] = cl;
+      saveChecklistList(updated);
+    };
+
+    // Falls später neue Spieler dazu kommen, binden wir sie dynamisch nach
+    const ensurePlayersPresent = (cl) => {
+      const items = { ...(cl.items || {}) };
+      sortedPlayers.filter(p => !p.isTrainer).forEach(p => {
+        if (!(p.name in items)) items[p.name] = false;
+      });
+      return { ...cl, items };
+    };
+
+    return (
+      <div className="App">
+        <header>
+          <h1>✔️ Checklisten <span className="blue-version">{version}</span></h1>
+        </header>
+
+        <section className="checklist-create">
+          <h2>Neue Checkliste anlegen</h2>
+          <div className="add-player-form">
+            <input
+              type="text"
+              placeholder="Titel z. B. 5 € für Rucksack"
+              value={newChecklistTitle}
+              onChange={(e) => setNewChecklistTitle(e.target.value)}
+            />
+            <button onClick={createChecklist}>➕ Anlegen</button>
+          </div>
+        </section>
+
+        <section className="checklist-list">
+          {checklists.length === 0 && (
+            <p className="no-trainings">Noch keine Checklisten angelegt.</p>
+          )}
+
+          {checklists.map((rawCl, idx) => {
+            const cl = ensurePlayersPresent(rawCl);
+            const playersOnly = sortedPlayers.filter(p => !p.isTrainer);
+            return (
+              <div key={(cl._id || '') + idx} className="training">
+                <h3 className="training-header">
+                  <input
+                    type="text"
+                    value={cl.title}
+                    onChange={(e) => {
+                      const updated = [...checklists];
+                      updated[idx] = { ...cl, title: e.target.value };
+                      setChecklists(updated);
+                    }}
+                    onBlur={(e) => renameChecklist(idx, e.target.value.trim() || 'Unbenannt')}
+                    style={{
+                      background:'#232942', color:'#e9f2ff', border:'1px solid #2d385b',
+                      borderRadius:'4px', padding:'0.25rem 0.5rem', minWidth: '220px'
+                    }}
+                  />
+                </h3>
+
+                <div style={{margin:'0.6rem 0 0.8rem 0'}}>
+                  <button className="main-func-btn" onClick={() => markAll(idx, true)}>Alle markieren</button>
+                  <button className="main-func-btn" onClick={() => markAll(idx, false)} style={{marginLeft:'0.6rem'}}>Alle leeren</button>
+                  <button className="btn-delete-training" onClick={() => deleteChecklist(idx)} style={{marginLeft:'0.6rem'}}>🗑️ Löschen</button>
+                </div>
+
+                <div className="trainings-list">
+                  <table style={{width:'100%'}}>
+                    <thead>
+                      <tr>
+                        <th style={{textAlign:'left'}}>Spieler</th>
+                        <th style={{textAlign:'center'}}>Erhalten / erledigt</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {playersOnly.map((p, i) => (
+                        <tr key={p.name} className={i % 2 === 0 ? 'even' : 'odd'}>
+                          <td style={{padding:'0.4rem 0.3rem'}}>{p.name}</td>
+                          <td style={{textAlign:'center'}}>
+                            <input
+                              type="checkbox"
+                              checked={!!cl.items[p.name]}
+                              onChange={() => toggleItem(idx, p.name)}
+                              style={{transform:'scale(1.2)'}}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div style={{marginTop:'0.5rem', fontSize:'0.9rem', color:'#8bb2f4'}}>
+                  Erstellt von {cl.createdBy || 'Unbekannt'} am {cl.createdAt ? new Date(cl.createdAt).toLocaleString() : '–'}
+                </div>
+              </div>
+            );
+          })}
+        </section>
+
+        <div className="controls mobile-controls" style={{marginTop:'1.2rem'}}>
+          <button className="main-func-btn" onClick={() => { setShowChecklists(false); setShowStartMenu(true); }}>
+            Zurück zum Startmenü
+          </button>
+        </div>
+
+        <footer>
+          <p>
+            Ersteller: <strong>Matthias Kopf</strong> | Mail:{' '}
+            <a href="mailto:matthias@head-mail.com">matthias@head-mail.com</a>
+          </p>
+          <p style={{ fontSize: "0.93rem", color: "#8bb2f4", marginTop: "0.4rem", marginBottom: "1.3rem" }}>
+            © 2025 Matthias Kopf. Alle Rechte vorbehalten.
+          </p>
+          <button
+            style={{
+              margin: '2rem auto 0 auto',
+              display: 'block',
+              backgroundColor: '#1363d2',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '4px',
+              padding: '0.7rem 1.4rem',
+              cursor: 'pointer',
+              fontSize: '1.05rem',
+              boxShadow: '0 2px 10px #222a4477',
+            }}
+            onClick={handleLogout}
+          >
+            Logout
+          </button>
+        </footer>
+      </div>
+    );
+  }
+
+  // 5. Trainingsseite (wie gehabt)
   // Trainings nach Datum absteigend sortieren
   function sortTrainings(arr) {
     return [...arr].sort((a, b) => {
@@ -840,7 +1054,7 @@ export default function App() {
   );
 
   // Trainingsanzeige/Teilnehmerkarten
-  if (!showStartMenu && !showSettings) {
+  if (!showStartMenu && !showSettings && !showChecklists) {
     return (
       <div className="App">
         <header>
@@ -854,7 +1068,7 @@ export default function App() {
           <button className="main-func-btn" onClick={() => setShowReport(!showReport)}>
             {showReport ? "Auswertung verbergen" : "Auswertung anzeigen"}
           </button>
-          <button className="main-func-btn" onClick={() => { setShowStartMenu(true); setShowSettings(false); }}>
+          <button className="main-func-btn" onClick={() => { setShowStartMenu(true); setShowSettings(false); setShowChecklists(false); }}>
             Zurück zum Startmenü
           </button>
         </div>
@@ -968,7 +1182,6 @@ export default function App() {
                         const isTrainer = !!p.isTrainer;
                         const teamHinweis = p.memberSince || "";
                         const playerNote = (t.playerNotes && t.playerNotes[p.name]) || "";
-                        // Zebra-Design: gerades idxP = hell, ungerade = dunkler
                         const cardBg = idxP % 2 === 0 ? "player-card even" : "player-card odd";
                         if (isTrainer) {
                           const trainerStatus = (t.trainerStatus && t.trainerStatus[p.name]) || 'Abgemeldet';
@@ -1168,7 +1381,6 @@ export default function App() {
           </section>
         )}
 
-        {/* Footer und Logout ganz unten */}
         <footer>
           <p>
             Ersteller: <strong>Matthias Kopf</strong> | Mail:{' '}
@@ -1230,7 +1442,7 @@ export default function App() {
         const details = trainingsInRange.map((t) => {
           const icon = (t.participants && t.participants[player.name]) || '⏳';
           const text = iconToText(icon);
-          if (icon === '✅') attendCount += 1; // Nur noch ✅ zählt als Teilnahme
+          if (icon === '✅') attendCount += 1; // Nur ✅ zählt
           return { date: t.date, statusText: text };
         });
         const percent = Math.round((attendCount / totalCount) * 100);
