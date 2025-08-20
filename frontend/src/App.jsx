@@ -49,7 +49,7 @@ export default function App() {
   const [newMemberSince, setNewMemberSince] = useState('');
   const [trainings, setTrainings] = useState([]);
 
-  // NEW: Checklisten
+  // Checklisten
   const [checklists, setChecklists] = useState([]);
   const [newChecklistTitle, setNewChecklistTitle] = useState('');
 
@@ -69,9 +69,9 @@ export default function App() {
   // Menü-States
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
-  const [showChecklists, setShowChecklists] = useState(false); // NEW
+  const [showChecklists, setShowChecklists] = useState(false);
 
-  const version = '3.1';
+  const version = '4.0';
 
   // Daten laden
   useEffect(() => {
@@ -88,10 +88,11 @@ export default function App() {
         lastEdited: t.lastEdited || null,
       })) : []);
     }).catch(() => setTrainings([]));
-    // NEW: Checklisten laden
-    fetch(API + '/checklists').then(res => res.json()).then(list => {
-      setChecklists(Array.isArray(list) ? list : []);
-    }).catch(() => setChecklists([]));
+
+    fetch(API + '/checklists')
+      .then(res => res.json())
+      .then(list => setChecklists(Array.isArray(list) ? list : []))
+      .catch(() => setChecklists([]));
   }, []);
 
   // Login-Handler
@@ -277,7 +278,7 @@ export default function App() {
       .catch(() => alert('Fehler beim Speichern der Notiz.'));
   };
 
-  // Hinweis (memberSince) in der Teamverwaltung – SPEICHERT DAUERHAFT onBlur
+  // Hinweis (memberSince) – SPEICHERT DAUERHAFT onBlur
   const handlePlayerMemberSinceBlur = (player, memberSinceValue) => {
     const idx = players.findIndex(p => p.name === player.name);
     if (idx === -1) return;
@@ -368,11 +369,12 @@ export default function App() {
     );
   }
 
-  // 2. Startmenü (nach Login)
+  // 2. Startmenü (nach Login) — Reihenfolge: Training → Checklisten → Einstellungen
   if (showStartMenu) {
     return (
       <div className="start-menu modern-dark-blue">
         <h2 style={{color:'#7dc4ff', marginTop:'1.3em'}}>Willkommen, {loggedInUser}!</h2>
+
         <button
           className="main-func-btn"
           style={{margin:'2.2em auto 0 auto', fontSize:'1.3rem', minWidth:260}}
@@ -380,13 +382,7 @@ export default function App() {
         >
           ⚽ Trainingsteilnahme
         </button>
-        <button
-          className="main-func-btn"
-          style={{margin:'0.9em auto 0 auto', fontSize:'1.13rem', minWidth:260}}
-          onClick={() => { setShowSettings(true); setShowStartMenu(false); setShowChecklists(false); }}
-        >
-          ⚙️ Einstellungen
-        </button>
+
         <button
           className="main-func-btn"
           style={{margin:'0.9em auto 0 auto', fontSize:'1.13rem', minWidth:260}}
@@ -394,6 +390,15 @@ export default function App() {
         >
           ✔️ Checklisten
         </button>
+
+        <button
+          className="main-func-btn"
+          style={{margin:'0.9em auto 0 auto', fontSize:'1.13rem', minWidth:260}}
+          onClick={() => { setShowSettings(true); setShowStartMenu(false); setShowChecklists(false); }}
+        >
+          ⚙️ Einstellungen
+        </button>
+
         <div style={{marginTop:'3.5em', textAlign:'center', color:'#8bb2f4', fontSize:'1.04rem'}}>© 2025 Matthias Kopf</div>
         <button
           style={{
@@ -539,7 +544,6 @@ export default function App() {
               )}
           </ul>
         </section>
-        {/* Admin-Bereich nur für Matthias */}
         {loggedInUser === 'Matthias' && (
           <section className="admin-section">
             <h2>Adminbereich</h2>
@@ -605,26 +609,46 @@ export default function App() {
       .sort((a, b) => a.name.localeCompare(b.name))
       .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0));
 
-    const saveChecklistList = (updatedList) => {
-      fetch(API + '/checklists', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset: true, list: updatedList }),
-      })
-        .then(res => res.json())
-        .then(serverList => setChecklists(serverList))
-        .catch(() => alert('Fehler beim Speichern der Checklisten.'));
+    // Robustes Speichern mit Bereinigung
+    const saveChecklistList = async (rawList) => {
+      try {
+        const cleaned = (rawList || []).map(cl => ({
+          title: typeof cl.title === 'string' ? cl.title : 'Unbenannt',
+          items: Object.fromEntries(
+            Object.entries(cl.items || {}).map(([k, v]) => [k, !!v])
+          ),
+          createdBy: cl.createdBy || loggedInUser || '',
+          createdAt: cl.createdAt ? new Date(cl.createdAt).toISOString() : new Date().toISOString()
+        }));
+
+        const res = await fetch(API + '/checklists', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reset: true, list: cleaned }),
+        });
+
+        if (!res.ok) {
+          const msg = await res.text().catch(() => '');
+          throw new Error(`HTTP ${res.status} ${res.statusText} ${msg}`);
+        }
+
+        const serverList = await res.json();
+        setChecklists(Array.isArray(serverList) ? serverList : []);
+      } catch (err) {
+        console.error('POST /checklists failed:', err);
+        alert('Fehler beim Speichern der Checklisten.');
+      }
     };
 
     const createChecklist = () => {
       const title = newChecklistTitle.trim() || 'Neue Checkliste';
-      // Default: alle Spieler unchecked
       const items = {};
       sortedPlayers.filter(p => !p.isTrainer).forEach(p => { items[p.name] = false; });
       const updated = [
         ...checklists,
         { title, items, createdBy: loggedInUser, createdAt: new Date().toISOString() }
       ];
+      setChecklists(updated);
       saveChecklistList(updated);
       setNewChecklistTitle('');
     };
@@ -632,6 +656,7 @@ export default function App() {
     const renameChecklist = (idx, newTitle) => {
       const updated = [...checklists];
       updated[idx] = { ...updated[idx], title: newTitle };
+      setChecklists(updated);
       saveChecklistList(updated);
     };
 
@@ -639,6 +664,7 @@ export default function App() {
       if (!window.confirm('Checkliste wirklich löschen?')) return;
       const updated = [...checklists];
       updated.splice(idx, 1);
+      setChecklists(updated);
       saveChecklistList(updated);
     };
 
@@ -648,7 +674,6 @@ export default function App() {
       cl.items = { ...cl.items, [playerName]: !cl.items[playerName] };
       updated[idx] = cl;
       setChecklists(updated);
-      // sofort speichern
       saveChecklistList(updated);
     };
 
@@ -659,10 +684,10 @@ export default function App() {
       Object.keys(newItems).forEach(k => { newItems[k] = value; });
       cl.items = newItems;
       updated[idx] = cl;
+      setChecklists(updated);
       saveChecklistList(updated);
     };
 
-    // Falls später neue Spieler dazu kommen, binden wir sie dynamisch nach
     const ensurePlayersPresent = (cl) => {
       const items = { ...(cl.items || {}) };
       sortedPlayers.filter(p => !p.isTrainer).forEach(p => {
@@ -794,7 +819,6 @@ export default function App() {
   }
 
   // 5. Trainingsseite (wie gehabt)
-  // Trainings nach Datum absteigend sortieren
   function sortTrainings(arr) {
     return [...arr].sort((a, b) => {
       const ad = (a.date || '').split(', ')[1]?.split('.').reverse().join('') || '';
@@ -803,7 +827,6 @@ export default function App() {
     });
   }
 
-  // Neues Training (mit Notizfeld)
   const addTraining = () => {
     if (!loggedInUser) {
       alert('Bitte zuerst einloggen.');
@@ -848,7 +871,6 @@ export default function App() {
       .catch(() => alert('Fehler beim Anlegen des Trainings.'));
   };
 
-  // Training löschen
   const deleteTraining = (training) => {
     if (window.confirm('Training wirklich löschen?')) {
       const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
@@ -875,7 +897,6 @@ export default function App() {
     }
   };
 
-  // Notiz Training – SPEICHERT DAUERHAFT onBlur
   const saveTrainingNote = (training, noteValue) => {
     const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
     if (idx === -1) return;
@@ -900,7 +921,6 @@ export default function App() {
       .catch(() => alert('Fehler beim Speichern der Notiz.'));
   };
 
-  // Spieler-Notiz (im Training) – SPEICHERT DAUERHAFT onBlur
   const savePlayerNote = (training, playerName, noteValue) => {
     const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
     if (idx === -1) return;
@@ -928,7 +948,6 @@ export default function App() {
       .catch(() => alert('Fehler beim Speichern der Notiz.'));
   };
 
-  // Trainingsdatum editieren
   const saveEditedDate = (training, newDateValue) => {
     if (!newDateValue) return;
     const [year, month, day] = newDateValue.split('-');
@@ -964,7 +983,6 @@ export default function App() {
       .catch(() => alert('Fehler beim Aktualisieren des Datums.'));
   };
 
-  // Teilnahme-Status (Spieler)
   const updateParticipation = (training, name, statusIcon) => {
     const now = new Date();
     const timestamp = formatDateTime(now);
@@ -995,39 +1013,6 @@ export default function App() {
         );
       })
       .catch(() => alert('Fehler beim Aktualisieren des Teilnahme-Status.'));
-  };
-
-  // Trainer-Status (Dropdown)
-  const updateTrainerStatus = (training, name, newStatus) => {
-    const now = new Date();
-    const timestamp = formatDateTime(now);
-
-    const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
-    if (idx === -1) return;
-    const updated = [...trainings];
-    updated[idx].trainerStatus = updated[idx].trainerStatus || {};
-    updated[idx].trainerStatus[name] = newStatus;
-    updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
-
-    fetch(API + '/trainings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then(trainingsFromServer => {
-        setTrainings(trainingsFromServer.map(t => ({
-          ...t,
-          participants: t.participants || {},
-          trainerStatus: t.trainerStatus || {},
-          playerNotes: t.playerNotes || {},
-          note: typeof t.note === 'string' ? t.note : '',
-        })));
-        alert(
-          `Trainer-Status von "${name}" im Training "${updated[idx].date}" wurde gesetzt auf "${newStatus}".`
-        );
-      })
-      .catch(() => alert('Fehler beim Aktualisieren des Trainer-Status.'));
   };
 
   // Trainingsliste sortiert und filterbar
@@ -1345,7 +1330,7 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {reportData.data.map((row, idx) => (
+                    {reportData.data.map((row) => (
                       <React.Fragment key={row.name}>
                         <tr
                           className={`report-row ${expandedReportRow === row.name ? 'expanded' : ''}`}
@@ -1413,7 +1398,7 @@ export default function App() {
     );
   }
 
-  // --- Auswertung berechnen
+  // --- Auswertung berechnen (ohne fremde Abhängigkeit von trainersFirst)
   function computeReport() {
     if (!fromDate || !toDate) {
       alert('Bitte Start- und Enddatum auswählen.');
@@ -1435,26 +1420,30 @@ export default function App() {
       setReportData(null);
       return;
     }
-    const report = trainersFirst
-      .filter((p) => !p.isTrainer)
-      .map((player) => {
-        let attendCount = 0;
-        const details = trainingsInRange.map((t) => {
-          const icon = (t.participants && t.participants[player.name]) || '⏳';
-          const text = iconToText(icon);
-          if (icon === '✅') attendCount += 1; // Nur ✅ zählt
-          return { date: t.date, statusText: text };
-        });
-        const percent = Math.round((attendCount / totalCount) * 100);
-        return {
-          name: player.name,
-          memberSince: player.memberSince || '',
-          note: player.note || '',
-          percent,
-          details,
-          showDetails: false,
-        };
+
+    const playersOnly = [...players]
+      .filter(p => !p.isTrainer)
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const report = playersOnly.map((player) => {
+      let attendCount = 0;
+      const details = trainingsInRange.map((t) => {
+        const icon = (t.participants && t.participants[player.name]) || '⏳';
+        const text = iconToText(icon);
+        if (icon === '✅') attendCount += 1; // Nur ✅ zählt
+        return { date: t.date, statusText: text };
       });
+      const percent = Math.round((attendCount / totalCount) * 100);
+      return {
+        name: player.name,
+        memberSince: player.memberSince || '',
+        note: player.note || '',
+        percent,
+        details,
+        showDetails: false,
+      };
+    });
+
     setReportData({ totalTrainings: totalCount, data: report });
     alert("Auswertung aktualisiert.");
   }
@@ -1468,7 +1457,7 @@ export default function App() {
     doc.text('⚽ Fußball-App – Trainingsteilnahme', 14, 18);
 
     doc.setFontSize(12);
-    doc.text(`Version ${version}`, 14, 27);
+    doc.text(`Version {version}`, 14, 27);
 
     const tableColumn = ["Spieler", "Hinweis", "Notiz", "Teilnahme (%)"];
     const tableRows = reportData.data.map(r => [
