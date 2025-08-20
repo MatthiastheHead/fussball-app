@@ -10,9 +10,7 @@ const iconToText = (icon) => {
     case '✅': return ' Teilnehmend';
     case '❌': return ' Abgemeldet';
     case '⏳': return ' Keine Rückmeldung';
-    case '⁉️': return ' Keine Rückmeldung-teilnehmend';
-    case '—': return '';
-    default: return ' Zugesagt aber Abwesend';
+    default:   return ' Keine Rückmeldung';
   }
 };
 
@@ -24,6 +22,7 @@ const formatDateTime = (dateObj) => {
   const minutes = String(dateObj.getMinutes()).padStart(2, '0');
   return `${day}.${month}.${year} ${hours}:${minutes}`;
 };
+
 const parseGermanDate = (str) => {
   const datePart = str && str.includes(',') ? str.split(', ')[1] : str;
   if (!datePart) return new Date(0);
@@ -84,6 +83,7 @@ export default function App() {
       })) : []);
     }).catch(() => setTrainings([]));
   }, []);
+
   // Login-Handler
   const handleLogin = () => {
     const trimmedName = loginName.trim();
@@ -323,6 +323,7 @@ export default function App() {
         .catch(() => alert('Fehler beim Löschen des Team-Mitglieds.'));
     }
   };
+
   // ----------- UI: Login, Startmenü, Einstellungen ------------
 
   // 1. Login
@@ -578,6 +579,7 @@ export default function App() {
       </div>
     );
   }
+
   // Trainings nach Datum absteigend sortieren
   function sortTrainings(arr) {
     return [...arr].sort((a, b) => {
@@ -747,6 +749,7 @@ export default function App() {
       })
       .catch(() => alert('Fehler beim Aktualisieren des Datums.'));
   };
+
   // Teilnahme-Status (Spieler)
   const updateParticipation = (training, name, statusIcon) => {
     const now = new Date();
@@ -997,7 +1000,7 @@ export default function App() {
                             </div>
                           );
                         } else {
-                          const statusIcon = (t.participants && t.participants[p.name]) || '—';
+                          const statusIcon = (t.participants && t.participants[p.name]) || '⏳';
                           return (
                             <div key={p.name} className={cardBg}>
                               <div className="participant-col">
@@ -1010,7 +1013,7 @@ export default function App() {
                                 <div style={{margin: "0.3em 0"}}>
                                   <span>Status:</span>
                                   <div className="btn-part-status status-btn-row">
-                                    {['✅', '❌', '⏳', '⁉️', '—'].map((icon, idxIcon) => (
+                                    {['✅', '❌', '⏳'].map((icon, idxIcon) => (
                                       <button
                                         key={idxIcon}
                                         className={statusIcon === icon ? 'active' : ''}
@@ -1225,9 +1228,9 @@ export default function App() {
       .map((player) => {
         let attendCount = 0;
         const details = trainingsInRange.map((t) => {
-          const icon = (t.participants && t.participants[player.name]) || '—';
+          const icon = (t.participants && t.participants[player.name]) || '⏳';
           const text = iconToText(icon);
-          if (icon === '✅' || icon === '⁉️') attendCount += 1;
+          if (icon === '✅') attendCount += 1; // Nur noch ✅ zählt als Teilnahme
           return { date: t.date, statusText: text };
         });
         const percent = Math.round((attendCount / totalCount) * 100);
