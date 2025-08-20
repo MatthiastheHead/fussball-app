@@ -43,6 +43,33 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
+// ---- Diagnose-/Health-Routen (zum Verifizieren des Deploys) ----
+app.get('/__health', (req, res) => {
+  res.json({
+    ok: true,
+    db: mongoose.connection?.readyState === 1 ? 'connected' : 'not-connected',
+    cwd: process.cwd(),
+  });
+});
+
+app.get('/__routes', (req, res) => {
+  const routes = (app._router?.stack || [])
+    .filter(l => l.route)
+    .map(l => {
+      const methods = Object.keys(l.route.methods).join(',').toUpperCase();
+      return `${methods} ${l.route.path}`;
+    });
+  res.json(routes);
+});
+
+// favicon-Noise ausblenden
+app.get('/favicon.ico', (_req, res) => res.status(204).end());
+
+// Root-Info
+app.get('/', (_req, res) => {
+  res.json({ ok: true, service: 'fussball-api', version: 1 });
+});
+
 // === 5) API-Endpunkte ===
 
 // ---- 5.1 Users ----
@@ -150,8 +177,10 @@ app.post('/trainings', async (req, res) => {
 });
 
 // ---- 5.4 Checklists (NEU) ----
+console.log('🧩 Registriere Checklisten-Endpunkte...');
+
 // GET /checklists → alle Checklisten, neueste zuerst
-app.get('/checklists', async (req, res) => {
+app.get('/checklists', async (_req, res) => {
   try {
     const list = await Checklist.find({}).sort({ createdAt: -1 }).lean();
     res.json(list);
@@ -161,7 +190,7 @@ app.get('/checklists', async (req, res) => {
   }
 });
 
-// POST /checklists → ersetzt die gesamte Sammlung (reset/list), wie bei /players
+// POST /checklists → ersetzt die gesamte Sammlung (reset/list)
 app.post('/checklists', async (req, res) => {
   const { reset, list } = req.body || {};
   if (!reset || !Array.isArray(list)) {
@@ -169,10 +198,8 @@ app.post('/checklists', async (req, res) => {
   }
   try {
     await Checklist.deleteMany({});
-    let inserted = [];
     if (list.length > 0) {
-      // defensive mapping, falls jemand Mist schickt
-      inserted = await Checklist.insertMany(list.map(cl => ({
+      await Checklist.insertMany(list.map(cl => ({
         title: typeof cl.title === 'string' ? cl.title : 'Unbenannt',
         items: typeof cl.items === 'object' && cl.items !== null ? cl.items : {},
         createdBy: cl.createdBy || '',
@@ -187,7 +214,7 @@ app.post('/checklists', async (req, res) => {
   }
 });
 
-// === 6) Fallback-Route (optional) ===
+// === 6) Fallback-Route ===
 app.use((req, res) => {
   res.status(404).send('Nicht gefunden');
 });
