@@ -24,7 +24,8 @@ const formatDateTime = (dateObj) => {
   const year = dateObj.getFullYear();
   const hours = String(dateObj.getHours()).padStart(2, '0');
   const minutes = String(dateObj.getMinutes()).padStart(2, '0');
-  return ${day}.${month}.${year} ${hours}:${minutes};
+  // ✅ Fix: Backticks für Template String
+  return `${day}.${month}.${year} ${hours}:${minutes}`;
 };
 
 const parseGermanDate = (str) => {
@@ -103,6 +104,7 @@ export default function App() {
       .then(list => setChecklists(Array.isArray(list) ? list : []))
       .catch(() => setChecklists([]));
   }, []);
+
 
   // Login-Handler
   const handleLogin = () => {
