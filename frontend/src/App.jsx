@@ -24,7 +24,7 @@ const formatDateTime = (dateObj) => {
   const year = dateObj.getFullYear();
   const hours = String(dateObj.getHours()).padStart(2, '0');
   const minutes = String(dateObj.getMinutes()).padStart(2, '0');
-  return `${day}.${month}.${year} ${hours}:${minutes}`;
+  return ${day}.${month}.${year} ${hours}:${minutes};
 };
 
 const parseGermanDate = (str) => {
@@ -168,7 +168,7 @@ export default function App() {
       .then(res => res.json())
       .then((saved) => {
         setUsers(saved);
-        alert(`Passwort für ${saved[index].name} geändert.`);
+        alert(Passwort für ${saved[index].name} geändert.);
       })
       .catch(() => alert('Fehler beim Aktualisieren des Passworts.'));
   };
@@ -179,7 +179,7 @@ export default function App() {
       alert('Den Administrator kann man nicht löschen.');
       return;
     }
-    if (window.confirm(`Benutzer "${userToDelete.name}" wirklich löschen?`)) {
+    if (window.confirm(Benutzer "${userToDelete.name}" wirklich löschen?)) {
       const updated = [...users];
       updated.splice(index, 1);
       fetch(API + '/users', {
@@ -326,7 +326,7 @@ export default function App() {
 
   // Spieler/Trainer löschen
   const deletePlayer = (player) => {
-    if (window.confirm(`Team-Mitglied "${player.name}" wirklich löschen?`)) {
+    if (window.confirm(Team-Mitglied "${player.name}" wirklich löschen?)) {
       const idx = players.findIndex(p => p.name === player.name);
       if (idx === -1) return;
       const updated = [...players];
@@ -361,11 +361,12 @@ export default function App() {
       return;
     }
     const now = new Date();
+    the:
     const dd = String(now.getDate()).padStart(2, '0');
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const yyyy = now.getFullYear();
     const weekday = ['So','Mo','Di','Mi','Do','Fr','Sa'][now.getDay()];
-    const formatted = `${weekday}, ${dd}.${mm}.${yyyy}`;
+    const formatted = ${weekday}, ${dd}.${mm}.${yyyy};
     const timestamp = formatDateTime(now);
 
     const updated = [
@@ -485,7 +486,7 @@ export default function App() {
     const [year, month, day] = newDateValue.split('-');
     const dateObj = new Date(Number(year), Number(month) - 1, Number(day));
     const weekday = ['So','Mo','Di','Mi','Do','Fr','Sa'][dateObj.getDay()];
-    const formatted = `${weekday}, ${String(day).padStart(2, '0')}.${String(month).padStart(2, '0')}.${year}`;
+    const formatted = ${weekday}, ${String(day).padStart(2, '0')}.${String(month).padStart(2, '0')}.${year};
     const now = new Date();
     const timestamp = formatDateTime(now);
 
@@ -541,7 +542,7 @@ export default function App() {
           playerNotes: t.playerNotes || {},
           note: typeof t.note === 'string' ? t.note : '',
         })));
-        alert(`Status von "${name}" im Training "${updated[idx].date}" wurde gesetzt auf "${iconToText(statusIcon).trim()}".`);
+        alert(Status von "${name}" im Training "${updated[idx].date}" wurde gesetzt auf "${iconToText(statusIcon).trim()}".);
       })
       .catch(() => alert('Fehler beim Aktualisieren des Teilnahme-Status.'));
   };
@@ -572,7 +573,7 @@ export default function App() {
           playerNotes: t.playerNotes || {},
           note: typeof t.note === 'string' ? t.note : '',
         })));
-        alert(`Trainer-Status von "${name}" im Training "${updated[idx].date}" wurde gesetzt auf "${newStatus}".`);
+        alert(Trainer-Status von "${name}" im Training "${updated[idx].date}" wurde gesetzt auf "${newStatus}".);
       })
       .catch(() => alert('Fehler beim Aktualisieren des Trainer-Status.'));
   };
@@ -588,7 +589,7 @@ export default function App() {
       if (filterDate && t.date) {
         const datePart = t.date.split(', ')[1];
         const [y, m, d] = filterDate.split('-');
-        const comp = `${d}.${m}.${y}`;
+        const comp = ${d}.${m}.${y};
         dateOk = datePart === comp;
       }
       let searchOk = true;
@@ -648,14 +649,14 @@ export default function App() {
           style={{margin:'0.9em auto 0 auto', fontSize:'1.13rem', minWidth:260}}
           onClick={() => { setShowChecklists(true); setShowStartMenu(false); setShowSettings(false); }}
         >
-          ✔️ Checklisten
+          ✔ Checklisten
         </button>
         <button
           className="main-func-btn"
           style={{margin:'0.9em auto 0 auto', fontSize:'1.13rem', minWidth:260}}
           onClick={() => { setShowSettings(true); setShowStartMenu(false); }}
         >
-          ⚙️ Einstellungen
+          ⚙ Einstellungen
         </button>
         <div style={{marginTop:'3.5em', textAlign:'center', color:'#8bb2f4', fontSize:'1.04rem'}}>© 2025 Matthias Kopf</div>
         <button
@@ -684,7 +685,7 @@ export default function App() {
     return (
       <div className="App">
         <header>
-          <h1>⚙️ Einstellungen</h1>
+          <h1>⚙ Einstellungen</h1>
         </header>
 
         {/* Teamverwaltung */}
@@ -795,7 +796,7 @@ export default function App() {
                         <option value="Spieler">Spieler</option>
                         <option value="Trainer">Trainer</option>
                       </select>
-                      <button className="btn-edit" onClick={() => startEditPlayer(p)}>✏️ Bearbeiten</button>
+                      <button className="btn-edit" onClick={() => startEditPlayer(p)}>✏ Bearbeiten</button>
                       <button className="btn-delete" onClick={() => deletePlayer(p)}>❌ Löschen</button>
                     </div>
                   </li>
@@ -835,7 +836,7 @@ export default function App() {
                       marginLeft: '0.5rem',
                       backgroundColor: '#232942',
                       color: '#f1f1f1',
-                      border: '1px solid '#2d385b',
+                      border: '1px solid #2d385b',   // ← FIX: korrekter String
                       borderRadius: '4px',
                       padding: '0.3rem 0.6rem',
                     }}
@@ -913,10 +914,10 @@ export default function App() {
             {trainingsToShow.map((t, idx) => (
               <div key={t.date + (t.createdBy || '')} className="training">
                 <h3
-                  className={`training-header ${expandedTraining === t.date + (t.createdBy || '') ? 'expanded' : ''}`}
+                  className={training-header ${expandedTraining === t.date + (t.createdBy || '') ? 'expanded' : ''}}
                   onClick={() => setExpandedTraining(expandedTraining === t.date + (t.createdBy || '') ? null : t.date + (t.createdBy || ''))}
                 >
-                  📅 {t.date} {expandedTraining === t.date + (t.createdBy || '') ? '🔽' : '▶️'}
+                  📅 {t.date} {expandedTraining === t.date + (t.createdBy || '') ? '🔽' : '▶'}
                 </h3>
 
                 {expandedTraining === t.date + (t.createdBy || '') && (
@@ -964,11 +965,11 @@ export default function App() {
                           className="btn-edit-date"
                           onClick={() => {
                             const parts = (t.date || '').split(', ')[1]?.split('.') || [];
-                            setEditDateValue(parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : '');
+                            setEditDateValue(parts.length === 3 ? ${parts[2]}-${parts[1]}-${parts[0]} : '');
                             setEditDateIdx(idx);
                           }}
                         >
-                          ✏️ Datum anpassen
+                          ✏ Datum anpassen
                         </button>
                       </div>
                     )}
@@ -1102,7 +1103,7 @@ export default function App() {
                         className="btn-delete-training"
                         onClick={() => deleteTraining(t)}
                       >
-                        🗑️ Training löschen
+                        🗑 Training löschen
                       </button>
                     )}
                   </>
@@ -1167,7 +1168,7 @@ export default function App() {
                     {reportData.data.map((row) => (
                       <React.Fragment key={row.name}>
                         <tr
-                          className={`report-row ${expandedReportRow === row.name ? 'expanded' : ''}`}
+                          className={report-row ${expandedReportRow === row.name ? 'expanded' : ''}}
                           onClick={() => setExpandedReportRow(expandedReportRow === row.name ? null : row.name)}
                           style={{ cursor: "pointer" }}
                         >
@@ -1254,7 +1255,7 @@ export default function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ reset: true, list: cleaned }),
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+        if (!res.ok) throw new Error(HTTP ${res.status} ${res.statusText});
         const serverList = await res.json();
         setChecklists(Array.isArray(serverList) ? serverList : []);
       } catch (err) {
@@ -1333,7 +1334,7 @@ export default function App() {
     return (
       <div className="App">
         <header>
-          <h1>✔️ Checklisten <span className="blue-version">{version}</span></h1>
+          <h1>✔ Checklisten <span className="blue-version">{version}</span></h1>
         </header>
 
         <section className="checklist-create">
@@ -1362,11 +1363,11 @@ export default function App() {
             return (
               <div key={key} className="training">
                 <h3
-                  className={`training-header ${isExpanded ? 'expanded' : ''}`}
+                  className={training-header ${isExpanded ? 'expanded' : ''}}
                   onClick={() => setExpandedChecklist(isExpanded ? null : key)}
                   style={{ cursor: 'pointer' }}
                 >
-                  📋 {cl.title} {isExpanded ? '🔽' : '▶️'}
+                  📋 {cl.title} {isExpanded ? '🔽' : '▶'}
                 </h3>
 
                 {isExpanded && (
@@ -1391,7 +1392,7 @@ export default function App() {
                     <div style={{margin:'0.6rem 0 0.8rem 0'}}>
                       <button className="main-func-btn" onClick={() => markAll(idx, true)}>Alle markieren</button>
                       <button className="main-func-btn" onClick={() => markAll(idx, false)} style={{marginLeft:'0.6rem'}}>Alle leeren</button>
-                      <button className="btn-delete-training" onClick={() => deleteChecklist(idx)} style={{marginLeft:'0.6rem'}}>🗑️ Löschen</button>
+                      <button className="btn-delete-training" onClick={() => deleteChecklist(idx)} style={{marginLeft:'0.6rem'}}>🗑 Löschen</button>
                     </div>
 
                     <div className="trainings-list">
@@ -1529,7 +1530,7 @@ export default function App() {
     doc.text('⚽ Fußball-App – Trainingsteilnahme', 14, 18);
 
     doc.setFontSize(12);
-    doc.text(`Version ${version}`, 14, 27);
+    doc.text(Version ${version}, 14, 27);
 
     const tableColumn = ["Spieler", "Hinweis", "Notiz", "Teilnahme (%)"];
     const tableRows = reportData.data.map(r => [
@@ -1549,8 +1550,8 @@ export default function App() {
     });
 
     doc.setFontSize(11);
-    doc.text(`© 2025 Matthias Kopf. Alle Rechte vorbehalten.`, 14, doc.internal.pageSize.height - 10);
+    doc.text(© 2025 Matthias Kopf. Alle Rechte vorbehalten., 14, doc.internal.pageSize.height - 10);
 
-    doc.save(`Training-Auswertung-${fromDate}-bis-${toDate}.pdf`);
+    doc.save(Training-Auswertung-${fromDate}-bis-${toDate}.pdf);
   }
 }
