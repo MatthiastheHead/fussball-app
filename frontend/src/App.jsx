@@ -4,7 +4,8 @@ import './App.css';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-const API = 'https://fussball-api.onrender.com';
+// API-URL: zuerst ENV, sonst Fallback
+const API = (import.meta?.env?.VITE_API_BASE) || 'https://fussball-api.onrender.com';
 
 // Nur noch drei Status-Icons
 const STATUS_ICONS = ['✅', '❌', '⏳'];
@@ -34,12 +35,37 @@ const parseGermanDate = (str) => {
   return new Date(Number(y), Number(m) - 1, Number(d));
 };
 
+// --- kleine Utils ---
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function healthcheck() {
+  // nutzt /health, ansonsten fällt fetch einfach fehl -> wir ignorieren Fehler
+  try {
+    const res = await fetch(API + '/health', { cache: 'no-store' });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureBackendAwake() {
+  // 3 Versuche mit sanftem Backoff
+  for (let i = 0; i < 3; i++) {
+    const ok = await healthcheck();
+    if (ok) return true;
+    await wait(1500 * (i + 1));
+  }
+  return false;
+}
+
 export default function App() {
   // STATES
   const [loggedInUser, setLoggedInUser] = useState(null);
   const [loginName, setLoginName] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState('');
+
+  const [busy, setBusy] = useState(false);        // Click-Lock/Progress
   const [users, setUsers] = useState([]);
   const [newUserName, setNewUserName] = useState('');
   const [newUserPass, setNewUserPass] = useState('');
@@ -80,28 +106,46 @@ export default function App() {
   // Version
   const version = '4.1';
 
+  // Helper: einmalige Ausführung (Busy-Lock)
+  async function runOnce(fn) {
+    if (busy) return false;
+    setBusy(true);
+    try { await fn(); return true; }
+    finally { setBusy(false); }
+  }
+
+  // Helper: Re-Fetch aller Kernlisten (konsistente UI nach jedem Speichern)
+  async function refetchAll() {
+    try {
+      const [u, p, t, c] = await Promise.all([
+        fetch(API + '/users').then(r => r.ok ? r.json() : []),
+        fetch(API + '/players').then(r => r.ok ? r.json() : []),
+        fetch(API + '/trainings').then(r => r.ok ? r.json() : []),
+        fetch(API + '/checklists').then(r => r.ok ? r.json() : []),
+      ]);
+      setUsers(Array.isArray(u) ? u : []);
+      setPlayers(Array.isArray(p) ? p : []);
+      setTrainings(Array.isArray(t) ? t.map(x => ({
+        ...x,
+        participants: x.participants || {},
+        trainerStatus: x.trainerStatus || {},
+        playerNotes: x.playerNotes || {},
+        note: typeof x.note === 'string' ? x.note : '',
+        createdBy: x.createdBy || '',
+        lastEdited: x.lastEdited || null,
+      })) : []);
+      setChecklists(Array.isArray(c) ? c : []);
+    } catch {
+      // Falls alles scheitert, keine harten Fehler – UI bleibt bestehen
+    }
+  }
+
   // Daten laden
   useEffect(() => {
-    fetch(API + '/users').then(res => res.json()).then(setUsers).catch(() => setUsers([]));
-    fetch(API + '/players').then(res => res.json()).then(setPlayers).catch(() => setPlayers([]));
-    fetch(API + '/trainings')
-      .then(res => res.json())
-      .then(data => {
-        setTrainings(Array.isArray(data) ? data.map(t => ({
-          ...t,
-          participants: t.participants || {},
-          trainerStatus: t.trainerStatus || {},
-          note: typeof t.note === 'string' ? t.note : '',
-          playerNotes: t.playerNotes || {},
-          createdBy: t.createdBy || '',
-          lastEdited: t.lastEdited || null,
-        })) : []);
-      })
-      .catch(() => setTrainings([]));
-    fetch(API + '/checklists')
-      .then(r => r.ok ? r.json() : [])
-      .then(list => setChecklists(Array.isArray(list) ? list : []))
-      .catch(() => setChecklists([]));
+    (async () => {
+      await ensureBackendAwake();
+      await refetchAll();
+    })();
   }, []);
 
   // Login-Handler
@@ -131,7 +175,7 @@ export default function App() {
   };
 
   // Nutzer anlegen
-  const addNewUser = () => {
+  const addNewUser = () => runOnce(async () => {
     const name = newUserName.trim();
     if (!name || !newUserPass) {
       alert('Bitte Benutzername und Passwort eingeben.');
@@ -142,59 +186,48 @@ export default function App() {
       return;
     }
     const updated = [...users, { name, password: newUserPass }];
-    fetch(API + '/users', {
+    const res = await fetch(API + '/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then((saved) => {
-        setUsers(saved);
-        setNewUserName('');
-        setNewUserPass('');
-        alert('Neuer Benutzer angelegt.');
-      })
-      .catch(() => alert('Fehler beim Anlegen des Benutzers.'));
-  };
+    });
+    if (!res.ok) { alert('Fehler beim Anlegen des Benutzers.'); return; }
+    await refetchAll();
+    setNewUserName(''); setNewUserPass('');
+    alert('Neuer Benutzer angelegt.');
+  });
 
-  const updateUserPassword = (index, newPass) => {
+  const updateUserPassword = (index, newPass) => runOnce(async () => {
     const updated = [...users];
     updated[index].password = newPass;
-    fetch(API + '/users', {
+    const res = await fetch(API + '/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then((saved) => {
-        setUsers(saved);
-        alert(`Passwort für ${saved[index].name} geändert.`);
-      })
-      .catch(() => alert('Fehler beim Aktualisieren des Passworts.'));
-  };
+    });
+    if (!res.ok) { alert('Fehler beim Aktualisieren des Passworts.'); return; }
+    await refetchAll();
+    alert(`Passwort für ${updated[index].name} geändert.`);
+  });
 
-  const deleteUser = (index) => {
+  const deleteUser = (index) => runOnce(async () => {
     const userToDelete = users[index];
     if (userToDelete.name === 'Matthias') {
       alert('Den Administrator kann man nicht löschen.');
       return;
     }
-    if (window.confirm(`Benutzer "${userToDelete.name}" wirklich löschen?`)) {
-      const updated = [...users];
-      updated.splice(index, 1);
-      fetch(API + '/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset: true, list: updated }),
-      })
-        .then(res => res.json())
-        .then((saved) => {
-          setUsers(saved);
-          alert('Benutzer gelöscht.');
-        })
-        .catch(() => alert('Fehler beim Löschen des Benutzers.'));
-    }
-  };
+    if (!window.confirm(`Benutzer "${userToDelete.name}" wirklich löschen?`)) return;
+    const updated = [...users];
+    updated.splice(index, 1);
+    const res = await fetch(API + '/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    });
+    if (!res.ok) { alert('Fehler beim Löschen des Benutzers.'); return; }
+    await refetchAll();
+    alert('Benutzer gelöscht.');
+  });
 
   // Teamverwaltung (mit Bearbeiten & Notiz/Hinweis speichern onBlur)
   const startEditPlayer = (player) => {
@@ -205,7 +238,8 @@ export default function App() {
       memberSince: player.memberSince || ''
     });
   };
-  const saveEditPlayer = () => {
+
+  const saveEditPlayer = () => runOnce(async () => {
     const idx = players.findIndex(p => p.name === editPlayerId);
     if (idx === -1) return;
     const updated = [...players];
@@ -214,32 +248,23 @@ export default function App() {
       note: typeof playerDraft.note === 'string' ? playerDraft.note : '',
       memberSince: typeof playerDraft.memberSince === 'string' ? playerDraft.memberSince : ''
     };
-    fetch(API + '/players', {
+    const res = await fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then(playersFromServer => {
-        setPlayers(playersFromServer);
-        alert('Änderung gespeichert.');
-      })
-      .catch(() => alert('Fehler beim Bearbeiten.'));
-    setEditPlayerId(null);
-    setPlayerDraft({});
-  };
-  const cancelEditPlayer = () => {
-    setEditPlayerId(null);
-    setPlayerDraft({});
-  };
+    });
+    setEditPlayerId(null); setPlayerDraft({});
+    if (!res.ok) { alert('Fehler beim Bearbeiten.'); return; }
+    await refetchAll();
+    alert('Änderung gespeichert.');
+  });
+
+  const cancelEditPlayer = () => { setEditPlayerId(null); setPlayerDraft({}); };
 
   // Spieler/Trainer anlegen (Teamverwaltung)
-  const addPlayer = () => {
+  const addPlayer = () => runOnce(async () => {
     const trimmed = newName.trim();
-    if (trimmed === '') {
-      alert('Bitte einen Namen eingeben.');
-      return;
-    }
+    if (trimmed === '') { alert('Bitte einen Namen eingeben.'); return; }
     const isTrainer = newRole === 'Trainer';
     const updated = [
       ...players,
@@ -250,100 +275,80 @@ export default function App() {
         memberSince: typeof newMemberSince === 'string' ? newMemberSince : ''
       },
     ];
-    fetch(API + '/players', {
+    const res = await fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then(playersFromServer => {
-        setPlayers(playersFromServer);
-        alert('Team-Mitglied hinzugefügt.');
-      })
-      .catch(() => alert('Fehler beim Hinzufügen des Team-Mitglieds.'));
-    setNewName('');
-    setNewRole('Spieler');
-    setNewNote('');
-    setNewMemberSince('');
-  };
+    });
+    if (!res.ok) { alert('Fehler beim Hinzufügen des Team-Mitglieds.'); return; }
+    await refetchAll();
+    setNewName(''); setNewRole('Spieler'); setNewNote(''); setNewMemberSince('');
+    alert('Team-Mitglied hinzugefügt.');
+  });
 
-  // Notiz in der Teamverwaltung – SPEICHERT DAUERHAFT onBlur
-  const handlePlayerNoteBlur = (player, noteValue) => {
+  // Notiz/Hinweis in der Teamverwaltung – SPEICHERT DAUERHAFT onBlur
+  const handlePlayerNoteBlur = (player, noteValue) => runOnce(async () => {
     const idx = players.findIndex(p => p.name === player.name);
     if (idx === -1) return;
     const updated = [...players];
     updated[idx].note = noteValue;
-    fetch(API + '/players', {
+    const res = await fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then(playersFromServer => {
-        setPlayers(playersFromServer);
-        alert('Notiz gespeichert.');
-      })
-      .catch(() => alert('Fehler beim Speichern der Notiz.'));
-  };
+    });
+    if (!res.ok) { alert('Fehler beim Speichern der Notiz.'); return; }
+    await refetchAll();
+    alert('Notiz gespeichert.');
+  });
 
-  // Hinweis (memberSince) in der Teamverwaltung – SPEICHERT DAUERHAFT onBlur
-  const handlePlayerMemberSinceBlur = (player, memberSinceValue) => {
+  const handlePlayerMemberSinceBlur = (player, memberSinceValue) => runOnce(async () => {
     const idx = players.findIndex(p => p.name === player.name);
     if (idx === -1) return;
     const updated = [...players];
     updated[idx].memberSince = memberSinceValue;
-    fetch(API + '/players', {
+    const res = await fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then(playersFromServer => {
-        setPlayers(playersFromServer);
-        alert('Hinweis gespeichert.');
-      })
-      .catch(() => alert('Fehler beim Speichern des Hinweises.'));
-  };
+    });
+    if (!res.ok) { alert('Fehler beim Speichern des Hinweises.'); return; }
+    await refetchAll();
+    alert('Hinweis gespeichert.');
+  });
 
   // Rolle ändern
-  const changeRole = (player, role) => {
+  const changeRole = (player, role) => runOnce(async () => {
     const idx = players.findIndex(p => p.name === player.name);
     if (idx === -1) return;
     const updated = [...players];
     updated[idx].isTrainer = role === 'Trainer';
-    fetch(API + '/players', {
+    const res = await fetch(API + '/players', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then(playersFromServer => {
-        setPlayers(playersFromServer);
-        alert('Rolle geändert.');
-      })
-      .catch(() => alert('Fehler beim Ändern der Rolle.'));
-  };
+    });
+    if (!res.ok) { alert('Fehler beim Ändern der Rolle.'); return; }
+    await refetchAll();
+    alert('Rolle geändert.');
+  });
 
   // Spieler/Trainer löschen
-  const deletePlayer = (player) => {
-    if (window.confirm(`Team-Mitglied "${player.name}" wirklich löschen?`)) {
-      const idx = players.findIndex(p => p.name === player.name);
-      if (idx === -1) return;
-      const updated = [...players];
-      updated.splice(idx, 1);
-      fetch(API + '/players', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset: true, list: updated }),
-      })
-        .then(res => res.json())
-        .then(playersFromServer => {
-          setPlayers(playersFromServer);
-          alert('Team-Mitglied gelöscht.');
-        })
-        .catch(() => alert('Fehler beim Löschen des Team-Mitglieds.'));
-    }
-  };
+  const deletePlayer = (player) => runOnce(async () => {
+    if (!window.confirm(`Team-Mitglied "${player.name}" wirklich löschen?`)) return;
+    const idx = players.findIndex(p => p.name === player.name);
+    if (idx === -1) return;
+    const updated = [...players];
+    updated.splice(idx, 1);
+    const res = await fetch(API + '/players', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    });
+    if (!res.ok) { alert('Fehler beim Löschen des Team-Mitglieds.'); return; }
+    await refetchAll();
+    alert('Team-Mitglied gelöscht.');
+  });
 
   // Trainings nach Datum absteigend sortieren
   function sortTrainings(arr) {
@@ -354,12 +359,9 @@ export default function App() {
     });
   }
 
-  // Neues Training (mit Notizfeld)
-  const addTraining = () => {
-    if (!loggedInUser) {
-      alert('Bitte zuerst einloggen.');
-      return;
-    }
+  // Neues Training (mit Notizfeld) – Click-Lock + Re-Fetch + Duplikat-Hinweis
+  const addTraining = () => runOnce(async () => {
+    if (!loggedInUser) { alert('Bitte zuerst einloggen.'); return; }
     const now = new Date();
     const dd = String(now.getDate()).padStart(2, '0');
     const mm = String(now.getMonth() + 1).padStart(2, '0');
@@ -367,6 +369,10 @@ export default function App() {
     const weekday = ['So','Mo','Di','Mi','Do','Fr','Sa'][now.getDay()];
     const formatted = `${weekday}, ${dd}.${mm}.${yyyy}`;
     const timestamp = formatDateTime(now);
+
+    if (trainings.some(t => (t.date || '').includes(`${dd}.${mm}.${yyyy}`))) {
+      if (!window.confirm('Es gibt heute schon ein Training. Trotzdem noch eins anlegen?')) return;
+    }
 
     const updated = [
       ...trainings,
@@ -380,107 +386,67 @@ export default function App() {
         note: '',
       },
     ];
-    fetch(API + '/trainings', {
+    const res = await fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then(trainingsFromServer => {
-        setTrainings(trainingsFromServer.map(t => ({
-          ...t,
-          participants: t.participants || {},
-          trainerStatus: t.trainerStatus || {},
-          playerNotes: t.playerNotes || {},
-          note: typeof t.note === 'string' ? t.note : '',
-        })));
-        alert('Neues Training angelegt.');
-      })
-      .catch(() => alert('Fehler beim Anlegen des Trainings.'));
-  };
+    });
+    if (!res.ok) { alert('Fehler beim Anlegen des Trainings.'); return; }
+    await refetchAll();
+    alert('Neues Training angelegt.');
+  });
 
   // Training löschen
-  const deleteTraining = (training) => {
-    if (window.confirm('Training wirklich löschen?')) {
-      const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
-      if (idx === -1) return;
-      const updated = [...trainings];
-      updated.splice(idx, 1);
-      fetch(API + '/trainings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset: true, list: updated }),
-      })
-        .then(res => res.json())
-        .then(trainingsFromServer => {
-          setTrainings(trainingsFromServer.map(t => ({
-            ...t,
-            participants: t.participants || {},
-            trainerStatus: t.trainerStatus || {},
-            playerNotes: t.playerNotes || {},
-            note: typeof t.note === 'string' ? t.note : '',
-          })));
-          alert('Training gelöscht.');
-        })
-        .catch(() => alert('Fehler beim Löschen des Trainings.'));
-    }
-  };
+  const deleteTraining = (training) => runOnce(async () => {
+    if (!window.confirm('Training wirklich löschen?')) return;
+    const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
+    if (idx === -1) return;
+    const updated = [...trainings];
+    updated.splice(idx, 1);
+    const res = await fetch(API + '/trainings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset: true, list: updated }),
+    });
+    if (!res.ok) { alert('Fehler beim Löschen des Trainings.'); return; }
+    await refetchAll();
+    alert('Training gelöscht.');
+  });
 
   // Notiz Training – SPEICHERT DAUERHAFT onBlur
-  const saveTrainingNote = (training, noteValue) => {
+  const saveTrainingNote = (training, noteValue) => runOnce(async () => {
     const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
     if (idx === -1) return;
     const updated = [...trainings];
     updated[idx].note = noteValue;
-    fetch(API + '/trainings', {
+    const res = await fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then(trainingsFromServer => {
-        setTrainings(trainingsFromServer.map(t => ({
-          ...t,
-          participants: t.participants || {},
-          trainerStatus: t.trainerStatus || {},
-          playerNotes: t.playerNotes || {},
-          note: typeof t.note === 'string' ? t.note : '',
-        })));
-        alert('Trainingsnotiz gespeichert.');
-      })
-      .catch(() => alert('Fehler beim Speichern der Notiz.'));
-  };
+    });
+    if (!res.ok) { alert('Fehler beim Speichern der Notiz.'); return; }
+    await refetchAll();
+    alert('Trainingsnotiz gespeichert.');
+  });
 
   // Spieler-Notiz (im Training) – SPEICHERT DAUERHAFT onBlur
-  const savePlayerNote = (training, playerName, noteValue) => {
+  const savePlayerNote = (training, playerName, noteValue) => runOnce(async () => {
     const idx = trainings.findIndex(t => t.date + (t.createdBy || '') === training.date + (training.createdBy || ''));
     if (idx === -1) return;
     const updated = [...trainings];
-    updated[idx].playerNotes = {
-      ...updated[idx].playerNotes,
-      [playerName]: noteValue
-    };
-    fetch(API + '/trainings', {
+    updated[idx].playerNotes = { ...(updated[idx].playerNotes || {}), [playerName]: noteValue };
+    const res = await fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then(trainingsFromServer => {
-        setTrainings(trainingsFromServer.map(t => ({
-          ...t,
-          participants: t.participants || {},
-          trainerStatus: t.trainerStatus || {},
-          playerNotes: t.playerNotes || {},
-          note: typeof t.note === 'string' ? t.note : '',
-        })));
-        alert('Notiz gespeichert.');
-      })
-      .catch(() => alert('Fehler beim Speichern der Notiz.'));
-  };
+    });
+    if (!res.ok) { alert('Fehler beim Speichern der Notiz.'); return; }
+    await refetchAll();
+    alert('Notiz gespeichert.');
+  });
 
   // Trainingsdatum editieren
-  const saveEditedDate = (training, newDateValue) => {
+  const saveEditedDate = (training, newDateValue) => runOnce(async () => {
     if (!newDateValue) return;
     const [year, month, day] = newDateValue.split('-');
     const dateObj = new Date(Number(year), Number(month) - 1, Number(day));
@@ -496,27 +462,18 @@ export default function App() {
     updated[idx].isEditing = false;
     updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
 
-    fetch(API + '/trainings', {
+    const res = await fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then(trainingsFromServer => {
-        setTrainings(trainingsFromServer.map(t => ({
-          ...t,
-          participants: t.participants || {},
-          trainerStatus: t.trainerStatus || {},
-          playerNotes: t.playerNotes || {},
-          note: typeof t.note === 'string' ? t.note : '',
-        })));
-        alert('Datum wurde aktualisiert.');
-      })
-      .catch(() => alert('Fehler beim Aktualisieren des Datums.'));
-  };
+    });
+    if (!res.ok) { alert('Fehler beim Aktualisieren des Datums.'); return; }
+    await refetchAll();
+    alert('Datum wurde aktualisiert.');
+  });
 
   // Teilnahme-Status (Spieler) — nur ✅ ❌ ⏳
-  const updateParticipation = (training, name, statusIcon) => {
+  const updateParticipation = (training, name, statusIcon) => runOnce(async () => {
     const now = new Date();
     const timestamp = formatDateTime(now);
 
@@ -527,27 +484,18 @@ export default function App() {
     updated[idx].participants[name] = statusIcon;
     updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
 
-    fetch(API + '/trainings', {
+    const res = await fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then(trainingsFromServer => {
-        setTrainings(trainingsFromServer.map(t => ({
-          ...t,
-          participants: t.participants || {},
-          trainerStatus: t.trainerStatus || {},
-          playerNotes: t.playerNotes || {},
-          note: typeof t.note === 'string' ? t.note : '',
-        })));
-        alert(`Status von "${name}" im Training "${updated[idx].date}" wurde gesetzt auf "${iconToText(statusIcon).trim()}".`);
-      })
-      .catch(() => alert('Fehler beim Aktualisieren des Teilnahme-Status.'));
-  };
+    });
+    if (!res.ok) { alert('Fehler beim Aktualisieren des Teilnahme-Status.'); return; }
+    await refetchAll();
+    alert(`Status von "${name}" im Training "${updated[idx].date}" wurde gesetzt auf "${iconToText(statusIcon).trim()}".`);
+  });
 
   // Trainer-Status (Dropdown)
-  const updateTrainerStatus = (training, name, newStatus) => {
+  const updateTrainerStatus = (training, name, newStatus) => runOnce(async () => {
     const now = new Date();
     const timestamp = formatDateTime(now);
 
@@ -558,24 +506,15 @@ export default function App() {
     updated[idx].trainerStatus[name] = newStatus;
     updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
 
-    fetch(API + '/trainings', {
+    const res = await fetch(API + '/trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list: updated }),
-    })
-      .then(res => res.json())
-      .then(trainingsFromServer => {
-        setTrainings(trainingsFromServer.map(t => ({
-          ...t,
-          participants: t.participants || {},
-          trainerStatus: t.trainerStatus || {},
-          playerNotes: t.playerNotes || {},
-          note: typeof t.note === 'string' ? t.note : '',
-        })));
-        alert(`Trainer-Status von "${name}" im Training "${updated[idx].date}" wurde gesetzt auf "${newStatus}".`);
-      })
-      .catch(() => alert('Fehler beim Aktualisieren des Trainer-Status.'));
-  };
+    });
+    if (!res.ok) { alert('Fehler beim Aktualisieren des Trainer-Status.'); return; }
+    await refetchAll();
+    alert(`Trainer-Status von "${name}" im Training "${updated[idx].date}" wurde gesetzt auf "${newStatus}".`);
+  });
 
   // Sortierte Spieler
   const sortedPlayers = [...players].sort((a, b) => a.name.localeCompare(b.name));
@@ -626,7 +565,7 @@ export default function App() {
           value={loginPass}
           onChange={(e) => setLoginPass(e.target.value)}
         />
-        <button onClick={handleLogin}>Einloggen</button>
+        <button onClick={handleLogin} disabled={busy}>{busy ? 'Bitte warten…' : 'Einloggen'}</button>
         {loginError && <p className="login-error">{loginError}</p>}
       </div>
     );
@@ -640,13 +579,15 @@ export default function App() {
           className="main-func-btn"
           style={{margin:'2.2em auto 0 auto', fontSize:'1.3rem', minWidth:260}}
           onClick={() => { setShowStartMenu(false); setShowSettings(false); setShowChecklists(false); }}
+          disabled={busy}
         >
-          ⚽ Trainingsteilnahme
+          {busy ? 'Bitte warten…' : '⚽ Trainingsteilnahme'}
         </button>
         <button
           className="main-func-btn"
           style={{margin:'0.9em auto 0 auto', fontSize:'1.13rem', minWidth:260}}
           onClick={() => { setShowChecklists(true); setShowStartMenu(false); setShowSettings(false); }}
+          disabled={busy}
         >
           ✔ Checklisten
         </button>
@@ -654,6 +595,7 @@ export default function App() {
           className="main-func-btn"
           style={{margin:'0.9em auto 0 auto', fontSize:'1.13rem', minWidth:260}}
           onClick={() => { setShowSettings(true); setShowStartMenu(false); }}
+          disabled={busy}
         >
           ⚙ Einstellungen
         </button>
@@ -672,6 +614,7 @@ export default function App() {
             boxShadow: '0 2px 10px #222a4477',
           }}
           onClick={handleLogout}
+          disabled={busy}
         >
           Logout
         </button>
@@ -713,7 +656,7 @@ export default function App() {
               value={newMemberSince}
               onChange={(e) => setNewMemberSince(e.target.value)}
             />
-            <button onClick={addPlayer}>➕ Hinzufügen</button>
+            <button onClick={addPlayer} disabled={busy}>{busy ? 'Bitte warten…' : '➕ Hinzufügen'}</button>
           </div>
           <ul className="player-list">
             {players
@@ -752,8 +695,10 @@ export default function App() {
                       <option value="Spieler">Spieler</option>
                       <option value="Trainer">Trainer</option>
                     </select>
-                    <button className="btn-save-players" onClick={saveEditPlayer}>💾 Speichern</button>
-                    <button className="btn-delete" onClick={cancelEditPlayer}>Abbrechen</button>
+                    <button className="btn-save-players" onClick={saveEditPlayer} disabled={busy}>
+                      {busy ? '…' : '💾 Speichern'}
+                    </button>
+                    <button className="btn-delete" onClick={cancelEditPlayer} disabled={busy}>Abbrechen</button>
                   </li>
                 ) : (
                   <li key={p.name}>
@@ -791,12 +736,13 @@ export default function App() {
                         className="role-dropdown"
                         value={p.isTrainer ? 'Trainer' : 'Spieler'}
                         onChange={e => changeRole(p, e.target.value)}
+                        disabled={busy}
                       >
                         <option value="Spieler">Spieler</option>
                         <option value="Trainer">Trainer</option>
                       </select>
-                      <button className="btn-edit" onClick={() => startEditPlayer(p)}>✏ Bearbeiten</button>
-                      <button className="btn-delete" onClick={() => deletePlayer(p)}>❌ Löschen</button>
+                      <button className="btn-edit" onClick={() => startEditPlayer(p)} disabled={busy}>✏ Bearbeiten</button>
+                      <button className="btn-delete" onClick={() => deletePlayer(p)} disabled={busy}>❌ Löschen</button>
                     </div>
                   </li>
                 )
@@ -821,7 +767,7 @@ export default function App() {
                 value={newUserPass}
                 onChange={(e) => setNewUserPass(e.target.value)}
               />
-              <button onClick={addNewUser}>➕ Erstellen</button>
+              <button onClick={addNewUser} disabled={busy}>{busy ? '…' : '➕ Erstellen'}</button>
             </div>
             <ul className="player-list">
               {users.map((u, idx) => (
@@ -840,7 +786,7 @@ export default function App() {
                       padding: '0.3rem 0.6rem',
                     }}
                   />
-                  <button className="btn-delete" onClick={() => deleteUser(idx)}>
+                  <button className="btn-delete" onClick={() => deleteUser(idx)} disabled={busy}>
                     ❌ Löschen
                   </button>
                 </li>
@@ -853,6 +799,7 @@ export default function App() {
           className="main-func-btn"
           style={{margin:'2em auto 0 auto', width:'260px'}}
           onClick={() => { setShowSettings(false); setShowStartMenu(true); }}
+          disabled={busy}
         >
           Zurück zum Startmenü
         </button>
@@ -873,14 +820,16 @@ export default function App() {
           <h1>⚽ Fußball‐App <span className="blue-version">{version}</span> Trainingsteilnahme</h1>
         </header>
         <div className="controls mobile-controls">
-          <button className="main-func-btn" onClick={addTraining}>➕ Training hinzufügen</button>
-          <button className="main-func-btn" onClick={() => setShowTrainings(!showTrainings)}>
+          <button className="main-func-btn" onClick={addTraining} disabled={busy}>
+            {busy ? 'Bitte warten…' : '➕ Training hinzufügen'}
+          </button>
+          <button className="main-func-btn" onClick={() => setShowTrainings(!showTrainings)} disabled={busy}>
             {showTrainings ? "Trainingsliste verbergen" : "Gespeicherte Trainings anzeigen"}
           </button>
-          <button className="main-func-btn" onClick={() => setShowReport(!showReport)}>
+          <button className="main-func-btn" onClick={() => setShowReport(!showReport)} disabled={busy}>
             {showReport ? "Auswertung verbergen" : "Auswertung anzeigen"}
           </button>
-          <button className="main-func-btn" onClick={() => { setShowStartMenu(true); setShowSettings(false); }}>
+          <button className="main-func-btn" onClick={() => { setShowStartMenu(true); setShowSettings(false); }} disabled={busy}>
             Zurück zum Startmenü
           </button>
         </div>
@@ -907,208 +856,217 @@ export default function App() {
                   style={{ minWidth: 140 }}
                 />
               </label>
-              <button onClick={() => { setFilterDate(''); setSearchText(''); }}>Filter zurücksetzen</button>
+              <button onClick={() => { setFilterDate(''); setSearchText(''); }} disabled={busy}>Filter zurücksetzen</button>
             </div>
 
-            {trainingsToShow.map((t, idx) => (
-              <div key={t.date + (t.createdBy || '')} className="training">
-                <h3
-                  className={`training-header ${expandedTraining === t.date + (t.createdBy || '') ? 'expanded' : ''}`}
-                  onClick={() => setExpandedTraining(expandedTraining === t.date + (t.createdBy || '') ? null : t.date + (t.createdBy || ''))}
-                >
-                  📅 {t.date} {expandedTraining === t.date + (t.createdBy || '') ? '🔽' : '▶'}
-                </h3>
+            {trainingsToShow.map((t, idx) => {
+              const tKey = (t._id || '') + (t.date || '') + (t.createdBy || '');
+              const expandedKey = expandedTraining === tKey;
 
-                {expandedTraining === t.date + (t.createdBy || '') && (
-                  <>
-                    <div className="created-by">
-                      Ersteller: <strong>{t.createdBy || ''}</strong>
-                    </div>
-                    {t.lastEdited && (
-                      <div className="last-edited">
-                        Zuletzt bearbeitet: <strong>{t.lastEdited.at}</strong> von <strong>{t.lastEdited.by}</strong>
+              return (
+                <div key={tKey} className="training">
+                  <h3
+                    className={`training-header ${expandedKey ? 'expanded' : ''}`}
+                    onClick={() => setExpandedTraining(expandedKey ? null : tKey)}
+                  >
+                    📅 {t.date} {expandedKey ? '🔽' : '▶'}
+                  </h3>
+
+                  {expandedKey && (
+                    <>
+                      <div className="created-by">
+                        Ersteller: <strong>{t.createdBy || ''}</strong>
                       </div>
-                    )}
+                      {t.lastEdited && (
+                        <div className="last-edited">
+                          Zuletzt bearbeitet: <strong>{t.lastEdited.at}</strong> von <strong>{t.lastEdited.by}</strong>
+                        </div>
+                      )}
 
-                    {editDateIdx === idx ? (
-                      <div className="edit-date-row">
-                        <input
-                          type="date"
-                          className="edit-date-input"
-                          value={editDateValue}
-                          onChange={e => setEditDateValue(e.target.value)}
+                      {editDateIdx === idx ? (
+                        <div className="edit-date-row">
+                          <input
+                            type="date"
+                            className="edit-date-input"
+                            value={editDateValue}
+                            onChange={e => setEditDateValue(e.target.value)}
+                          />
+                          <button
+                            className="btn-save-date"
+                            onClick={() => {
+                              saveEditedDate(t, editDateValue);
+                              setEditDateIdx(null);
+                              setEditDateValue('');
+                            }}
+                            disabled={busy}
+                          >
+                            Speichern
+                          </button>
+                          <button
+                            className="btn-save-date"
+                            onClick={() => { setEditDateIdx(null); setEditDateValue(''); }}
+                            disabled={busy}
+                          >
+                            Abbrechen
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="edit-date-row">
+                          <button
+                            className="btn-edit-date"
+                            onClick={() => {
+                              const parts = (t.date || '').split(', ')[1]?.split('.') || [];
+                              setEditDateValue(parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : '');
+                              setEditDateIdx(idx);
+                            }}
+                            disabled={busy}
+                          >
+                            ✏ Datum anpassen
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Notizfeld */}
+                      <div className="note-field">
+                        <textarea
+                          rows={2}
+                          placeholder="Notiz zum Training (z.B. was gemacht wurde...)"
+                          value={typeof t.note === 'string' ? t.note : ''}
+                          onChange={(e) => {
+                            const idx2 = trainings.findIndex(tr => (tr._id || '') + (tr.date || '') + (tr.createdBy || '') === tKey);
+                            if (idx2 === -1) return;
+                            const updated = [...trainings];
+                            updated[idx2].note = e.target.value;
+                            setTrainings(updated);
+                          }}
+                          onBlur={(e) => saveTrainingNote(t, e.target.value)}
                         />
-                        <button
-                          className="btn-save-date"
-                          onClick={() => {
-                            saveEditedDate(t, editDateValue);
-                            setEditDateIdx(null);
-                            setEditDateValue('');
-                          }}
-                        >
-                          Speichern
-                        </button>
-                        <button
-                          className="btn-save-date"
-                          onClick={() => {
-                            setEditDateIdx(null);
-                            setEditDateValue('');
-                          }}
-                        >
-                          Abbrechen
-                        </button>
                       </div>
-                    ) : (
-                      <div className="edit-date-row">
-                        <button
-                          className="btn-edit-date"
-                          onClick={() => {
-                            const parts = (t.date || '').split(', ')[1]?.split('.') || [];
-                            setEditDateValue(parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : '');
-                            setEditDateIdx(idx);
-                          }}
-                        >
-                          ✏ Datum anpassen
-                        </button>
-                      </div>
-                    )}
 
-                    {/* Notizfeld */}
-                    <div className="note-field">
-                      <textarea
-                        rows={2}
-                        placeholder="Notiz zum Training (z.B. was gemacht wurde...)"
-                        value={typeof t.note === 'string' ? t.note : ''}
-                        onChange={(e) => {
-                          const idx2 = trainings.findIndex(tr => tr.date + (tr.createdBy || '') === t.date + (t.createdBy || ''));
-                          if (idx2 === -1) return;
-                          const updated = [...trainings];
-                          updated[idx2].note = e.target.value;
-                          setTrainings(updated);
-                        }}
-                        onBlur={(e) => saveTrainingNote(t, e.target.value)}
-                      />
-                    </div>
+                      {/* Teilnehmerliste */}
+                      {players
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0))
+                        .map((p, idxP) => {
+                          const isTrainer = !!p.isTrainer;
+                          const teamHinweis = p.memberSince || "";
+                          const playerNote = (t.playerNotes && t.playerNotes[p.name]) || "";
+                          const cardBg = idxP % 2 === 0 ? "player-card even" : "player-card odd";
 
-                    {/* Teilnehmerliste */}
-                    {players
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0))
-                      .map((p, idxP) => {
-                        const isTrainer = !!p.isTrainer;
-                        const teamHinweis = p.memberSince || "";
-                        const playerNote = (t.playerNotes && t.playerNotes[p.name]) || "";
-                        const cardBg = idxP % 2 === 0 ? "player-card even" : "player-card odd";
-
-                        if (isTrainer) {
-                          const trainerStatus = (t.trainerStatus && t.trainerStatus[p.name]) || 'Abgemeldet';
-                          return (
-                            <div key={p.name + 'trainer'} className={cardBg}>
-                              <div className="participant-col">
-                                <span>
-                                  <b>{p.name}</b> <em style={{color:"#ffe548", fontWeight:500}}>(Trainer:in)</em>
-                                </span>
-                                {teamHinweis && (
-                                  <div style={{ fontSize: "0.93em", color: "#9cc6ff", marginBottom: "0.2em" }}>
-                                    Hinweis: {teamHinweis}
+                          if (isTrainer) {
+                            const trainerStatus = (t.trainerStatus && t.trainerStatus[p.name]) || 'Abgemeldet';
+                            return (
+                              <div key={p.name + 'trainer'} className={cardBg}>
+                                <div className="participant-col">
+                                  <span>
+                                    <b>{p.name}</b> <em style={{color:"#ffe548", fontWeight:500}}>(Trainer:in)</em>
+                                  </span>
+                                  {teamHinweis && (
+                                    <div style={{ fontSize: "0.93em", color: "#9cc6ff", marginBottom: "0.2em" }}>
+                                      Hinweis: {teamHinweis}
+                                    </div>
+                                  )}
+                                  <div style={{margin: "0.3em 0"}}>
+                                    <span>Status: </span>
+                                    <select
+                                      className="trainer-status-dropdown"
+                                      value={trainerStatus}
+                                      onChange={(e) => updateTrainerStatus(t, p.name, e.target.value)}
+                                      disabled={busy}
+                                    >
+                                      <option value="Zugesagt">Zugesagt</option>
+                                      <option value="Abgemeldet">Abgemeldet</option>
+                                    </select>
                                   </div>
-                                )}
-                                <div style={{margin: "0.3em 0"}}>
-                                  <span>Status: </span>
-                                  <select
-                                    className="trainer-status-dropdown"
-                                    value={trainerStatus}
-                                    onChange={(e) => updateTrainerStatus(t, p.name, e.target.value)}
-                                  >
-                                    <option value="Zugesagt">Zugesagt</option>
-                                    <option value="Abgemeldet">Abgemeldet</option>
-                                  </select>
                                 </div>
                               </div>
-                            </div>
-                          );
-                        } else {
-                          const statusIcon = (t.participants && t.participants[p.name]) || '⏳';
-                          return (
-                            <div key={p.name} className={cardBg}>
-                              <div className="participant-col">
-                                <span><b>{p.name}</b></span>
-                                {teamHinweis && (
-                                  <div style={{ fontSize: "0.93em", color: "#9cc6ff", marginBottom: "0.2em" }}>
-                                    Hinweis: {teamHinweis}
+                            );
+                          } else {
+                            const statusIcon = (t.participants && t.participants[p.name]) || '⏳';
+                            return (
+                              <div key={p.name} className={cardBg}>
+                                <div className="participant-col">
+                                  <span><b>{p.name}</b></span>
+                                  {teamHinweis && (
+                                    <div style={{ fontSize: "0.93em", color: "#9cc6ff", marginBottom: "0.2em" }}>
+                                      Hinweis: {teamHinweis}
+                                    </div>
+                                  )}
+                                  <div style={{margin: "0.3em 0"}}>
+                                    <span>Status:</span>
+                                    <div className="btn-part-status status-btn-row">
+                                      {STATUS_ICONS.map((icon, idxIcon) => (
+                                        <button
+                                          key={idxIcon}
+                                          className={statusIcon === icon ? 'active' : ''}
+                                          onClick={() => updateParticipation(t, p.name, icon)}
+                                          disabled={busy}
+                                        >
+                                          {icon}
+                                        </button>
+                                      ))}
+                                      <span className="status-text">{iconToText(statusIcon)}</span>
+                                    </div>
                                   </div>
-                                )}
-                                <div style={{margin: "0.3em 0"}}>
-                                  <span>Status:</span>
-                                  <div className="btn-part-status status-btn-row">
-                                    {STATUS_ICONS.map((icon, idxIcon) => (
-                                      <button
-                                        key={idxIcon}
-                                        className={statusIcon === icon ? 'active' : ''}
-                                        onClick={() => updateParticipation(t, p.name, icon)}
-                                      >
-                                        {icon}
-                                      </button>
-                                    ))}
-                                    <span className="status-text">{iconToText(statusIcon)}</span>
+                                  <div style={{ margin: "0.35em 0 0.1em 0" }}>
+                                    <textarea
+                                      rows={1}
+                                      placeholder="Notiz (Training)"
+                                      style={{
+                                        width: "99%",
+                                        minHeight: "38px",
+                                        maxHeight: "60px",
+                                        fontSize: "1em",
+                                        background: "#232942",
+                                        color: "#96ffc4",
+                                        border: "1.2px solid #2d385b",
+                                        borderRadius: "5px",
+                                        resize: "vertical",
+                                        overflowY: "auto"
+                                      }}
+                                      value={playerNote}
+                                      onChange={e => {
+                                        const idxT = trainings.findIndex(tr => (tr._id || '') + (tr.date || '') + (tr.createdBy || '') === tKey);
+                                        if (idxT === -1) return;
+                                        const updatedTrainings = [...trainings];
+                                        updatedTrainings[idxT].playerNotes = {
+                                          ...updatedTrainings[idxT].playerNotes,
+                                          [p.name]: e.target.value
+                                        };
+                                        setTrainings(updatedTrainings);
+                                      }}
+                                      onBlur={e => savePlayerNote(t, p.name, e.target.value)}
+                                    />
                                   </div>
-                                </div>
-                                <div style={{ margin: "0.35em 0 0.1em 0" }}>
-                                  <textarea
-                                    rows={1}
-                                    placeholder="Notiz (Training)"
-                                    style={{
-                                      width: "99%",
-                                      minHeight: "38px",
-                                      maxHeight: "60px",
-                                      fontSize: "1em",
-                                      background: "#232942",
-                                      color: "#96ffc4",
-                                      border: "1.2px solid #2d385b",
-                                      borderRadius: "5px",
-                                      resize: "vertical",
-                                      overflowY: "auto"
-                                    }}
-                                    value={playerNote}
-                                    onChange={e => {
-                                      const idxT = trainings.findIndex(tr => tr.date + (tr.createdBy || '') === t.date + (t.createdBy || ''));
-                                      if (idxT === -1) return;
-                                      const updatedTrainings = [...trainings];
-                                      updatedTrainings[idxT].playerNotes = {
-                                        ...updatedTrainings[idxT].playerNotes,
-                                        [p.name]: e.target.value
-                                      };
-                                      setTrainings(updatedTrainings);
-                                    }}
-                                    onBlur={e => savePlayerNote(t, p.name, e.target.value)}
-                                  />
                                 </div>
                               </div>
-                            </div>
-                          );
-                        }
-                      })}
+                            );
+                          }
+                        })}
 
-                    {!t.isEditing && (
-                      <button
-                        className="btn-save-training"
-                        onClick={() => alert('Änderungen im Training wurden gespeichert.')}
-                      >
-                        💾 Speichern
-                      </button>
-                    )}
-                    {!t.isEditing && (
-                      <button
-                        className="btn-delete-training"
-                        onClick={() => deleteTraining(t)}
-                      >
-                        🗑 Training löschen
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
-            ))}
+                      {!t.isEditing && (
+                        <button
+                          className="btn-save-training"
+                          onClick={() => alert('Änderungen im Training wurden gespeichert.')}
+                          disabled={busy}
+                        >
+                          💾 Speichern
+                        </button>
+                      )}
+                      {!t.isEditing && (
+                        <button
+                          className="btn-delete-training"
+                          onClick={() => deleteTraining(t)}
+                          disabled={busy}
+                        >
+                          🗑 Training löschen
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })}
 
             {trainingsToShow.length === 0 && (
               <p className="no-trainings">Keine Trainings gefunden{filterDate || searchText ? ' für diesen Filter.' : '.'}</p>
@@ -1137,11 +1095,12 @@ export default function App() {
                   onChange={(e) => setToDate(e.target.value)}
                 />
               </label>
-              <button onClick={computeReport}>Auswertung anzeigen</button>
+              <button onClick={computeReport} disabled={busy}>Auswertung anzeigen</button>
               {reportData && (
                 <button
                   style={{ marginLeft: '2em', background: "#46a8f7", color: "#fff", borderRadius: 5, padding: "0.5em 1.4em", fontWeight: 600, border: 0, cursor: 'pointer'}}
                   onClick={exportPDF}
+                  disabled={busy}
                 >
                   Tabelle als PDF exportieren
                 </button>
@@ -1221,6 +1180,7 @@ export default function App() {
               boxShadow: '0 2px 10px #222a4477',
             }}
             onClick={handleLogout}
+            disabled={busy}
           >
             Logout
           </button>
@@ -1269,7 +1229,7 @@ export default function App() {
       return { ...cl, items };
     };
 
-    const createChecklist = () => {
+    const createChecklist = () => runOnce(async () => {
       const title = newChecklistTitle.trim() || 'Neue Checkliste';
       const items = {};
       playersOnly.forEach(p => { items[p.name] = false; });
@@ -1284,41 +1244,41 @@ export default function App() {
       setChecklists(updated);
       const key = (newCl._id || '') + newCl.createdAt + updated.length;
       setExpandedChecklist(key);
-      saveChecklistList(updated, loggedInUser);
+      await saveChecklistList(updated, loggedInUser);
       setNewChecklistTitle('');
-    };
+    });
 
-    const renameChecklist = (idx, newTitle) => {
+    const renameChecklist = (idx, newTitle) => runOnce(async () => {
       const updated = [...checklists];
       updated[idx] = {
         ...updated[idx],
-        title: newTitle,
+        title: newTitle.trim() || 'Unbenannt',
         lastEdited: { by: loggedInUser, at: formatDateTime(new Date()) }
       };
       setChecklists(updated);
-      saveChecklistList(updated, loggedInUser);
-    };
+      await saveChecklistList(updated, loggedInUser);
+    });
 
-    const deleteChecklist = (idx) => {
+    const deleteChecklist = (idx) => runOnce(async () => {
       if (!window.confirm('Checkliste wirklich löschen?')) return;
       const updated = [...checklists];
       updated.splice(idx, 1);
       setChecklists(updated);
-      saveChecklistList(updated, loggedInUser);
+      await saveChecklistList(updated, loggedInUser);
       setExpandedChecklist(null);
-    };
+    });
 
-    const toggleItem = (idx, playerName) => {
+    const toggleItem = (idx, playerName) => runOnce(async () => {
       const updated = [...checklists];
       const cl = { ...updated[idx] };
       cl.items = { ...cl.items, [playerName]: !cl.items[playerName] };
       cl.lastEdited = { by: loggedInUser, at: formatDateTime(new Date()) };
       updated[idx] = cl;
       setChecklists(updated);
-      saveChecklistList(updated, loggedInUser);
-    };
+      await saveChecklistList(updated, loggedInUser);
+    });
 
-    const markAll = (idx, value) => {
+    const markAll = (idx, value) => runOnce(async () => {
       const updated = [...checklists];
       const cl = { ...updated[idx] };
       const newItems = { ...cl.items };
@@ -1327,8 +1287,8 @@ export default function App() {
       cl.lastEdited = { by: loggedInUser, at: formatDateTime(new Date()) };
       updated[idx] = cl;
       setChecklists(updated);
-      saveChecklistList(updated, loggedInUser);
-    };
+      await saveChecklistList(updated, loggedInUser);
+    });
 
     return (
       <div className="App">
@@ -1345,7 +1305,7 @@ export default function App() {
               value={newChecklistTitle}
               onChange={(e) => setNewChecklistTitle(e.target.value)}
             />
-            <button onClick={createChecklist}>➕ Anlegen</button>
+            <button onClick={createChecklist} disabled={busy}>{busy ? '…' : '➕ Anlegen'}</button>
           </div>
         </section>
 
@@ -1380,7 +1340,7 @@ export default function App() {
                           updated[idx] = { ...cl, title: e.target.value };
                           setChecklists(updated);
                         }}
-                        onBlur={(e) => renameChecklist(idx, e.target.value.trim() || 'Unbenannt')}
+                        onBlur={(e) => renameChecklist(idx, e.target.value)}
                         style={{
                           background:'#232942', color:'#e9f2ff', border:'1px solid #2d385b',
                           borderRadius:'4px', padding:'0.25rem 0.5rem', minWidth: '240px'
@@ -1389,9 +1349,9 @@ export default function App() {
                     </div>
 
                     <div style={{margin:'0.6rem 0 0.8rem 0'}}>
-                      <button className="main-func-btn" onClick={() => markAll(idx, true)}>Alle markieren</button>
-                      <button className="main-func-btn" onClick={() => markAll(idx, false)} style={{marginLeft:'0.6rem'}}>Alle leeren</button>
-                      <button className="btn-delete-training" onClick={() => deleteChecklist(idx)} style={{marginLeft:'0.6rem'}}>🗑 Löschen</button>
+                      <button className="main-func-btn" onClick={() => markAll(idx, true)} disabled={busy}>Alle markieren</button>
+                      <button className="main-func-btn" onClick={() => markAll(idx, false)} style={{marginLeft:'0.6rem'}} disabled={busy}>Alle leeren</button>
+                      <button className="btn-delete-training" onClick={() => deleteChecklist(idx)} style={{marginLeft:'0.6rem'}} disabled={busy}>🗑 Löschen</button>
                     </div>
 
                     <div className="trainings-list">
@@ -1417,6 +1377,7 @@ export default function App() {
                                   checked={!!cl.items[p.name]}
                                   onChange={() => toggleItem(idx, p.name)}
                                   style={{transform:'scale(1.2)'}}
+                                  disabled={busy}
                                 />
                               </td>
                             </tr>
@@ -1439,7 +1400,7 @@ export default function App() {
         </section>
 
         <div className="controls mobile-controls" style={{marginTop:'1.2rem'}}>
-          <button className="main-func-btn" onClick={() => { setShowChecklists(false); setShowStartMenu(true); }}>
+          <button className="main-func-btn" onClick={() => { setShowChecklists(false); setShowStartMenu(true); }} disabled={busy}>
             Zurück zum Startmenü
           </button>
         </div>
@@ -1466,6 +1427,7 @@ export default function App() {
               boxShadow: '0 2px 10px #222a4477',
             }}
             onClick={handleLogout}
+            disabled={busy}
           >
             Logout
           </button>

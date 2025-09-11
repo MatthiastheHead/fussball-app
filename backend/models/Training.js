@@ -2,12 +2,19 @@
 const mongoose = require('mongoose');
 
 const TrainingSchema = new mongoose.Schema({
-  date:          { type: String, required: true },
+  // Datum im Format "Wochentag, DD.MM.YYYY"
+  date:          { type: String, required: true, trim: true },
+  // Teilnehmer-Status: { "Spielername": "✅" | "❌" | "⏳" }
   participants:  { type: Object, default: {} },
+  // Trainer-Status: { "Trainername": "Zugesagt" | "Abgemeldet" }
   trainerStatus: { type: Object, default: {} },
+  // Notiz zum Training
   note:          { type: String, default: "" },
-  playerNotes:   { type: Object, default: {} }, // <--- WICHTIG für Notizen pro Spieler*in!
+  // Notizen pro Spieler*in: { "Spielername": "Text" }
+  playerNotes:   { type: Object, default: {} },
+  // Wer das Training angelegt hat
   createdBy:     { type: String, default: "" },
+  // Letzte Bearbeitung (z. B. { by: "Name", at: "dd.mm.yyyy hh:mm" }), kann auch null sein
   lastEdited:    { type: Object, default: null }
 });
 

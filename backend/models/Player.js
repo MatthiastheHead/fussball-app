@@ -2,8 +2,8 @@
 const mongoose = require('mongoose');
 
 const PlayerSchema = new mongoose.Schema({
-  name:        { type: String, required: true },
-  isTrainer:   { type: Boolean, default: false }, // <- für Konsistenz im Frontend
+  name:        { type: String, required: true, trim: true },
+  isTrainer:   { type: Boolean, default: false }, // für Konsistenz im Frontend
   note:        { type: String, default: "" },
   memberSince: { type: String, default: "" }
 });
