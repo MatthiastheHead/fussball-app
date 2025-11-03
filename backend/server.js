@@ -31,7 +31,7 @@ mongoose
     process.exit(1);
   });
 
-// === 3) Users-Schema (bleibt wie gehabt) ===
+// === 3) Users-Schema ===
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, unique: true },
   password: { type: String, required: true },
@@ -41,9 +41,12 @@ const User = mongoose.model('User', userSchema);
 // === 4) Express-App konfigurieren ===
 const app = express();
 app.use(cors());
-app.use(bodyParser.json());
 
-// ---- Diagnose-/Health-Routen (zum Verifizieren des Deploys) ----
+// ⚙️ Body-Limit deutlich erhöht (Fix für HTTP 413)
+app.use(bodyParser.json({ limit: '10mb' }));
+app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
+
+// ---- Diagnose-/Health-Routen ----
 app.get('/__health', (req, res) => {
   res.json({
     ok: true,
@@ -62,7 +65,7 @@ app.get('/__routes', (req, res) => {
   res.json(routes);
 });
 
-// favicon-Noise ausblenden
+// favicon ignorieren
 app.get('/favicon.ico', (_req, res) => res.status(204).end());
 
 // Root-Info
@@ -162,7 +165,7 @@ app.post('/trainings', async (req, res) => {
           participants: t.participants || {},
           trainerStatus: t.trainerStatus || {},
           note: typeof t.note === 'string' ? t.note : "",
-          playerNotes: t.playerNotes || {},   // Notizen pro Spieler*in
+          playerNotes: t.playerNotes || {},
           createdBy: t.createdBy || '',
           lastEdited: t.lastEdited || null
         }))
@@ -176,10 +179,9 @@ app.post('/trainings', async (req, res) => {
   }
 });
 
-// ---- 5.4 Checklists (NEU) ----
+// ---- 5.4 Checklists ----
 console.log('🧩 Registriere Checklisten-Endpunkte...');
 
-// GET /checklists → alle Checklisten, neueste zuerst
 app.get('/checklists', async (_req, res) => {
   try {
     const list = await Checklist.find({}).sort({ createdAt: -1 }).lean();
@@ -190,7 +192,6 @@ app.get('/checklists', async (_req, res) => {
   }
 });
 
-// POST /checklists → ersetzt die gesamte Sammlung (reset/list)
 app.post('/checklists', async (req, res) => {
   const { reset, list } = req.body || {};
   if (!reset || !Array.isArray(list)) {

@@ -5,7 +5,11 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
 // API-URL: zuerst ENV, sonst Fallback
-const API = (import.meta?.env?.VITE_API_BASE) || 'https://fussball-api.onrender.com';
+const API =
+  (import.meta?.env?.VITE_API_BASE) ||
+  (window.location.hostname === 'localhost'
+    ? 'http://localhost:3001'
+    : 'https://fussball-api.onrender.com');
 
 // Nur noch drei Status-Icons
 const STATUS_ICONS = ['✅', '❌', '⏳'];
