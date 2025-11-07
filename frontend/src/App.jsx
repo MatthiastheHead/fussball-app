@@ -1,24 +1,24 @@
 
-// Version 4.3: Änderungen gegenüber der Vorversion
-// - Entfernt alle alert()-Meldungen bei Statusänderungen (Teilnahme‑ und Trainerstatus).
-// - Kein automatisches refetchAll() nach Statusänderungen; der Status wird nur lokal im State aktualisiert.
-// - API‑Basisadresse zuerst aus ENV (VITE_API_BASE), ansonsten Fallback auf localhost oder Render‑URL.
+// Version 5.1: Erweiterungen
+// - Integration der "Inaktiv"-Funktion: Spieler und Trainer können deaktiviert werden.
+//   Inaktive Mitglieder werden in den Listen grau dargestellt und erscheinen nicht mehr in Auswertungen.
+// - Anpassungen für Version 5.1 (Versionsnummer aktualisiert).
+// - Die API-Basisadresse wird weiterhin zuerst aus ENV gelesen, ansonsten Fallback.
 
 import React, { useState, useEffect } from 'react';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-// Hilfsfunktionen und Konstanten
 // API-Basis: zuerst ENV, ansonsten abhängig vom Hostname
 const API = import.meta.env.VITE_API_BASE ||
   (window.location.hostname === 'localhost'
     ? 'http://localhost:3001/'
     : 'https://fussball-api.onrender.com/');
 
-// Drei mögliche Icons für den Teilnahme‑Status
+// Icons für den Teilnahme‑Status
 const STATUS_ICONS = ['✅', '❌', '⏳'];
 
-// Übersetzung eines Icons in Text
+// Icon zu Text
 const iconToText = (icon) => {
   switch (icon) {
     case '✅':
@@ -32,17 +32,17 @@ const iconToText = (icon) => {
   }
 };
 
-// Datum/Zeit im Format „DD.MM.YYYY HH:MM“ formatieren
+// Datum/Zeit formatieren: DD.MM.YYYY HHMM
 const formatDateTime = (dateObj) => {
   const day = String(dateObj.getDate()).padStart(2, '0');
   const month = String(dateObj.getMonth() + 1).padStart(2, '0');
   const year = dateObj.getFullYear();
   const hours = String(dateObj.getHours()).padStart(2, '0');
   const minutes = String(dateObj.getMinutes()).padStart(2, '0');
-  return `${day}.${month}.${year} ${hours}:${minutes}`;
+  return `${day}.${month}.${year} ${hours}${minutes}`;
 };
 
-// Deutsches Datumsformat ("Wochentag, DD.MM.YYYY") in Date-Objekt konvertieren
+// Deutsches Datum (Wochentag, DD.MM.YYYY) in Date konvertieren
 const parseGermanDate = (str) => {
   const datePart = str && str.includes(',') ? str.split(', ')[1] : str;
   if (!datePart) return new Date(0);
@@ -50,10 +50,8 @@ const parseGermanDate = (str) => {
   return new Date(Number(y), Number(m) - 1, Number(d));
 };
 
-// Utility: Promise‑basierte Wartefunktion
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Healthcheck des Backends – bei Fehlern false zurückliefern
 async function healthcheck() {
   try {
     const res = await fetch(API + 'health', { cache: 'no-store' });
@@ -63,7 +61,6 @@ async function healthcheck() {
   }
 }
 
-// Sicherstellen, dass das Backend wach ist. Es werden bis zu drei Versuche durchgeführt.
 async function ensureBackendAwake() {
   for (let i = 0; i < 3; i++) {
     const ok = await healthcheck();
@@ -73,16 +70,14 @@ async function ensureBackendAwake() {
   return false;
 }
 
-// Haupt‑App-Komponente
 export default function App() {
-  // Diverse States
+  // State-Definitionen
   const [loggedInUser, setLoggedInUser] = useState(null);
   const [loginName, setLoginName] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  // Benutzerverwaltung
   const [users, setUsers] = useState([]);
   const [newUserName, setNewUserName] = useState('');
   const [newUserPass, setNewUserPass] = useState('');
@@ -107,18 +102,14 @@ export default function App() {
   const [expandedReportRow, setExpandedReportRow] = useState(null);
   const [showTrainings, setShowTrainings] = useState(false);
   const [showReport, setShowReport] = useState(false);
-  // Checklisten
   const [checklists, setChecklists] = useState([]);
   const [showChecklists, setShowChecklists] = useState(false);
   const [newChecklistTitle, setNewChecklistTitle] = useState('');
   const [expandedChecklist, setExpandedChecklist] = useState(null);
-  // Menü‑Zustände
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
-  // Versionsnummer
-  const version = '4.3';
+  const version = '5.1';
 
-  // Hilfsfunktion: verhindert parallele Ausführung mittels Busy‑Lock
   async function runOnce(fn) {
     if (busy) return false;
     setBusy(true);
@@ -130,7 +121,6 @@ export default function App() {
     }
   }
 
-  // Lädt alle Daten neu – bei größeren Änderungen erforderlich
   async function refetchAll() {
     try {
       const [u, p, t, c] = await Promise.all([
@@ -140,7 +130,14 @@ export default function App() {
         fetch(API + 'checklists').then((r) => (r.ok ? r.json() : [])),
       ]);
       setUsers(Array.isArray(u) ? u : []);
-      setPlayers(Array.isArray(p) ? p : []);
+      setPlayers(
+        Array.isArray(p)
+          ? p.map((x) => ({
+              ...x,
+              inactive: !!x.inactive,
+            }))
+          : []
+      );
       setTrainings(
         Array.isArray(t)
           ? t.map((x) => ({
@@ -156,11 +153,10 @@ export default function App() {
       );
       setChecklists(Array.isArray(c) ? c : []);
     } catch {
-      // Fehler werden ignoriert, die UI bleibt stabil
+      // ignorieren
     }
   }
 
-  // Beim Laden der App Backend aufwecken und Daten einmalig abrufen
   useEffect(() => {
     (async () => {
       await ensureBackendAwake();
@@ -168,7 +164,6 @@ export default function App() {
     })();
   }, []);
 
-  // Login‑Handler
   const handleLogin = () => {
     const trimmedName = loginName.trim();
     const user = users.find(
@@ -196,7 +191,7 @@ export default function App() {
     setLoginError('');
   };
 
-  // Neuen Benutzer anlegen
+  // Neue Benutzerverwaltung
   const addNewUser = () =>
     runOnce(async () => {
       const name = newUserName.trim();
@@ -264,10 +259,15 @@ export default function App() {
       alert('Benutzer gelöscht.');
     });
 
-  // Teamverwaltung: Spieler bearbeiten
+  // Spieler bearbeiten
   const startEditPlayer = (player) => {
     setEditPlayerId(player.name);
-    setPlayerDraft({ ...player, note: player.note || '', memberSince: player.memberSince || '' });
+    setPlayerDraft({
+      ...player,
+      note: player.note || '',
+      memberSince: player.memberSince || '',
+      inactive: !!player.inactive,
+    });
   };
 
   const saveEditPlayer = () =>
@@ -278,7 +278,11 @@ export default function App() {
       updated[idx] = {
         ...playerDraft,
         note: typeof playerDraft.note === 'string' ? playerDraft.note : '',
-        memberSince: typeof playerDraft.memberSince === 'string' ? playerDraft.memberSince : '',
+        memberSince:
+          typeof playerDraft.memberSince === 'string'
+            ? playerDraft.memberSince
+            : '',
+        inactive: !!playerDraft.inactive,
       };
       const res = await fetch(API + 'players', {
         method: 'POST',
@@ -300,7 +304,6 @@ export default function App() {
     setPlayerDraft({});
   };
 
-  // Teammitglied hinzufügen
   const addPlayer = () =>
     runOnce(async () => {
       const trimmed = newName.trim();
@@ -316,6 +319,7 @@ export default function App() {
           isTrainer,
           note: typeof newNote === 'string' ? newNote : '',
           memberSince: typeof newMemberSince === 'string' ? newMemberSince : '',
+          inactive: false,
         },
       ];
       const res = await fetch(API + 'players', {
@@ -335,7 +339,6 @@ export default function App() {
       alert('Team-Mitglied hinzugefügt.');
     });
 
-  // Notiz und Hinweis (Teamverwaltung) dauerhaft speichern
   const handlePlayerNoteBlur = (player, noteValue) =>
     runOnce(async () => {
       const idx = players.findIndex((p) => p.name === player.name);
@@ -374,7 +377,6 @@ export default function App() {
       alert('Hinweis gespeichert.');
     });
 
-  // Rolle eines Spielers ändern
   const changeRole = (player, role) =>
     runOnce(async () => {
       const idx = players.findIndex((p) => p.name === player.name);
@@ -394,7 +396,6 @@ export default function App() {
       alert('Rolle geändert.');
     });
 
-  // Teammitglied löschen
   const deletePlayer = (player) =>
     runOnce(async () => {
       if (!window.confirm(`Team-Mitglied ${player.name} wirklich löschen?`)) return;
@@ -415,7 +416,30 @@ export default function App() {
       alert('Team-Mitglied gelöscht.');
     });
 
-  // Trainings nach Datum absteigend sortieren
+  // Neu: Spieler/Trainer aktiv/inaktiv toggeln
+  const toggleInactive = (player) =>
+    runOnce(async () => {
+      const idx = players.findIndex((p) => p.name === player.name);
+      if (idx === -1) return;
+      const updated = [...players];
+      updated[idx].inactive = !updated[idx].inactive;
+      const res = await fetch(API + 'players', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reset: true, list: updated }),
+      });
+      if (!res.ok) {
+        alert('Fehler beim Ändern des Aktivstatus.');
+        return;
+      }
+      await refetchAll();
+      alert(
+        updated[idx].inactive
+          ? `Mitglied ${player.name} inaktiv geschaltet.`
+          : `Mitglied ${player.name} reaktiviert.`
+      );
+    });
+
   function sortTrainings(arr) {
     return [...arr].sort((a, b) => {
       const ad = (a.date || '').split(', ')[1]?.split('.').reverse().join('') || '';
@@ -424,7 +448,6 @@ export default function App() {
     });
   }
 
-  // Neues Training anlegen
   const addTraining = () =>
     runOnce(async () => {
       if (!loggedInUser) {
@@ -466,7 +489,6 @@ export default function App() {
       alert('Neues Training angelegt.');
     });
 
-  // Training löschen
   const deleteTraining = (training) =>
     runOnce(async () => {
       if (!window.confirm('Training wirklich löschen?')) return;
@@ -489,7 +511,6 @@ export default function App() {
       alert('Training gelöscht.');
     });
 
-  // Trainingsnotiz dauerhaft speichern
   const saveTrainingNote = (training, noteValue) =>
     runOnce(async () => {
       const idx = trainings.findIndex(
@@ -511,7 +532,6 @@ export default function App() {
       alert('Trainingsnotiz gespeichert.');
     });
 
-  // Spielernotiz im Training dauerhaft speichern
   const savePlayerNote = (training, playerName, noteValue) =>
     runOnce(async () => {
       const idx = trainings.findIndex(
@@ -536,7 +556,6 @@ export default function App() {
       alert('Notiz gespeichert.');
     });
 
-  // Trainingsdatum editieren
   const saveEditedDate = (training, newDateValue) =>
     runOnce(async () => {
       if (!newDateValue) return;
@@ -567,8 +586,7 @@ export default function App() {
       alert('Datum wurde aktualisiert.');
     });
 
-  // Teilnahme‑Status ändern (✅ ❌ ⏳)
-  // Hier werden keine alert()-Meldungen mehr ausgelöst und es erfolgt kein automatisches Refetch.
+  // Status ändern
   const updateParticipation = (training, name, statusIcon) =>
     runOnce(async () => {
       const now = new Date();
@@ -581,22 +599,18 @@ export default function App() {
       updated[idx].participants = updated[idx].participants || {};
       updated[idx].participants[name] = statusIcon;
       updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
-      // Persistieren beim Backend
       const res = await fetch(API + 'trainings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
       });
       if (!res.ok) {
-        // Fehler werden im Hintergrund geloggt, aber nicht gemeldet
         console.error('Fehler beim Aktualisieren des Teilnahme-Status.');
         return;
       }
-      // Lokal den State aktualisieren, damit die UI sich aktualisiert
       setTrainings(updated);
     });
 
-  // Trainer‑Status ändern (Dropdown) – ebenfalls ohne alert() und ohne refetchAll()
   const updateTrainerStatus = (training, name, newStatus) =>
     runOnce(async () => {
       const now = new Date();
@@ -618,15 +632,12 @@ export default function App() {
         console.error('Fehler beim Aktualisieren des Trainer-Status.');
         return;
       }
-      // Nur lokal updaten, kein refetch
       setTrainings(updated);
     });
 
-  // Spieler sortieren: alphabetisch, Trainer zuerst
   const sortedPlayers = [...players].sort((a, b) => a.name.localeCompare(b.name));
   const trainersFirst = [...sortedPlayers].sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0));
 
-  // Trainingsliste mit Filter
   const trainingsToShow = sortTrainings(
     trainings.filter((t) => {
       let dateOk = true;
@@ -639,14 +650,15 @@ export default function App() {
       let searchOk = true;
       if (searchText.trim()) {
         const search = searchText.trim().toLowerCase();
-        searchOk = (t.date && t.date.toLowerCase().includes(search)) || (t.note && t.note.toLowerCase().includes(search));
+        searchOk =
+          (t.date && t.date.toLowerCase().includes(search)) ||
+          (t.note && t.note.toLowerCase().includes(search));
       }
       return dateOk && searchOk;
     })
   );
 
-  // === View Rendering ===
-  // Login‑Ansicht
+  // === UI Rendering ===
   if (!loggedInUser) {
     return (
       <div className="login-screen modern-dark-blue">
@@ -680,7 +692,6 @@ export default function App() {
     );
   }
 
-  // Startmenü
   if (showStartMenu) {
     return (
       <div className="start-menu modern-dark-blue">
@@ -745,14 +756,12 @@ export default function App() {
     );
   }
 
-  // Einstellungen (Teamverwaltung & Adminbereich)
   if (showSettings) {
     return (
       <div className="App">
         <header>
           <h1>⚙ Einstellungen</h1>
         </header>
-        {/* Teamverwaltung */}
         <section className="player-management">
           <h2>Teamverwaltung</h2>
           <div className="add-player-form">
@@ -788,7 +797,11 @@ export default function App() {
               .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0))
               .map((p) =>
                 editPlayerId === p.name ? (
-                  <li key={p.name} className="edit-player-row">
+                  <li
+                    key={p.name}
+                    className="edit-player-row"
+                    style={{ opacity: p.inactive ? 0.5 : 1 }}
+                  >
                     <input
                       type="text"
                       value={playerDraft.name}
@@ -824,6 +837,16 @@ export default function App() {
                       <option value="Spieler">Spieler</option>
                       <option value="Trainer">Trainer</option>
                     </select>
+                    <label style={{ marginLeft: '0.5rem', color: '#ccc' }}>
+                      <input
+                        type="checkbox"
+                        checked={!!playerDraft.inactive}
+                        onChange={(e) =>
+                          setPlayerDraft((draft) => ({ ...draft, inactive: e.target.checked }))
+                        }
+                      />{' '}
+                      Inaktiv
+                    </label>
                     <button className="btn-save-players" onClick={saveEditPlayer} disabled={busy}>
                       {busy ? '…' : '💾 Speichern'}
                     </button>
@@ -832,7 +855,10 @@ export default function App() {
                     </button>
                   </li>
                 ) : (
-                  <li key={p.name}>
+                  <li
+                    key={p.name}
+                    style={{ opacity: p.inactive ? 0.5 : 1 }}
+                  >
                     <span className={p.isTrainer ? 'role-trainer' : 'role-player'}>{p.name}</span>
                     <input
                       type="text"
@@ -885,6 +911,15 @@ export default function App() {
                         <option value="Spieler">Spieler</option>
                         <option value="Trainer">Trainer</option>
                       </select>
+                      <label style={{ marginLeft: '0.5rem', color: '#ccc' }}>
+                        <input
+                          type="checkbox"
+                          checked={!!p.inactive}
+                          onChange={() => toggleInactive(p)}
+                          disabled={busy}
+                        />{' '}
+                        Inaktiv
+                      </label>
                       <button className="btn-edit" onClick={() => startEditPlayer(p)} disabled={busy}>
                         ✏ Bearbeiten
                       </button>
@@ -897,7 +932,6 @@ export default function App() {
               )}
           </ul>
         </section>
-        {/* Admin-Bereich nur für Matthias */}
         {loggedInUser === 'Matthias' && (
           <section className="admin-section">
             <h2>Adminbereich</h2>
@@ -963,7 +997,6 @@ export default function App() {
     );
   }
 
-  // === Trainingsteilnahme ===
   if (!showStartMenu && !showSettings && !showChecklists) {
     return (
       <div className="App">
@@ -1001,7 +1034,6 @@ export default function App() {
             Zurück zum Startmenü
           </button>
         </div>
-        {/* Trainingsliste */}
         {showTrainings && (
           <section className="trainings-list">
             <div className="training-filter">
@@ -1040,9 +1072,7 @@ export default function App() {
                 <div key={tKey} className="training">
                   <h3
                     className={`training-header ${expandedKey ? 'expanded' : ''}`}
-                    onClick={() =>
-                      setExpandedTraining(expandedKey ? null : tKey)
-                    }
+                    onClick={() => setExpandedTraining(expandedKey ? null : tKey)}
                   >
                     📅 {t.date} {expandedKey ? '🔽' : '▶'}
                   </h3>
@@ -1051,12 +1081,12 @@ export default function App() {
                       <div className="created-by">
                         Ersteller <strong>{t.createdBy || ''}</strong>
                       </div>
-                        {t.lastEdited && (
-                          <div className="last-edited">
-                            Zuletzt bearbeitet <strong>{t.lastEdited.at}</strong> von{' '}
-                            <strong>{t.lastEdited.by}</strong>
-                          </div>
-                        )}
+                      {t.lastEdited && (
+                        <div className="last-edited">
+                          Zuletzt bearbeitet <strong>{t.lastEdited.at}</strong> von{' '}
+                          <strong>{t.lastEdited.by}</strong>
+                        </div>
+                      )}
                       {editDateIdx === idx ? (
                         <div className="edit-date-row">
                           <input
@@ -1094,9 +1124,7 @@ export default function App() {
                             onClick={() => {
                               const parts = (t.date || '').split(', ')[1]?.split('.') || [];
                               setEditDateValue(
-                                parts.length === 3
-                                  ? `${parts[2]}-${parts[1]}-${parts[0]}`
-                                  : ''
+                                parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : ''
                               );
                               setEditDateIdx(idx);
                             }}
@@ -1106,7 +1134,6 @@ export default function App() {
                           </button>
                         </div>
                       )}
-                      {/* Notizfeld */}
                       <div className="note-field">
                         <textarea
                           rows={2}
@@ -1125,7 +1152,6 @@ export default function App() {
                           onBlur={(e) => saveTrainingNote(t, e.target.value)}
                         />
                       </div>
-                      {/* Teilnehmerliste */}
                       {players
                         .sort((a, b) => a.name.localeCompare(b.name))
                         .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0))
@@ -1134,12 +1160,15 @@ export default function App() {
                           const teamHinweis = p.memberSince || '';
                           const playerNote = (t.playerNotes && t.playerNotes[p.name]) || '';
                           const cardBg = idxP % 2 === 0 ? 'player-card even' : 'player-card odd';
+                          const inactiveStyle = { opacity: p.inactive ? 0.5 : 1 };
                           if (isTrainer) {
                             const trainerStatus = (t.trainerStatus && t.trainerStatus[p.name]) || 'Abgemeldet';
                             return (
-                              <div key={p.name + 'trainer'} className={cardBg}>
+                              <div key={p.name + 'trainer'} className={cardBg} style={inactiveStyle}>
                                 <div className="participant-col">
-                                  <span><b>{p.name}</b> <em style={{ color: '#ffe548', fontWeight: 500 }}>(Trainer*in)</em></span>
+                                  <span>
+                                    <b>{p.name}</b> <em style={{ color: '#ffe548', fontWeight: 500 }}>(Trainer*in)</em>
+                                  </span>
                                   {teamHinweis && (
                                     <div
                                       style={{ fontSize: '0.93em', color: '#9cc6ff', marginBottom: '0.2em' }}
@@ -1165,9 +1194,11 @@ export default function App() {
                           } else {
                             const statusIcon = (t.participants && t.participants[p.name]) || '⏳';
                             return (
-                              <div key={p.name} className={cardBg}>
+                              <div key={p.name} className={cardBg} style={inactiveStyle}>
                                 <div className="participant-col">
-                                  <span><b>{p.name}</b></span>
+                                  <span>
+                                    <b>{p.name}</b>
+                                  </span>
                                   {teamHinweis && (
                                     <div
                                       style={{ fontSize: '0.93em', color: '#9cc6ff', marginBottom: '0.2em' }}
@@ -1229,7 +1260,6 @@ export default function App() {
                             );
                           }
                         })}
-                      {/* Speicherung der Änderung: Hier kann optional ein Speichern-Knopf stehen */}
                       {!t.isEditing && (
                         <button
                           className="btn-save-training"
@@ -1261,7 +1291,6 @@ export default function App() {
             )}
           </section>
         )}
-        {/* Auswertung */}
         {showReport && (
           <section className="report-section">
             <h2>Auswertung</h2>
@@ -1323,9 +1352,7 @@ export default function App() {
                     {reportData.data.map((row) => (
                       <React.Fragment key={row.name}>
                         <tr
-                          className={`report-row ${
-                            expandedReportRow === row.name ? 'expanded' : ''
-                          }`}
+                          className={`report-row ${expandedReportRow === row.name ? 'expanded' : ''}`}
                           onClick={() =>
                             setExpandedReportRow(
                               expandedReportRow === row.name ? null : row.name
@@ -1368,19 +1395,13 @@ export default function App() {
             )}
           </section>
         )}
-        {/* Footer in der Trainingsansicht */}
         <footer>
           <p>
             Ersteller <strong>Matthias Kopf</strong> Mail{' '}
             <a href="mailto:matthias@head-mail.com">matthias@head-mail.com</a>
           </p>
           <p
-            style={{
-              fontSize: '0.93rem',
-              color: '#8bb2f4',
-              marginTop: '0.4rem',
-              marginBottom: '1.3rem',
-            }}
+            style={{ fontSize: '0.93rem', color: '#8bb2f4', marginTop: '0.4rem', marginBottom: '1.3rem' }}
           >
             © 2025 Matthias Kopf. Alle Rechte vorbehalten.
           </p>
@@ -1407,12 +1428,9 @@ export default function App() {
     );
   }
 
-  // === Checklisten ===
   if (showChecklists) {
-    // Spieler ohne Trainerstatus (nur Spieler)
     const playersOnly = trainersFirst.filter((p) => !p.isTrainer);
     const rowBg = (i) => (i % 2 === 0 ? '#1e2744' : '#19213a');
-    // Checklisten säubern
     const sanitizeList = (rawList, editorName = loggedInUser) =>
       (rawList || []).map((cl) => ({
         title: typeof cl.title === 'string' ? cl.title : 'Unbenannt',
@@ -1427,7 +1445,6 @@ export default function App() {
             : { by: editorName || '', at: formatDateTime(new Date()) },
         _id: cl._id || undefined,
       }));
-    // Speichern einer Liste
     const saveChecklistList = async (rawList, editorName = loggedInUser) => {
       try {
         const cleaned = sanitizeList(rawList, editorName);
@@ -1444,7 +1461,6 @@ export default function App() {
         alert('Fehler beim Speichern der Checklisten.');
       }
     };
-    // Sicherstellen, dass alle Spieler in einer Checkliste vorhanden sind
     const ensurePlayersPresent = (cl) => {
       const items = { ...(cl.items || {}) };
       playersOnly.forEach((p) => {
@@ -1452,7 +1468,6 @@ export default function App() {
       });
       return { ...cl, items };
     };
-    // Neue Checkliste anlegen
     const createChecklist = () =>
       runOnce(async () => {
         const title = newChecklistTitle.trim() || 'Neue Checkliste';
@@ -1474,7 +1489,6 @@ export default function App() {
         await saveChecklistList(updated, loggedInUser);
         setNewChecklistTitle('');
       });
-    // Checkliste umbenennen
     const renameChecklist = (idx, newTitle) =>
       runOnce(async () => {
         const updated = [...checklists];
@@ -1486,7 +1500,6 @@ export default function App() {
         setChecklists(updated);
         await saveChecklistList(updated, loggedInUser);
       });
-    // Checkliste löschen
     const deleteChecklist = (idx) =>
       runOnce(async () => {
         if (!window.confirm('Checkliste wirklich löschen?')) return;
@@ -1496,7 +1509,6 @@ export default function App() {
         await saveChecklistList(updated, loggedInUser);
         setExpandedChecklist(null);
       });
-    // Ein einzelnes Item toggeln
     const toggleItem = (idx, playerName) =>
       runOnce(async () => {
         const updated = [...checklists];
@@ -1507,7 +1519,6 @@ export default function App() {
         setChecklists(updated);
         await saveChecklistList(updated, loggedInUser);
       });
-    // Alle markieren oder leeren
     const markAll = (idx, value) =>
       runOnce(async () => {
         const updated = [...checklists];
@@ -1555,9 +1566,7 @@ export default function App() {
               <div key={key} className="training">
                 <h3
                   className={`training-header ${isExpanded ? 'expanded' : ''}`}
-                  onClick={() =>
-                    setExpandedChecklist(isExpanded ? null : key)
-                  }
+                  onClick={() => setExpandedChecklist(isExpanded ? null : key)}
                   style={{ cursor: 'pointer' }}
                 >
                   📋 {cl.title} {isExpanded ? '🔽' : '▶'}
@@ -1674,12 +1683,7 @@ export default function App() {
             <a href="mailto:matthias@head-mail.com">matthias@head-mail.com</a>
           </p>
           <p
-            style={{
-              fontSize: '0.93rem',
-              color: '#8bb2f4',
-              marginTop: '0.4rem',
-              marginBottom: '1.3rem',
-            }}
+            style={{ fontSize: '0.93rem', color: '#8bb2f4', marginTop: '0.4rem', marginBottom: '1.3rem' }}
           >
             © 2025 Matthias Kopf. Alle Rechte vorbehalten.
           </p>
@@ -1706,7 +1710,7 @@ export default function App() {
     );
   }
 
-  // === Funktionen für Auswertung und PDF-Export ===
+  // Auswertung berechnen – berücksichtigt nur aktive Spieler (kein Trainer, nicht inaktiv)
   function computeReport() {
     if (!fromDate || !toDate) {
       alert('Bitte Start- und Enddatum auswählen.');
@@ -1729,7 +1733,7 @@ export default function App() {
       return;
     }
     const report = trainersFirst
-      .filter((p) => !p.isTrainer)
+      .filter((p) => !p.isTrainer && !p.inactive)
       .map((player) => {
         let attendCount = 0;
         const details = trainingsInRange.map((t) => {
@@ -1778,4 +1782,238 @@ export default function App() {
     doc.text('© 2025 Matthias Kopf. Alle Rechte vorbehalten.', 14, doc.internal.pageSize.height - 10);
     doc.save(`Training-Auswertung-${fromDate}-bis-${toDate}.pdf`);
   }
+}
+/* --------------------------------------------------
+   CSS‑Definitionen (App.css)
+   Dieses Stylesheet bildet das farbige Dark‑Design der App nach.  
+   Alle Klassen, die im obigen React‑Code verwendet werden, sind hier definiert.  
+   Bei Bedarf können Farben und Abstände angepasst werden.
+-------------------------------------------------- */
+
+.modern-dark-blue {
+  background: #0d1321;
+  color: #e0e6f5;
+  min-height: 100vh;
+  padding: 1.2rem;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
+    Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+.login-screen input,
+.login-screen button,
+.start-menu button {
+  display: block;
+  margin: 0.6rem auto;
+  width: 260px;
+}
+
+.login-icon-row {
+  text-align: center;
+  font-size: 3rem;
+  margin-top: 1.2rem;
+  margin-bottom: 0.6rem;
+}
+
+.login-version {
+  text-align: center;
+  font-size: 0.9rem;
+  color: #8bb2f4;
+  margin-bottom: 1rem;
+}
+
+.login-hint {
+  font-size: 0.8rem;
+  color: #8891b5;
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.login-error {
+  color: #e74c3c;
+  text-align: center;
+  margin-top: 0.5rem;
+}
+
+.main-func-btn {
+  background: #1363d2;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 0.6rem 1.2rem;
+  cursor: pointer;
+  box-shadow: 0 2px 10px #222a4477;
+  font-size: 1rem;
+}
+
+.main-func-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Player list styling */
+.player-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.8rem 0;
+}
+
+.player-list li {
+  background: #19274f;
+  border-radius: 4px;
+  padding: 0.5rem;
+  margin-bottom: 0.4rem;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.role-trainer {
+  color: #ffe548;
+  font-weight: bold;
+}
+
+.role-player {
+  color: #96ffc4;
+  font-weight: bold;
+}
+
+.btn-save-players,
+.btn-delete,
+.btn-edit,
+.btn-delete-training,
+.btn-edit-date,
+.btn-save-date,
+.btn-save-training {
+  background: #46a8f7;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 0.3rem 0.6rem;
+  margin-left: 0.4rem;
+  cursor: pointer;
+}
+
+.btn-delete,
+.btn-delete-training {
+  background: #e74c3c;
+}
+
+.btn-edit-date {
+  background: #f1c40f;
+  color: #1e2744;
+}
+
+.btn-save-date {
+  background: #2ecc71;
+}
+
+.training {
+  background: #1e2744;
+  border-radius: 4px;
+  padding: 0.6rem;
+  margin: 0.5rem 0;
+}
+
+.training-header {
+  cursor: pointer;
+  user-select: none;
+  margin: 0;
+}
+
+.training-header.expanded {
+  background: #162044;
+  padding: 0.3rem;
+  border-radius: 4px;
+}
+
+.note-field textarea {
+  width: 100%;
+  min-height: 60px;
+  background: #232942;
+  color: #96ffc4;
+  border: 1.2px solid #2d385b;
+  border-radius: 5px;
+  resize: vertical;
+  padding: 0.4rem;
+  font-size: 1rem;
+}
+
+.player-card {
+  display: flex;
+  flex-direction: column;
+  margin: 0.2em 0;
+  padding: 0.5rem;
+  border-radius: 4px;
+}
+
+.player-card.even {
+  background: #162044;
+}
+
+.player-card.odd {
+  background: #111a3c;
+}
+
+.status-btn-row button {
+  margin-right: 0.3rem;
+  background: #374785;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+}
+
+.status-btn-row button.active {
+  background: #46a8f7;
+}
+
+.status-text {
+  margin-left: 0.5rem;
+  color: #8bb2f4;
+}
+
+.report-section table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.report-section th,
+.report-section td {
+  padding: 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid #2b3559;
+}
+
+.report-row {
+  background: #19274f;
+}
+
+.report-row.expanded {
+  background: #162044;
+}
+
+.report-details-row td {
+  background: #101a35;
+  padding: 0.7rem;
+}
+
+.checklist-list .training {
+  background: #1e2744;
+}
+
+.training-filter label {
+  margin-right: 1rem;
+  color: #8bb2f4;
+}
+
+.no-trainings {
+  color: #9bb8e4;
+  margin-top: 1rem;
+}
+
+/* Inaktive Mitglieder erscheinen mit reduzierter Opazität */
+.inactive {
+  opacity: 0.5;
 }
