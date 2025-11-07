@@ -1,521 +1,233 @@
-body {
-  margin: 0;
-  font-family: 'Inter', Arial, sans-serif;
-  background: linear-gradient(135deg, #121624 60%, #1d273a 100%);
-  color: #f1f1f1;
+   CSS‑Definitionen (App.css)
+   Dieses Stylesheet bildet das farbige Dark‑Design der App nach.  
+   Alle Klassen, die im obigen React‑Code verwendet werden, sind hier definiert.  
+   Bei Bedarf können Farben und Abstände angepasst werden.
+-------------------------------------------------- */
+
+.modern-dark-blue {
+  background: #0d1321;
+  color: #e0e6f5;
+  min-height: 100vh;
+  padding: 1.2rem;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
+    Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 }
 
-.App {
-  max-width: 950px;
-  margin: 0 auto;
-  padding: 1rem;
+.login-screen input,
+.login-screen button,
+.start-menu button {
+  display: block;
+  margin: 0.6rem auto;
+  width: 260px;
 }
 
-header {
-  position: relative;
-  margin-bottom: 1rem;
-  background: #1b2232;
-  border-radius: 0 0 16px 16px;
-  box-shadow: 0 2px 12px #19294a24;
-}
-header h1 {
-  font-size: 2.0rem;
-  text-align: center;
-  margin: 0;
-  padding: 1.1rem 0 0.6rem 0;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: #d1e9ff;
-}
-header .blue-version {
-  color: #32a9ff;
-}
-
-.login-screen.modern-dark-blue {
-  max-width: 410px;
-  margin: 4.5rem auto;
-  background: #191e32;
-  padding: 2.5rem 2rem;
-  border-radius: 14px;
-  text-align: center;
-  box-shadow: 0 2px 24px #19294a44;
-  position: relative;
-}
 .login-icon-row {
   text-align: center;
-  margin-bottom: 0.8rem;
+  font-size: 3rem;
+  margin-top: 1.2rem;
+  margin-bottom: 0.6rem;
 }
-.login-icon {
-  font-size: 3.8rem;
-  display: block;
-  margin: 0 auto 0.2rem auto;
-}
-.login-headline {
-  font-size: 1.65rem;
-  margin-bottom: 0.2rem;
-  color: #51adff;
-  letter-spacing: 0.02em;
-}
+
 .login-version {
-  color: #4e8ef5;
-  font-size: 1.07rem;
-  margin-bottom: 1.3rem;
-}
-.login-hint {
-  color: #9cd7ff;
-  background: #1b253b;
-  font-size: 1.01rem;
-  margin-bottom: 1.1rem;
-  padding: 0.65em 1em;
-  border-radius: 8px;
-  box-shadow: 0 1px 7px #1a3a6019;
-}
-.login-screen input {
-  width: 100%;
-  padding: 0.65rem;
-  margin: 0.5rem 0;
-  background: #232942;
-  border: 1.6px solid #2568be44;
-  border-radius: 6px;
-  color: #fff;
-  font-size: 1rem;
-}
-.login-screen button {
-  width: 100%;
-  padding: 0.7rem;
-  margin-top: 1.3rem;
-  background-color: #2b71c2;
-  color: #fff;
-  border: none;
-  border-radius: 7px;
-  cursor: pointer;
-  font-weight: bold;
-  font-size: 1.06rem;
-  box-shadow: 0 2px 12px #222a4450;
-}
-.login-screen button:hover {
-  background-color: #3793fc;
-}
-.login-error {
-  color: #ff5252;
-  margin-top: 0.7rem;
-  font-weight: bold;
-  font-size: 1.03rem;
-}
-
-.controls {
-  display: flex;
-  gap: 1rem;
-  justify-content: center;
-  margin-bottom: 1.3rem;
-}
-
-.controls button {
-  background: linear-gradient(90deg,#2568be 55%, #163974 100%);
-  color: #fff;
-  border: none;
-  border-radius: 7px;
-  padding: 0.75rem 1.45rem;
-  cursor: pointer;
-  font-size: 1.05rem;
-  box-shadow: 0 2px 10px #1724413d;
-  font-weight: 600;
-  transition: background 0.18s;
-}
-.controls button:hover {
-  background: linear-gradient(90deg,#2f94f6 60%, #194a96 100%);
-}
-
-.admin-section,
-.player-management {
-  background: #191e32;
-  padding: 1.3rem 1rem 1.1rem 1rem;
-  border-radius: 12px;
-  margin-bottom: 1.4rem;
-  box-shadow: 0 2px 16px #19294a28;
-}
-
-.admin-section h2,
-.player-management h2 {
-  margin-top: 0;
+  text-align: center;
+  font-size: 0.9rem;
+  color: #8bb2f4;
   margin-bottom: 1rem;
-  color: #69b8ff;
-  letter-spacing: 0.02em;
 }
 
-.add-player-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  margin-bottom: 1.2rem;
+.login-hint {
+  font-size: 0.8rem;
+  color: #8891b5;
+  text-align: center;
+  margin-bottom: 1rem;
 }
 
-.add-player-form input[type='text'],
-.add-player-form input[type='date'],
-.add-player-form select,
-.add-player-form button {
-  padding: 0.4rem;
-  background: #232942;
-  border: 1.3px solid #2d385b;
-  border-radius: 5px;
+.login-error {
+  color: #e74c3c;
+  text-align: center;
+  margin-top: 0.5rem;
+}
+
+.main-func-btn {
+  background: #1363d2;
   color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 0.6rem 1.2rem;
+  cursor: pointer;
+  box-shadow: 0 2px 10px #222a4477;
   font-size: 1rem;
 }
-.add-player-form button {
-  background: #1982ef;
-  cursor: pointer;
-  border: none;
-  font-weight: 600;
-  transition: background 0.15s;
-}
-.add-player-form button:hover {
-  background: #40c4ff;
-  color: #0b192b;
+
+.main-func-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
+/* Player list styling */
 .player-list {
   list-style: none;
   padding: 0;
-  margin: 0;
+  margin: 0.8rem 0;
 }
+
 .player-list li {
+  background: #19274f;
+  border-radius: 4px;
+  padding: 0.5rem;
+  margin-bottom: 0.4rem;
   display: flex;
+  flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  background: #20263e;
-  margin-bottom: 0.65rem;
-  padding: 0.65rem 0.9rem;
-  border-radius: 6px;
-  box-shadow: 0 1px 7px #1a3a6019;
 }
 
-.edit-player-row input, .edit-player-row select {
-  margin-right: 0.3rem;
-  background: #272e4b;
-}
-
-.player-list li span {
-  flex-grow: 1;
-}
-.role-player {
-  color: #7dc4ff;
-  font-weight: bold;
-}
 .role-trainer {
   color: #ffe548;
   font-weight: bold;
 }
-.join-date {
-  font-style: italic;
-  margin-left: 0.5rem;
-  color: #b6c5df;
+
+.role-player {
+  color: #96ffc4;
+  font-weight: bold;
 }
-.note {
-  font-size: 0.96rem;
-  margin-left: 0.5rem;
-  color: #61e6a0;
-}
-.role-dropdown,
-.trainer-status-dropdown {
-  background: #232942;
-  color: #fff;
-  border: 1.2px solid #2d385b;
-  border-radius: 5px;
-  padding: 0.3rem 0.7rem;
-  margin-left: 0.5rem;
-}
-.btn-delete, .btn-edit, .btn-save-players {
-  background: #1982ef;
+
+.btn-save-players,
+.btn-delete,
+.btn-edit,
+.btn-delete-training,
+.btn-edit-date,
+.btn-save-date,
+.btn-save-training {
+  background: #46a8f7;
   color: #fff;
   border: none;
-  border-radius: 5px;
-  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  padding: 0.3rem 0.6rem;
   margin-left: 0.4rem;
   cursor: pointer;
-  font-weight: bold;
-  font-size: 1.01rem;
-  box-shadow: 0 2px 10px #0b162b29;
-  transition: background 0.15s;
 }
-.btn-edit {
-  background: #56b3ff;
-  color: #0b162b;
-}
-.btn-save-players {
-  background: #2dfca9;
-  color: #0b192b;
-}
-.btn-delete:hover { background: #e54040; color: #fff; }
-.btn-edit:hover { background: #3793fc; }
-.btn-save-players:hover { background: #00e097; color: #fff; }
 
-.trainings-list {
-  margin-bottom: 2.2rem;
+.btn-delete,
+.btn-delete-training {
+  background: #e74c3c;
 }
-.training-filter {
-  display: flex;
-  align-items: center;
-  gap: 0.9rem;
-  margin-bottom: 1.1rem;
-  flex-wrap: wrap;
+
+.btn-edit-date {
+  background: #f1c40f;
+  color: #1e2744;
 }
-.training-filter input[type='date'],
-.training-filter input[type='text'] {
-  background: #232942;
-  border: 1.2px solid #2d385b;
-  border-radius: 5px;
-  padding: 0.36rem 0.75rem;
-  color: #fff;
-  font-size: 1.03rem;
-}
-.training-filter button {
-  background: #295cb6;
-  color: #fff;
-  border: none;
-  border-radius: 5px;
-  padding: 0.33rem 1.0rem;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 1rem;
-  margin-left: 0.2rem;
-}
-.training-filter button:hover {
-  background: #41b0fa;
-  color: #1d273a;
+
+.btn-save-date {
+  background: #2ecc71;
 }
 
 .training {
-  background: #22283d;
-  margin-bottom: 1.2rem;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px #17244123;
-}
-.training-header {
-  margin: 0;
-  padding: 0.8rem 1.1rem;
-  background: linear-gradient(90deg,#163974 75%,#164679 100%);
-  cursor: pointer;
-  border-radius: 8px 8px 0 0;
-  font-size: 1.14rem;
-  font-weight: bold;
-  letter-spacing: 0.01em;
-  color: #d8eaff;
-  transition: background 0.12s;
-}
-.training-header.expanded {
-  background: linear-gradient(90deg,#329fff 70%, #174981 100%);
-  color: #fff;
-}
-.training .created-by,
-.training .last-edited {
-  font-size: 0.99rem;
+  background: #1e2744;
+  border-radius: 4px;
+  padding: 0.6rem;
   margin: 0.5rem 0;
-  color: #7bc7ff;
 }
-.edit-date-row {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  margin-bottom: 0.8rem;
+
+.training-header {
+  cursor: pointer;
+  user-select: none;
+  margin: 0;
 }
-.edit-date-input {
+
+.training-header.expanded {
+  background: #162044;
+  padding: 0.3rem;
+  border-radius: 4px;
+}
+
+.note-field textarea {
+  width: 100%;
+  min-height: 60px;
   background: #232942;
+  color: #96ffc4;
   border: 1.2px solid #2d385b;
   border-radius: 5px;
-  padding: 0.3rem 0.8rem;
-  color: #fff;
-}
-.btn-edit-date, .btn-save-date {
-  background: #3b95f2;
-  color: #fff;
-  border: none;
-  border-radius: 5px;
-  padding: 0.32rem 1.1rem;
-  cursor: pointer;
-  font-weight: 600;
+  resize: vertical;
+  padding: 0.4rem;
+  font-size: 1rem;
 }
 
 .player-card {
-  background: linear-gradient(120deg, #232942 80%, #243359 100%);
-  border: 1.8px solid #283b67;
-  border-radius: 15px;
-  box-shadow: 0 2px 14px #1a1f30cc;
-  padding: 1.0rem 1.2rem 0.7rem 1.2rem;
-  margin-bottom: 1.0rem;
-  margin-top: 0.2rem;
-  transition: box-shadow 0.13s, border 0.13s;
   display: flex;
   flex-direction: column;
-}
-.player-card:focus-within,
-.player-card:hover {
-  box-shadow: 0 4px 20px #2966bb60;
-  border-color: #36adff;
-}
-@media (max-width: 600px) {
-  .player-card {
-    padding: 0.7rem 0.5rem 0.6rem 0.5rem;
-  }
+  margin: 0.2em 0;
+  padding: 0.5rem;
+  border-radius: 4px;
 }
 
-.status-btn-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
-  margin-top: 0.2em;
+.player-card.even {
+  background: #162044;
 }
 
-.btn-part-status button {
-  margin-left: 0.23rem;
-  background: #295cb6;
-  color: #fff;
+.player-card.odd {
+  background: #111a3c;
+}
+
+.status-btn-row button {
+  margin-right: 0.3rem;
+  background: #374785;
+  color: #ffffff;
   border: none;
-  border-radius: 5px;
-  padding: 0.28rem 0.56rem;
+  border-radius: 4px;
+  padding: 0.3rem 0.6rem;
   cursor: pointer;
-  font-weight: 600;
-  font-size: 1.07rem;
-  transition: background 0.12s;
 }
-.btn-part-status button.active {
-  background: #2dfca9;
-  color: #0b192b;
+
+.status-btn-row button.active {
+  background: #46a8f7;
 }
-.participant-col {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 0.16em;
-}
+
 .status-text {
-  margin-left: 0.35em;
-  font-style: italic;
-  color: #65d0fc;
-  font-size: 1.05em;
-  font-weight: 500;
-}
-.note-field {
-  margin: 0.6rem 0 0.9rem 0;
-  display: flex;
-  align-items: flex-start;
-}
-.note-field textarea {
-  width: 70%;
-  min-width: 210px;
-  max-width: 700px;
-  padding: 0.57rem 0.8rem;
-  background: #232942;
-  border: 1.2px solid #2d385b;
-  border-radius: 6px;
-  color: #fff;
-  font-size: 1rem;
-  min-height: 38px;
-  resize: vertical;
-}
-
-.report-section {
-  background: #191e32;
-  padding: 1.3rem 1.0rem 1.1rem 1.0rem;
-  border-radius: 10px;
-  margin-bottom: 1.3rem;
-  box-shadow: 0 2px 14px #19294a23;
-}
-.report-form {
-  display: flex;
-  gap: 1.2rem;
-  align-items: center;
-  margin-bottom: 1.2rem;
-  flex-wrap: wrap;
-}
-.report-form input[type='date'] {
-  background: #232942;
-  border: 1.2px solid #2d385b;
-  border-radius: 5px;
-  padding: 0.34rem 0.8rem;
-  color: #fff;
-  font-size: 1.02rem;
-}
-.report-form button {
-  background: #295cb6;
-  color: #fff;
-  border: none;
-  border-radius: 5px;
-  padding: 0.37rem 1.0rem;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 1rem;
-}
-.report-form button:hover {
-  background: #41b0fa;
-  color: #1d273a;
-}
-.report-results table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 1rem;
-  background: #22283d;
-  border-radius: 8px;
-  overflow: hidden;
-}
-.report-results th,
-.report-results td {
-  border: 1px solid #2b3861;
-  padding: 0.56rem 0.5rem;
-  text-align: left;
-  background: #232942;
-}
-.report-row {
-  cursor: pointer;
-  transition: background 0.12s;
-}
-.report-row.expanded,
-.report-row:hover {
-  background: #233c65;
-  color: #fff;
-}
-.report-details-row td {
-  background: #1c263a;
-  padding: 0.55rem;
-  border-bottom: 2px solid #19406255;
-}
-.footer {
-  text-align: center;
-  margin-top: 2.4rem;
-  font-size: 0.97rem;
+  margin-left: 0.5rem;
   color: #8bb2f4;
 }
-footer a {
-  color: #61b5ff;
-  text-decoration: none;
-}
 
-.mobile-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  margin-bottom: 1.2rem;
-  align-items: stretch;
-}
-
-.main-func-btn {
+.report-section table {
   width: 100%;
-  font-size: 1.2rem;
-  padding: 0.85rem;
-  margin: 0;
-  background: linear-gradient(90deg,#1363d2 60%,#232942 100%);
-  border: none;
-  border-radius: 10px;
-  color: #fff;
-  font-weight: bold;
-  letter-spacing: 0.05em;
-  box-shadow: 0 2px 10px #10182233;
+  border-collapse: collapse;
 }
 
-@media (min-width: 700px) {
-  .mobile-controls {
-    flex-direction: row;
-    gap: 1rem;
-    align-items: center;
-  }
-  .main-func-btn { width: auto; min-width: 220px; }
+.report-section th,
+.report-section td {
+  padding: 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid #2b3559;
+}
+
+.report-row {
+  background: #19274f;
+}
+
+.report-row.expanded {
+  background: #162044;
+}
+
+.report-details-row td {
+  background: #101a35;
+  padding: 0.7rem;
+}
+
+.checklist-list .training {
+  background: #1e2744;
+}
+
+.training-filter label {
+  margin-right: 1rem;
+  color: #8bb2f4;
+}
+
+.no-trainings {
+  color: #9bb8e4;
+  margin-top: 1rem;
+}
+
+/* Inaktive Mitglieder erscheinen mit reduzierter Opazität */
+.inactive {
+  opacity: 0.5;
 }
