@@ -586,6 +586,36 @@ export default function App() {
       alert('Datum wurde aktualisiert.');
     });
 
+  // Trainingsliste von Duplikaten bereinigen (nach Datum)
+  const removeDuplicateTrainings = () =>
+    runOnce(async () => {
+      // Erstelle neue Liste, behalte nur das erste Training pro Datum
+      const uniqueList = [];
+      const seen = new Set();
+      for (const tr of trainings) {
+        const key = tr.date || '';
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueList.push(tr);
+        }
+      }
+      if (uniqueList.length === trainings.length) {
+        alert('Keine doppelten Trainings vorhanden.');
+        return;
+      }
+      const res = await fetch(API + 'trainings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reset: true, list: uniqueList }),
+      });
+      if (!res.ok) {
+        alert('Fehler beim Entfernen der doppelten Trainings.');
+        return;
+      }
+      await refetchAll();
+      alert('Doppelte Trainings wurden entfernt.');
+    });
+
   // Status ändern
   const updateParticipation = (training, name, statusIcon) =>
     runOnce(async () => {
@@ -977,6 +1007,14 @@ export default function App() {
             </ul>
           </section>
         )}
+        <button
+          className="main-func-btn"
+          style={{ margin: "1.5em auto 0 auto", width: "260px" }}
+          onClick={removeDuplicateTrainings}
+          disabled={busy}
+        >
+          Doppelte Trainings entfernen
+        </button>
         <button
           className="main-func-btn"
           style={{ margin: '2em auto 0 auto', width: '260px' }}
