@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const { randomBytes } = require('crypto');
 const { version } = require('./package.json');
 const revision = process.env.RENDER_GIT_COMMIT?.slice(0, 7) || 'local';
 
@@ -11,8 +12,75 @@ const Checklist = require('./models/Checklist');
 const Player = require('./models/Player');
 const Training = require('./models/Training');
 const AppSettings = require('./models/AppSettings');
+const LoginEvent = require('./models/LoginEvent');
+const { hashPassword, isPasswordHash, verifyPassword } = require('./authUtils');
 
 const TRAINING_LOCATIONS = ['Sportplatz', 'Turnhalle'];
+const ADMIN_USERNAME = 'Matthias';
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const MAX_LOGIN_ATTEMPTS = 10;
+const sessions = new Map();
+const loginAttempts = new Map();
+
+const pruneSessions = () => {
+  const now = Date.now();
+  for (const [token, session] of sessions.entries()) {
+    if (session.expiresAt <= now) sessions.delete(token);
+  }
+};
+
+const getBearerToken = req => {
+  const authorization = req.get('authorization') || '';
+  return authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+};
+
+const requireSession = (req, res, next) => {
+  pruneSessions();
+  const token = getBearerToken(req);
+  const session = token ? sessions.get(token) : null;
+  if (!session) return res.status(401).json({ error: 'Bitte erneut einloggen.' });
+  req.auth = { ...session, token };
+  next();
+};
+
+const requireAdmin = (req, res, next) =>
+  requireSession(req, res, () => {
+    if (req.auth.username !== ADMIN_USERNAME) {
+      return res.status(403).json({ error: 'Nur Matthias darf diesen Bereich öffnen.' });
+    }
+    next();
+  });
+
+const safeUser = user => ({ _id: user._id, name: user.name });
+
+const loginAttemptKey = (req, username = '') =>
+  `${req.ip || req.socket?.remoteAddress || 'unknown'}|${String(username).toLowerCase()}`;
+
+const pruneLoginAttempts = () => {
+  const now = Date.now();
+  for (const [key, attempt] of loginAttempts.entries()) {
+    if (now - attempt.startedAt > LOGIN_WINDOW_MS) loginAttempts.delete(key);
+  }
+};
+
+const isLoginBlocked = key => {
+  const attempt = loginAttempts.get(key);
+  if (!attempt || Date.now() - attempt.startedAt > LOGIN_WINDOW_MS) {
+    loginAttempts.delete(key);
+    return false;
+  }
+  return attempt.count >= MAX_LOGIN_ATTEMPTS;
+};
+
+const recordFailedLogin = key => {
+  const current = loginAttempts.get(key);
+  if (!current || Date.now() - current.startedAt > LOGIN_WINDOW_MS) {
+    loginAttempts.set(key, { count: 1, startedAt: Date.now() });
+    return;
+  }
+  current.count += 1;
+};
 
 async function replaceCollectionSafely(Model, list, cleanDocument) {
   const existing = await Model.find({}).lean();
@@ -120,7 +188,146 @@ app.get('/', (_req, res) => {
 
 // === 5) API-Endpunkte ===
 
-// ---- 5.1 Users ----
+// ---- 5.1 Anmeldung und Benutzer ----
+app.post('/auth/login', async (req, res) => {
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  if (!name || !password || name.length > 100 || password.length > 256) {
+    return res.status(400).json({ error: 'Benutzername und Passwort werden benötigt.' });
+  }
+
+  const attemptKey = loginAttemptKey(req, name);
+  pruneLoginAttempts();
+  if (isLoginBlocked(attemptKey)) {
+    return res.status(429).json({ error: 'Zu viele Anmeldeversuche. Bitte später erneut versuchen.' });
+  }
+
+  try {
+    const user = await User.findOne({ name });
+    const passwordMatches = user
+      ? await verifyPassword(password, user.password)
+      : false;
+    if (!user || !passwordMatches) {
+      recordFailedLogin(attemptKey);
+      return res.status(401).json({ error: 'Falscher Benutzername oder Passwort.' });
+    }
+
+    loginAttempts.delete(attemptKey);
+    if (!isPasswordHash(user.password)) {
+      user.password = await hashPassword(password);
+      await user.save();
+    }
+
+    pruneSessions();
+    const token = randomBytes(32).toString('hex');
+    sessions.set(token, {
+      username: user.name,
+      expiresAt: Date.now() + SESSION_TTL_MS,
+    });
+    await LoginEvent.create({ username: user.name, loggedInAt: new Date() });
+    res.json({
+      name: user.name,
+      isAdmin: user.name === ADMIN_USERNAME,
+      token,
+      expiresInMs: SESSION_TTL_MS,
+    });
+  } catch (err) {
+    console.error('Fehler POST /auth/login:', err);
+    res.status(500).json({ error: 'Anmeldung konnte nicht abgeschlossen werden.' });
+  }
+});
+
+app.post('/auth/logout', (req, res) => {
+  const token = getBearerToken(req);
+  if (token) sessions.delete(token);
+  res.status(204).end();
+});
+
+app.get('/admin/users', requireAdmin, async (_req, res) => {
+  try {
+    const allUsers = await User.find().sort({ name: 1 }).lean();
+    res.json(allUsers.map(safeUser));
+  } catch (err) {
+    console.error('Fehler GET /admin/users:', err);
+    res.status(500).json({ error: 'Benutzer konnten nicht geladen werden.' });
+  }
+});
+
+app.post('/admin/users', requireAdmin, async (req, res) => {
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  if (!name || !password || name.length > 100 || password.length > 256) {
+    return res.status(400).json({ error: 'Benutzername und Passwort werden benötigt.' });
+  }
+  try {
+    const user = await User.create({ name, password: await hashPassword(password) });
+    res.status(201).json(safeUser(user));
+  } catch (err) {
+    console.error('Fehler POST /admin/users:', err);
+    if (err?.code === 11000) {
+      return res.status(409).json({ error: 'Dieser Benutzername existiert bereits.' });
+    }
+    res.status(500).json({ error: 'Benutzer konnte nicht angelegt werden.' });
+  }
+});
+
+app.patch('/admin/users/:id/password', requireAdmin, async (req, res) => {
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  if (!mongoose.isValidObjectId(req.params.id) || !password || password.length > 256) {
+    return res.status(400).json({ error: 'Ungültiger Benutzer oder ungültiges Passwort.' });
+  }
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { $set: { password: await hashPassword(password) } },
+      { new: true }
+    );
+    if (!user) return res.status(404).json({ error: 'Benutzer nicht gefunden.' });
+    res.json(safeUser(user));
+  } catch (err) {
+    console.error('Fehler PATCH /admin/users/:id/password:', err);
+    res.status(500).json({ error: 'Passwort konnte nicht geändert werden.' });
+  }
+});
+
+app.delete('/admin/users/:id', requireAdmin, async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(400).json({ error: 'Ungültiger Benutzer.' });
+  }
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'Benutzer nicht gefunden.' });
+    if (user.name === ADMIN_USERNAME) {
+      return res.status(400).json({ error: 'Der Administrator kann nicht gelöscht werden.' });
+    }
+    await user.deleteOne();
+    res.status(204).end();
+  } catch (err) {
+    console.error('Fehler DELETE /admin/users/:id:', err);
+    res.status(500).json({ error: 'Benutzer konnte nicht gelöscht werden.' });
+  }
+});
+
+app.get('/admin/login-events', requireAdmin, async (req, res) => {
+  const requestedLimit = Number(req.query.limit);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(500, Math.max(1, Math.trunc(requestedLimit)))
+    : 200;
+  try {
+    const events = await LoginEvent.find({}).sort({ loggedInAt: -1 }).limit(limit).lean();
+    res.json(events.map(event => ({
+      _id: event._id,
+      username: event.username,
+      loggedInAt: event.loggedInAt,
+    })));
+  } catch (err) {
+    console.error('Fehler GET /admin/login-events:', err);
+    res.status(500).json({ error: 'Login-Protokoll konnte nicht geladen werden.' });
+  }
+});
+
+// Diese beiden Endpunkte bleiben während des gestaffelten Updates zunächst
+// für die vorherige Oberfläche verfügbar und werden danach abgesichert.
 app.get('/users', async (req, res) => {
   try {
     const allUsers = await User.find().lean();
