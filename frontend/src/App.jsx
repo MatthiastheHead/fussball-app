@@ -89,12 +89,17 @@ const toIsoDate = (value) => {
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function healthcheck() {
-  try {
-    const res = await apiRequest('health', { cache: 'no-store' }, 15000);
-    return res.ok;
-  } catch {
-    return false;
+  // Während eines gestaffelten Deployments kann das Backend noch den älteren
+  // Diagnosepfad verwenden. Beide Varianten halten die App funktionsfähig.
+  for (const path of ['health', '__health']) {
+    try {
+      const res = await apiRequest(path, { cache: 'no-store' }, 15000);
+      if (res.ok) return true;
+    } catch {
+      // Beim nächsten kompatiblen Pfad bzw. Versuch weiterprüfen.
+    }
   }
+  return false;
 }
 
 async function ensureBackendAwake() {
