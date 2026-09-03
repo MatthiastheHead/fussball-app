@@ -1,16 +1,20 @@
-// Version 6.0: Trainingserfassung mit Status, Sternebewertung, erweiterten
-// Auswertungen und nachvollziehbarem Bearbeitungsverlauf.
+// Version 6.1: Saisonwahl, Trainingsort, begründete Trainings-Inaktivität
+// und eine kindgerechte Auswertung.
 
 import React, { useState, useEffect } from 'react';
 import './App.css';
 import {
   STATUS_OPTIONS,
   RATING_VALUES,
+  TRAINING_LOCATIONS,
+  currentSeason,
   formatTrainingDate,
   iconToText,
   normalizeRating,
   ratingLabel,
   ratingPoints,
+  seasonDateRange,
+  seasonForTrainingDate,
   summarizePlayerTrainings,
 } from './trainingUtils.js';
 
@@ -22,6 +26,8 @@ const API = (import.meta.env.VITE_API_BASE ||
     : 'https://fussball-api.onrender.com/')).replace(/\/+$/, '');
 
 const REQUEST_TIMEOUT = 20000;
+const INITIAL_SEASON = currentSeason();
+const INITIAL_SEASON_RANGE = seasonDateRange(INITIAL_SEASON);
 
 async function apiRequest(path, options = {}, timeout = REQUEST_TIMEOUT) {
   const controller = new AbortController();
@@ -64,6 +70,11 @@ const formatAuditTime = (value) => {
     });
   }
   return String(value);
+};
+
+const formatInputDate = (value) => {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match ? `${match[3]}.${match[2]}.${match[1]}` : value || '';
 };
 
 // Deutsches Datum (Wochentag, DD.MM.YYYY) in Date konvertieren
@@ -140,14 +151,18 @@ export default function App() {
   const [trainings, setTrainings] = useState([]);
   const [showAddTraining, setShowAddTraining] = useState(false);
   const [newTrainingDate, setNewTrainingDate] = useState(() => getLocalDateInputValue());
+  const [newTrainingLocation, setNewTrainingLocation] = useState('Sportplatz');
+  const [defaultTrainingLocation, setDefaultTrainingLocation] = useState('Sportplatz');
+  const [selectedSeason, setSelectedSeason] = useState(INITIAL_SEASON);
   const [expandedTraining, setExpandedTraining] = useState(null);
   const [editTrainingKey, setEditTrainingKey] = useState(null);
   const [editDateValue, setEditDateValue] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [searchText, setSearchText] = useState('');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
+  const [fromDate, setFromDate] = useState(INITIAL_SEASON_RANGE.from);
+  const [toDate, setToDate] = useState(INITIAL_SEASON_RANGE.to);
   const [reportData, setReportData] = useState(null);
+  const [reportView, setReportView] = useState('children');
   const [expandedReportRow, setExpandedReportRow] = useState(null);
   const [showTrainings, setShowTrainings] = useState(false);
   const [showReport, setShowReport] = useState(false);
@@ -157,7 +172,7 @@ export default function App() {
   const [expandedChecklist, setExpandedChecklist] = useState(null);
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
-  const version = '6.0';
+  const version = '6.1';
   const currentYear = new Date().getFullYear();
 
   const createAuditEntry = (action) => ({
@@ -194,6 +209,10 @@ export default function App() {
           ratings: training.ratings || {},
           trainerStatus: training.trainerStatus || {},
           playerNotes: training.playerNotes || {},
+          inactiveReasons: training.inactiveReasons || {},
+          location: TRAINING_LOCATIONS.includes(training.location)
+            ? training.location
+            : 'Sportplatz',
           history: Array.isArray(training.history) ? training.history : [],
         }))
       : [];
@@ -221,11 +240,12 @@ export default function App() {
   }
 
   async function refetchAll() {
-    const [u, p, t, c] = await Promise.all([
+    const [u, p, t, c, s] = await Promise.all([
       fetchJson('users'),
       fetchJson('players'),
       fetchJson('trainings'),
       fetchJson('checklists'),
+      fetchJson('settings'),
     ]);
       setUsers(Array.isArray(u) ? u : []);
       setPlayers(
@@ -244,6 +264,10 @@ export default function App() {
               ratings: x.ratings || {},
               trainerStatus: x.trainerStatus || {},
               playerNotes: x.playerNotes || {},
+              inactiveReasons: x.inactiveReasons || {},
+              location: TRAINING_LOCATIONS.includes(x.location)
+                ? x.location
+                : 'Sportplatz',
               note: typeof x.note === 'string' ? x.note : '',
               createdBy: x.createdBy || '',
               createdAt: x.createdAt || null,
@@ -265,7 +289,29 @@ export default function App() {
             }))
           : []
       );
+      const savedDefaultLocation = TRAINING_LOCATIONS.includes(s?.defaultTrainingLocation)
+        ? s.defaultTrainingLocation
+        : 'Sportplatz';
+      setDefaultTrainingLocation(savedDefaultLocation);
+      setNewTrainingLocation(savedDefaultLocation);
   }
+
+  const saveDefaultLocation = () =>
+    runOnce(async () => {
+      const res = await apiRequest('settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ defaultTrainingLocation }),
+      });
+      if (!res.ok) throw new Error(`Einstellungen: HTTP ${res.status}`);
+      const saved = await res.json();
+      const location = TRAINING_LOCATIONS.includes(saved.defaultTrainingLocation)
+        ? saved.defaultTrainingLocation
+        : 'Sportplatz';
+      setDefaultTrainingLocation(location);
+      setNewTrainingLocation(location);
+      alert(`Standard-Trainingsort auf ${location} gesetzt.`);
+    });
 
   async function loadInitialData() {
     setInitializing(true);
@@ -445,6 +491,7 @@ export default function App() {
             training.ratings,
             training.trainerStatus,
             training.playerNotes,
+            training.inactiveReasons,
           ].some((collection) =>
             Object.prototype.hasOwnProperty.call(collection || {}, previousName)
           );
@@ -454,6 +501,11 @@ export default function App() {
             ratings: renameObjectKey(training.ratings, previousName, nextName),
             trainerStatus: renameObjectKey(training.trainerStatus, previousName, nextName),
             playerNotes: renameObjectKey(training.playerNotes, previousName, nextName),
+            inactiveReasons: renameObjectKey(
+              training.inactiveReasons,
+              previousName,
+              nextName
+            ),
           });
         });
         const updatedChecklists = checklists.map((checklist) =>
@@ -691,10 +743,12 @@ export default function App() {
       };
       const newTraining = {
         date: formatted,
+        location: newTrainingLocation,
         participants,
         ratings,
         trainerStatus,
         playerNotes: {},
+        inactiveReasons: {},
         createdBy: loggedInUser,
         createdAt: now.toISOString(),
         lastEdited: auditEntry,
@@ -706,6 +760,15 @@ export default function App() {
       setShowTrainings(true);
       setShowAddTraining(false);
       setNewTrainingDate(getLocalDateInputValue());
+      setNewTrainingLocation(defaultTrainingLocation);
+      const createdSeason = seasonForTrainingDate(formatted);
+      if (createdSeason) {
+        const range = seasonDateRange(createdSeason);
+        setSelectedSeason(createdSeason);
+        setFromDate(range.from);
+        setToDate(range.to);
+        setReportData(null);
+      }
       if (created) setExpandedTraining(trainingKey(created));
       alert(`Training am ${formatted} angelegt.`);
     });
@@ -776,6 +839,14 @@ export default function App() {
           : item
       );
       await saveTrainingList(updated);
+      const editedSeason = seasonForTrainingDate(formatted);
+      if (editedSeason && editedSeason !== selectedSeason) {
+        const range = seasonDateRange(editedSeason);
+        setSelectedSeason(editedSeason);
+        setFromDate(range.from);
+        setToDate(range.to);
+        setReportData(null);
+      }
       alert('Datum wurde aktualisiert.');
       return true;
     });
@@ -824,6 +895,53 @@ export default function App() {
       await saveTrainingList(updated);
     });
 
+  const updateTrainingLocation = (training, location) =>
+    runOnce(async () => {
+      if (!TRAINING_LOCATIONS.includes(location)) return false;
+      const idx = findTrainingIndex(training);
+      if (idx === -1) return false;
+      const updated = trainings.map((item, itemIndex) =>
+        itemIndex === idx
+          ? applyTrainingChange(item, `Trainingsort auf ${location} geändert`, { location })
+          : item
+      );
+      await saveTrainingList(updated);
+      return true;
+    });
+
+  const updateTrainingInactivity = (training, name, makeInactive) =>
+    runOnce(async () => {
+      const idx = findTrainingIndex(training);
+      if (idx === -1) return false;
+      const reasons = { ...(training.inactiveReasons || {}) };
+      let action = `${name} für dieses Training wieder aktiviert`;
+
+      if (makeInactive) {
+        const enteredReason = window.prompt(
+          `Warum ist ${name} bei diesem Training inaktiv?`,
+          reasons[name] || ''
+        );
+        if (enteredReason === null) return false;
+        const reason = enteredReason.trim();
+        if (!reason) {
+          alert('Inaktiv kann nur mit einer Begründung gespeichert werden.');
+          return false;
+        }
+        reasons[name] = reason;
+        action = `${name} für dieses Training inaktiv: ${reason}`;
+      } else {
+        delete reasons[name];
+      }
+
+      const updated = trainings.map((item, itemIndex) =>
+        itemIndex === idx
+          ? applyTrainingChange(item, action, { inactiveReasons: reasons })
+          : item
+      );
+      await saveTrainingList(updated);
+      return true;
+    });
+
   const sortedPlayers = [...players].sort((a, b) => a.name.localeCompare(b.name));
   const trainersFirst = [...sortedPlayers].sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0));
 
@@ -837,6 +955,7 @@ export default function App() {
       ...new Set([
         ...Object.keys(training.participants || {}),
         ...Object.keys(training.ratings || {}),
+        ...Object.keys(training.inactiveReasons || {}),
       ]),
     ]
       .filter((name) => !trainerSet.has(name))
@@ -855,8 +974,26 @@ export default function App() {
     ];
   };
 
+  const seasonOptions = [
+    ...new Set([
+      INITIAL_SEASON,
+      '2025/26',
+      ...trainings.map((training) => seasonForTrainingDate(training.date)).filter(Boolean),
+    ]),
+  ].sort((a, b) => b.localeCompare(a));
+
+  const changeSeason = (season) => {
+    const range = seasonDateRange(season);
+    setSelectedSeason(season);
+    setFromDate(range.from);
+    setToDate(range.to);
+    setReportData(null);
+    setExpandedTraining(null);
+  };
+
   const trainingsToShow = sortTrainings(
     trainings.filter((t) => {
+      const seasonOk = seasonForTrainingDate(t.date) === selectedSeason;
       let dateOk = true;
       if (filterDate && t.date) {
         const datePart = t.date.split(', ')[1];
@@ -871,7 +1008,7 @@ export default function App() {
           (t.date && t.date.toLowerCase().includes(search)) ||
           (t.note && t.note.toLowerCase().includes(search));
       }
-      return dateOk && searchOk;
+      return seasonOk && dateOk && searchOk;
     })
   );
 
@@ -992,6 +1129,27 @@ export default function App() {
         <header>
           <h1>⚙ Einstellungen</h1>
         </header>
+        <section className="training-settings">
+          <h2>Trainingseinstellungen</h2>
+          <p>Dieser Ort ist beim Anlegen eines neuen Trainings vorausgewählt.</p>
+          <div className="settings-row">
+            <label className="labeled-field">
+              <span>Standard-Trainingsort</span>
+              <select
+                value={defaultTrainingLocation}
+                onChange={(event) => setDefaultTrainingLocation(event.target.value)}
+                disabled={busy}
+              >
+                {TRAINING_LOCATIONS.map((location) => (
+                  <option key={location} value={location}>{location}</option>
+                ))}
+              </select>
+            </label>
+            <button className="btn-save-training" onClick={saveDefaultLocation} disabled={busy}>
+              Standard speichern
+            </button>
+          </div>
+        </section>
         <section className="player-management">
           <h2>Spielerinnen und Trainer</h2>
           <div className="add-player-form">
@@ -1005,18 +1163,24 @@ export default function App() {
               <option value="Spieler">Spielerin</option>
               <option value="Trainer">Trainer</option>
             </select>
-            <input
-              type="text"
-              placeholder="Notiz"
-              value={newNote}
-              onChange={(e) => setNewNote(e.target.value)}
-            />
-            <input
-              type="text"
-              placeholder="Hinweis"
-              value={newMemberSince}
-              onChange={(e) => setNewMemberSince(e.target.value)}
-            />
+            <label className="labeled-field">
+              <span>Notiz</span>
+              <input
+                type="text"
+                placeholder="Notiz"
+                value={newNote}
+                onChange={(e) => setNewNote(e.target.value)}
+              />
+            </label>
+            <label className="labeled-field">
+              <span>Hinweis hinter dem Namen</span>
+              <input
+                type="text"
+                placeholder="z. B. Torhüterin"
+                value={newMemberSince}
+                onChange={(e) => setNewMemberSince(e.target.value)}
+              />
+            </label>
             <button onClick={addPlayer} disabled={busy}>
               {busy ? 'Bitte warten…' : '➕ Hinzufügen'}
             </button>
@@ -1036,22 +1200,28 @@ export default function App() {
                         setPlayerDraft((draft) => ({ ...draft, name: e.target.value }))
                       }
                     />
-                    <input
-                      type="text"
-                      value={playerDraft.note}
-                      onChange={(e) =>
-                        setPlayerDraft((draft) => ({ ...draft, note: e.target.value }))
-                      }
-                      placeholder="Notiz"
-                    />
-                    <input
-                      type="text"
-                      value={playerDraft.memberSince}
-                      onChange={(e) =>
-                        setPlayerDraft((draft) => ({ ...draft, memberSince: e.target.value }))
-                      }
-                      placeholder="Hinweis"
-                    />
+                    <label className="labeled-field">
+                      <span>Notiz</span>
+                      <input
+                        type="text"
+                        value={playerDraft.note}
+                        onChange={(e) =>
+                          setPlayerDraft((draft) => ({ ...draft, note: e.target.value }))
+                        }
+                        placeholder="Notiz"
+                      />
+                    </label>
+                    <label className="labeled-field">
+                      <span>Hinweis hinter dem Namen</span>
+                      <input
+                        type="text"
+                        value={playerDraft.memberSince}
+                        onChange={(e) =>
+                          setPlayerDraft((draft) => ({ ...draft, memberSince: e.target.value }))
+                        }
+                        placeholder="Hinweis"
+                      />
+                    </label>
                     <select
                       className="role-dropdown"
                       value={playerDraft.isTrainer ? 'Trainer' : 'Spieler'}
@@ -1085,51 +1255,40 @@ export default function App() {
                     style={{ opacity: p.inactive ? 0.5 : 1 }}
                   >
                     <span className={p.isTrainer ? 'role-trainer' : 'role-player'}>{p.name}</span>
-                    <input
-                      type="text"
-                      value={p.note || ''}
-                      placeholder="Notiz"
-                      style={{
-                        marginLeft: '1rem',
-                        background: '#222c',
-                        color: '#fff',
-                        border: '1px solid #226',
-                        borderRadius: '4px',
-                        padding: '0.2rem',
-                      }}
-                      onChange={(e) => {
-                        const idx = players.findIndex((x) => x.name === p.name);
-                        const updated = players.map((player, playerIndex) =>
-                          playerIndex === idx ? { ...player, note: e.target.value } : player
-                        );
-                        setPlayers(updated);
-                      }}
-                      onBlur={(e) => handlePlayerNoteBlur(p, e.target.value)}
-                    />
-                    <input
-                      type="text"
-                      value={p.memberSince || ''}
-                      placeholder="Hinweis"
-                      style={{
-                        marginLeft: '1rem',
-                        background: '#222c',
-                        color: '#fff',
-                        border: '1px solid #226',
-                        borderRadius: '4px',
-                        padding: '0.2rem',
-                        minWidth: '90px',
-                      }}
-                      onChange={(e) => {
-                        const idx = players.findIndex((x) => x.name === p.name);
-                        const updated = players.map((player, playerIndex) =>
-                          playerIndex === idx
-                            ? { ...player, memberSince: e.target.value }
-                            : player
-                        );
-                        setPlayers(updated);
-                      }}
-                      onBlur={(e) => handlePlayerMemberSinceBlur(p, e.target.value)}
-                    />
+                    <label className="labeled-field">
+                      <span>Notiz</span>
+                      <input
+                        type="text"
+                        value={p.note || ''}
+                        placeholder="Notiz"
+                        onChange={(e) => {
+                          const idx = players.findIndex((x) => x.name === p.name);
+                          const updated = players.map((player, playerIndex) =>
+                            playerIndex === idx ? { ...player, note: e.target.value } : player
+                          );
+                          setPlayers(updated);
+                        }}
+                        onBlur={(e) => handlePlayerNoteBlur(p, e.target.value)}
+                      />
+                    </label>
+                    <label className="labeled-field">
+                      <span>Hinweis hinter dem Namen</span>
+                      <input
+                        type="text"
+                        value={p.memberSince || ''}
+                        placeholder="Hinweis"
+                        onChange={(e) => {
+                          const idx = players.findIndex((x) => x.name === p.name);
+                          const updated = players.map((player, playerIndex) =>
+                            playerIndex === idx
+                              ? { ...player, memberSince: e.target.value }
+                              : player
+                          );
+                          setPlayers(updated);
+                        }}
+                        onBlur={(e) => handlePlayerMemberSinceBlur(p, e.target.value)}
+                      />
+                    </label>
                     <div>
                       <select
                         className="role-dropdown"
@@ -1251,6 +1410,20 @@ export default function App() {
             ⚽ Fußball‐App <span className="blue-version">{version}</span> Trainingsteilnahme
           </h1>
         </header>
+        <section className="season-toolbar">
+          <label className="labeled-field">
+            <span>Angezeigte Saison</span>
+            <select
+              value={selectedSeason}
+              onChange={(event) => changeSeason(event.target.value)}
+              disabled={busy}
+            >
+              {seasonOptions.map((season) => (
+                <option key={season} value={season}>Saison {season}</option>
+              ))}
+            </select>
+          </label>
+        </section>
         <div className="controls mobile-controls">
           <button
             className="main-func-btn"
@@ -1305,6 +1478,18 @@ export default function App() {
                   disabled={busy}
                 />
               </label>
+              <label>
+                Trainingsort
+                <select
+                  value={newTrainingLocation}
+                  onChange={(event) => setNewTrainingLocation(event.target.value)}
+                  disabled={busy}
+                >
+                  {TRAINING_LOCATIONS.map((location) => (
+                    <option key={location} value={location}>{location}</option>
+                  ))}
+                </select>
+              </label>
               <button className="btn-save-training" onClick={addTraining} disabled={busy}>
                 {busy ? 'Wird angelegt…' : 'Training anlegen'}
               </button>
@@ -1352,7 +1537,7 @@ export default function App() {
                     className={`training-header ${expandedKey ? 'expanded' : ''}`}
                     onClick={() => setExpandedTraining(expandedKey ? null : tKey)}
                   >
-                    📅 {t.date} {expandedKey ? '🔽' : '▶'}
+                    📅 {t.date} · {t.location || 'Sportplatz'} {expandedKey ? '🔽' : '▶'}
                   </h3>
                   {expandedKey && (
                     <div>
@@ -1381,6 +1566,20 @@ export default function App() {
                           </ul>
                         </details>
                       )}
+                      <div className="training-location-row">
+                        <label className="labeled-field">
+                          <span>Trainingsort</span>
+                          <select
+                            value={t.location || 'Sportplatz'}
+                            onChange={(event) => updateTrainingLocation(t, event.target.value)}
+                            disabled={busy}
+                          >
+                            {TRAINING_LOCATIONS.map((location) => (
+                              <option key={location} value={location}>{location}</option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
                       {editTrainingKey === tKey ? (
                         <div className="edit-date-row">
                           <input
@@ -1450,6 +1649,11 @@ export default function App() {
                           const isTrainer = !!p.isTrainer;
                           const teamHinweis = p.memberSince || '';
                           const playerNote = (t.playerNotes && t.playerNotes[p.name]) || '';
+                          const inactiveReason =
+                            typeof t.inactiveReasons?.[p.name] === 'string'
+                              ? t.inactiveReasons[p.name].trim()
+                              : '';
+                          const isInactiveForTraining = !!inactiveReason;
                           const cardBg = idxP % 2 === 0 ? 'player-card even' : 'player-card odd';
                           if (isTrainer) {
                             const trainerStatus =
@@ -1457,16 +1661,13 @@ export default function App() {
                             return (
                               <div key={p.name + 'trainer'} className={cardBg}>
                                 <div className="participant-col">
-                                  <span>
-                                    <b>{p.name}</b> <em style={{ color: '#ffe548', fontWeight: 500 }}>(Trainer*in)</em>
-                                  </span>
-                                  {teamHinweis && (
-                                    <div
-                                      style={{ fontSize: '0.93em', color: '#9cc6ff', marginBottom: '0.2em' }}
-                                    >
-                                      Hinweis {teamHinweis}
-                                    </div>
-                                  )}
+                                  <div className="player-name-line">
+                                    <b>{p.name}</b>
+                                    <em className="trainer-label">Trainer*in</em>
+                                    {teamHinweis && (
+                                      <span className="player-hint">Hinweis: {teamHinweis}</span>
+                                    )}
+                                  </div>
                                   <div style={{ margin: '0.3em 0' }}>
                                     <span>Status</span>{' '}
                                     <select
@@ -1493,18 +1694,42 @@ export default function App() {
                               ? normalizeRating(t.ratings[p.name])
                               : null;
                             return (
-                              <div key={p.name} className={cardBg}>
+                              <div
+                                key={p.name}
+                                className={`${cardBg} ${isInactiveForTraining ? 'training-inactive' : ''}`}
+                              >
                                 <div className="participant-col">
-                                  <span>
+                                  <div className="player-name-line">
                                     <b>{p.name}</b>
-                                  </span>
-                                  {teamHinweis && (
-                                    <div
-                                      style={{ fontSize: '0.93em', color: '#9cc6ff', marginBottom: '0.2em' }}
-                                    >
-                                      Hinweis {teamHinweis}
-                                    </div>
-                                  )}
+                                    {teamHinweis && (
+                                      <span className="player-hint">Hinweis: {teamHinweis}</span>
+                                    )}
+                                  </div>
+                                  <div className="training-inactive-control">
+                                    <label>
+                                      <input
+                                        type="checkbox"
+                                        checked={isInactiveForTraining}
+                                        onChange={(event) =>
+                                          updateTrainingInactivity(t, p.name, event.target.checked)
+                                        }
+                                        disabled={busy}
+                                      />{' '}
+                                      Nur bei diesem Training inaktiv
+                                    </label>
+                                    {isInactiveForTraining && (
+                                      <div className="inactive-reason">
+                                        <span>Begründung: {inactiveReason}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => updateTrainingInactivity(t, p.name, true)}
+                                          disabled={busy}
+                                        >
+                                          Begründung ändern
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
                                   <div style={{ margin: '0.3em 0' }}>
                                     <span>Status</span>
                                     <div className="btn-part-status status-btn-row">
@@ -1513,14 +1738,18 @@ export default function App() {
                                           key={icon}
                                           className={statusIcon === icon ? 'active' : ''}
                                           onClick={() => updateParticipation(t, p.name, icon)}
-                                          disabled={busy}
+                                          disabled={busy || isInactiveForTraining}
                                           aria-label={`${p.name}: ${label}`}
                                           title={label}
                                         >
                                           {icon}
                                         </button>
                                       ))}
-                                      <span className="status-text">{iconToText(statusIcon)}</span>
+                                      <span className="status-text">
+                                        {isInactiveForTraining
+                                          ? 'Inaktiv, wird nicht gewertet'
+                                          : iconToText(statusIcon)}
+                                      </span>
                                     </div>
                                   </div>
                                   <div className="rating-field">
@@ -1546,7 +1775,7 @@ export default function App() {
                                               currentRating === rating ? 0 : rating
                                             )
                                           }
-                                          disabled={busy}
+                                          disabled={busy || isInactiveForTraining}
                                           aria-label={`${rating} ${rating === 1 ? 'Stern' : 'Sterne'}`}
                                           title={ratingLabel(rating)}
                                         >
@@ -1554,7 +1783,9 @@ export default function App() {
                                         </button>
                                       ))}
                                       <span className="rating-text">
-                                        {currentRating === null ? (
+                                        {isInactiveForTraining ? (
+                                          'Für dieses Training nicht gewertet'
+                                        ) : currentRating === null ? (
                                           'Noch keine Bewertung (Altbestand)'
                                         ) : (
                                           <>
@@ -1566,6 +1797,7 @@ export default function App() {
                                     </div>
                                   </div>
                                   <div style={{ margin: '0.35em 0 0.1em 0' }}>
+                                    <span className="field-label">Notiz</span>
                                     <textarea
                                       rows={1}
                                       placeholder="Notiz (Training)"
@@ -1631,7 +1863,9 @@ export default function App() {
             {trainingsToShow.length === 0 && (
               <p className="no-trainings">
                 Keine Trainings gefunden
-                {filterDate || searchText ? ' für diesen Filter.' : '.'}
+                {filterDate || searchText
+                  ? ' für diesen Filter.'
+                  : ` in der Saison ${selectedSeason}.`}
               </p>
             )}
           </section>
@@ -1642,6 +1876,7 @@ export default function App() {
             <p className="report-legend">
               Bewertung: 3 Sterne = super, 2 = ordentlich, 1 = etwas mitgemacht,
               0 Sterne = −1 Punkt. „Nicht abgemeldet“ wird separat gezählt.
+              Trainingsbezogene Inaktivität wird nicht in die Quote oder Bewertung eingerechnet.
             </p>
             <div className="report-form">
               <label>
@@ -1678,83 +1913,166 @@ export default function App() {
                   onClick={() => runOnce(exportPDF)}
                   disabled={busy}
                 >
-                  Tabelle als PDF exportieren
+                  Auswertung als PDF exportieren
                 </button>
               )}
             </div>
             {reportData && (
               <div className="report-results">
+                <h3>Trainingsauswertung Saison {reportData.season}</h3>
                 <p>
                   {reportData.totalTrainings} Training
-                  {reportData.totalTrainings !== 1 ? 's' : ''} im Zeitraum.
+                  {reportData.totalTrainings !== 1 ? 's' : ''} vom{' '}
+                  {formatInputDate(reportData.fromDate)} bis {formatInputDate(reportData.toDate)}.
                 </p>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Spielerin</th>
-                      <th>Hinweis</th>
-                      <th>Notiz</th>
-                      <th>Teilnahme (%)</th>
-                      <th>Dabei</th>
-                      <th>Abgemeldet</th>
-                      <th>Nicht abgemeldet</th>
-                      <th>Ø Sterne</th>
-                      <th>Punkte</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <div className="report-view-switch" role="group" aria-label="Auswertungsansicht">
+                  <button
+                    className={reportView === 'children' ? 'active' : ''}
+                    onClick={() => setReportView('children')}
+                  >
+                    Kindgerechte Ansicht
+                  </button>
+                  <button
+                    className={reportView === 'table' ? 'active' : ''}
+                    onClick={() => setReportView('table')}
+                  >
+                    Tabelle
+                  </button>
+                </div>
+                {reportView === 'children' ? (
+                  <div className="child-report-grid">
                     {reportData.data.map((row) => (
-                      <React.Fragment key={row.name}>
-                        <tr
-                          className={`report-row ${expandedReportRow === row.name ? 'expanded' : ''}`}
-                          onClick={() =>
-                            setExpandedReportRow(
-                              expandedReportRow === row.name ? null : row.name
-                            )
-                          }
-                          style={{ cursor: 'pointer' }}
-                        >
-                          <td className="clickable">{row.name}</td>
-                          <td>{row.memberSince || ''}</td>
-                          <td
-                            style={{
-                              maxWidth: '200px',
-                              whiteSpace: 'pre-line',
-                              overflowWrap: 'anywhere',
-                            }}
+                      <article key={row.name} className="child-report-card">
+                        <div className="child-report-name">
+                          <h4>{row.name}</h4>
+                          {row.memberSince && (
+                            <span className="player-hint">{row.memberSince}</span>
+                          )}
+                        </div>
+                        <div className="attendance-summary">
+                          <div className="attendance-label">
+                            <span>Teilnahme</span>
+                            <strong>{row.percent}%</strong>
+                          </div>
+                          <div
+                            className="attendance-bar"
+                            role="progressbar"
+                            aria-label={`Teilnahme von ${row.name}`}
+                            aria-valuemin="0"
+                            aria-valuemax="100"
+                            aria-valuenow={row.percent}
                           >
-                            {row.note || ''}
-                          </td>
-                          <td>{row.percent}%</td>
-                          <td>{row.attendCount}</td>
-                          <td>{row.excusedCount}</td>
-                          <td>{row.unexcusedCount}</td>
-                          <td>
-                            {row.averageRating}
-                            {row.ratingCount > 0 ? ' / 3' : ''}
-                          </td>
-                          <td>{row.pointsTotal}</td>
-                        </tr>
-                        {expandedReportRow === row.name && (
-                          <tr className="report-details-row">
-                            <td colSpan={9}>
-                              <ul>
-                                {row.details.map((d, dIdx) => (
-                                  <li key={dIdx}>
-                                    {d.date}: <strong>{d.statusText}</strong>,{' '}
-                                    {d.rating === null
-                                      ? 'noch keine Bewertung'
-                                      : `${'★'.repeat(d.rating)}${'☆'.repeat(3 - d.rating)} (${d.points > 0 ? '+' : ''}${d.points} Punkte)`}
-                                  </li>
-                                ))}
-                              </ul>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
+                            <span style={{ width: `${row.percent}%` }} />
+                          </div>
+                          <p>{row.attendCount} von {row.consideredCount} Trainings dabei</p>
+                        </div>
+                        <div className="child-rating-summary">
+                          <span>Durchschnittliche Bewertung</span>
+                          <div
+                            className="child-stars"
+                            aria-label={
+                              row.averageRatingValue === null
+                                ? `Noch keine Bewertung für ${row.name}`
+                                : `${row.averageRating} von 3 Sternen für ${row.name}`
+                            }
+                          >
+                            {RATING_VALUES.map((star) => {
+                              const fill = Math.max(
+                                0,
+                                Math.min(1, (row.averageRatingValue || 0) - star + 1)
+                              );
+                              return (
+                                <span
+                                  key={star}
+                                  className="child-star"
+                                  style={{ '--star-fill': `${Math.round(fill * 100)}%` }}
+                                  aria-hidden="true"
+                                >
+                                  ★
+                                </span>
+                              );
+                            })}
+                          </div>
+                          <strong>
+                            {row.averageRatingValue === null
+                              ? 'Noch keine Sternebewertung'
+                              : `${row.averageRating} von 3 Sternen`}
+                          </strong>
+                        </div>
+                        <div className="child-status-summary">
+                          <span>Dabei: {row.attendCount}</span>
+                          <span>Abgemeldet: {row.excusedCount}</span>
+                          <span>Nicht abgemeldet: {row.unexcusedCount}</span>
+                          <span>Inaktiv: {row.inactiveCount}</span>
+                        </div>
+                      </article>
                     ))}
-                  </tbody>
-                </table>
+                  </div>
+                ) : (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Spielerin</th>
+                        <th>Hinweis</th>
+                        <th>Notiz</th>
+                        <th>Teilnahme (%)</th>
+                        <th>Dabei</th>
+                        <th>Abgemeldet</th>
+                        <th>Nicht abgemeldet</th>
+                        <th>Inaktiv</th>
+                        <th>Ø Sterne</th>
+                        <th>Punkte</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reportData.data.map((row) => (
+                        <React.Fragment key={row.name}>
+                          <tr
+                            className={`report-row ${expandedReportRow === row.name ? 'expanded' : ''}`}
+                            onClick={() =>
+                              setExpandedReportRow(
+                                expandedReportRow === row.name ? null : row.name
+                              )
+                            }
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <td className="clickable">{row.name}</td>
+                            <td>{row.memberSince || ''}</td>
+                            <td>{row.note || ''}</td>
+                            <td>{row.percent}%</td>
+                            <td>{row.attendCount}</td>
+                            <td>{row.excusedCount}</td>
+                            <td>{row.unexcusedCount}</td>
+                            <td>{row.inactiveCount}</td>
+                            <td>
+                              {row.averageRating}
+                              {row.ratingCount > 0 ? ' / 3' : ''}
+                            </td>
+                            <td>{row.pointsTotal}</td>
+                          </tr>
+                          {expandedReportRow === row.name && (
+                            <tr className="report-details-row">
+                              <td colSpan={10}>
+                                <ul>
+                                  {row.details.map((detail) => (
+                                    <li key={detail.date}>
+                                      {detail.date}: <strong>{detail.statusText}</strong>,{' '}
+                                      {detail.inactiveReason
+                                        ? `Begründung: ${detail.inactiveReason}, nicht gewertet`
+                                        : detail.rating === null
+                                          ? 'noch keine Bewertung'
+                                          : `${'★'.repeat(detail.rating)}${'☆'.repeat(3 - detail.rating)} (${detail.points > 0 ? '+' : ''}${detail.points} Punkte)`}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             )}
           </section>
@@ -2112,7 +2430,13 @@ export default function App() {
           ...summary,
         };
       });
-    setReportData({ totalTrainings: totalCount, data: report });
+    setReportData({
+      totalTrainings: totalCount,
+      data: report,
+      season: selectedSeason,
+      fromDate,
+      toDate,
+    });
     alert('Auswertung aktualisiert.');
   }
 
@@ -2124,9 +2448,14 @@ export default function App() {
     ]);
     const doc = new jsPDF({ orientation: 'landscape' });
     doc.setFontSize(18);
-    doc.text('⚽ Fußball-App – Trainingsteilnahme', 14, 18);
-    doc.setFontSize(12);
-    doc.text(`Version ${version}`, 14, 27);
+    doc.text(`Trainingsauswertung Saison ${reportData.season}`, 14, 18);
+    doc.setFontSize(11);
+    doc.text(
+      `Zeitraum: ${formatInputDate(reportData.fromDate)} bis ${formatInputDate(reportData.toDate)} | ${reportData.totalTrainings} Trainings`,
+      14,
+      27
+    );
+    doc.text(`Fußball-App Version ${version}`, 230, 18);
     const tableColumn = [
       'Spielerin',
       'Hinweis',
@@ -2135,6 +2464,7 @@ export default function App() {
       'Dabei',
       'Abgemeldet',
       'Nicht abgemeldet',
+      'Inaktiv',
       'Ø Sterne',
       'Punkte',
     ];
@@ -2146,13 +2476,14 @@ export default function App() {
       r.attendCount,
       r.excusedCount,
       r.unexcusedCount,
+      r.inactiveCount,
       r.averageRating === '–' ? '–' : `${r.averageRating} / 3`,
       r.pointsTotal,
     ]);
     autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
-      startY: 33,
+      startY: 34,
       theme: 'grid',
       headStyles: { fillColor: [49, 169, 255], textColor: 255 },
       bodyStyles: { fillColor: [36, 40, 62], textColor: 255 },
@@ -2160,6 +2491,6 @@ export default function App() {
     });
     doc.setFontSize(11);
     doc.text(`© ${currentYear} Matthias Kopf. Alle Rechte vorbehalten.`, 14, doc.internal.pageSize.height - 10);
-    doc.save(`Training-Auswertung-${fromDate}-bis-${toDate}.pdf`);
+    doc.save(`Trainingsauswertung-Saison-${reportData.season.replace('/', '-')}.pdf`);
   }
 }

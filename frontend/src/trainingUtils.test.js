@@ -2,10 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  currentSeason,
   formatTrainingDate,
   normalizeRating,
   ratingLabel,
   ratingPoints,
+  seasonDateRange,
+  seasonForInputDate,
+  seasonForTrainingDate,
   summarizePlayerTrainings,
 } from './trainingUtils.js';
 
@@ -17,6 +21,18 @@ test('weist ungültige Datumswerte zurück', () => {
   assert.equal(formatTrainingDate('2026-02-31'), '');
   assert.equal(formatTrainingDate('03.09.2026'), '');
   assert.equal(formatTrainingDate(''), '');
+});
+
+test('ordnet Trainings korrekt einer Saison von Juli bis Juni zu', () => {
+  assert.equal(seasonForInputDate('2025-07-01'), '2025/26');
+  assert.equal(seasonForInputDate('2026-06-30'), '2025/26');
+  assert.equal(seasonForInputDate('2026-07-01'), '2026/27');
+  assert.equal(seasonForTrainingDate('Do, 03.09.2026'), '2026/27');
+  assert.equal(currentSeason(new Date(2026, 8, 3)), '2026/27');
+  assert.deepEqual(seasonDateRange('2025/26'), {
+    from: '2025-07-01',
+    to: '2026-06-30',
+  });
 });
 
 test('begrenzt Bewertungen auf null bis drei Sterne', () => {
@@ -61,6 +77,7 @@ test('fasst Teilnahme, Abmeldungen und Sterne korrekt zusammen', () => {
   assert.equal(result.unexcusedCount, 1);
   assert.equal(result.consideredCount, 3);
   assert.equal(result.averageRating, '1,7');
+  assert.equal(Math.round(result.averageRatingValue * 10), 17);
   assert.equal(result.ratingCount, 3);
   assert.equal(result.pointsTotal, 4);
   assert.deepEqual(
@@ -102,4 +119,30 @@ test('zählt Trainings vor der Aufnahme einer Spielerin nicht als versäumt', ()
   assert.equal(result.unexcusedCount, 1);
   assert.equal(result.details.length, 1);
   assert.equal(result.details[0].date, 'Do, 03.09.2026');
+});
+
+test('schließt trainingsbezogene Inaktivität mit Begründung aus der Wertung aus', () => {
+  const result = summarizePlayerTrainings(
+    [
+      {
+        date: 'Di, 01.09.2026',
+        participants: { Mia: '⏳' },
+        ratings: { Mia: 0 },
+        inactiveReasons: { Mia: 'Klassenfahrt' },
+      },
+      {
+        date: 'Do, 03.09.2026',
+        participants: { Mia: '✅' },
+        ratings: { Mia: 3 },
+      },
+    ],
+    'Mia'
+  );
+
+  assert.equal(result.inactiveCount, 1);
+  assert.equal(result.consideredCount, 1);
+  assert.equal(result.attendCount, 1);
+  assert.equal(result.pointsTotal, 3);
+  assert.equal(result.details[0].statusText, 'Inaktiv');
+  assert.equal(result.details[0].inactiveReason, 'Klassenfahrt');
 });

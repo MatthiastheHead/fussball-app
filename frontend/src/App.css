@@ -233,10 +233,12 @@ textarea::placeholder,
 
 .player-management,
 .admin-section,
+.training-settings,
 .report-section,
 .add-training-panel,
 .checklist-create,
-.checklist-list {
+.checklist-list,
+.season-toolbar {
   margin-bottom: 1.25rem;
   padding: 1rem;
   border: 1px solid #263a5f;
@@ -247,6 +249,7 @@ textarea::placeholder,
 
 .player-management h2,
 .admin-section h2,
+.training-settings h2,
 .report-section h2,
 .add-training-panel h2,
 .checklist-create h2 {
@@ -258,7 +261,8 @@ textarea::placeholder,
 .add-training-form,
 .training-filter,
 .report-form,
-.edit-date-row {
+.edit-date-row,
+.settings-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
@@ -286,13 +290,46 @@ textarea::placeholder,
   font-weight: 650;
 }
 
-.add-training-form input {
+.add-training-form input,
+.add-training-form select,
+.training-settings select,
+.season-toolbar select,
+.training-location-row select {
   min-height: 44px;
   padding: 0.6rem 0.7rem;
   border: 1px solid #35517d;
   border-radius: 8px;
   background: #17233b;
   color: #fff;
+}
+
+.season-toolbar {
+  display: flex;
+  justify-content: center;
+  padding: 0.8rem 1rem;
+}
+
+.training-settings p {
+  color: #b8d7f7;
+}
+
+.labeled-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 180px;
+  color: #c6e4ff;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.labeled-field input,
+.labeled-field select {
+  width: 100%;
+}
+
+.settings-row {
+  align-items: flex-end;
 }
 
 .add-player-form button,
@@ -478,6 +515,78 @@ textarea::placeholder,
   width: 100%;
 }
 
+.player-name-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.player-hint {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid #3b6590;
+  border-radius: 999px;
+  background: #183657;
+  color: #a9d8ff;
+  font-size: 0.85rem;
+  font-weight: 650;
+}
+
+.trainer-label {
+  color: #ffe548;
+  font-weight: 600;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: #c6e4ff;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.training-location-row {
+  margin: 0.75rem 0;
+}
+
+.training-inactive {
+  border-color: #b47c42;
+  background: #2f281f !important;
+}
+
+.training-inactive-control {
+  margin: 0.4rem 0;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  background: rgba(8, 14, 25, 0.38);
+  color: #f1d6a7;
+}
+
+.training-inactive-control label {
+  cursor: pointer;
+}
+
+.inactive-reason {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.inactive-reason button {
+  min-height: 34px;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid #b98a4c;
+  border-radius: 7px;
+  background: #68491f;
+  color: #fff4d6;
+  cursor: pointer;
+}
+
 .status-btn-row {
   display: flex;
   flex-wrap: wrap;
@@ -574,7 +683,7 @@ textarea::placeholder,
 }
 
 .report-results table {
-  min-width: 1050px;
+  min-width: 1150px;
 }
 
 .report-results th,
@@ -603,6 +712,129 @@ textarea::placeholder,
 
 .report-details-row td {
   background: #111d32;
+}
+
+.report-view-switch {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.8rem 0 1rem;
+}
+
+.report-view-switch button {
+  padding: 0.55rem 0.9rem;
+  border: 1px solid #385b86;
+  border-radius: 8px;
+  background: #1c3150;
+  color: #d7eaff;
+  cursor: pointer;
+}
+
+.report-view-switch button.active {
+  border-color: #78c6ff;
+  background: #176fb2;
+  color: #fff;
+}
+
+.child-report-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 0.85rem;
+}
+
+.child-report-card {
+  padding: 1rem;
+  border: 1px solid #345482;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #1d3151, #14243d);
+  box-shadow: 0 7px 20px rgba(0, 0, 0, 0.2);
+}
+
+.child-report-name {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.child-report-name h4 {
+  margin: 0;
+  color: #8dd3ff;
+  font-size: 1.25rem;
+}
+
+.attendance-summary,
+.child-rating-summary {
+  margin-top: 0.85rem;
+}
+
+.attendance-label {
+  display: flex;
+  justify-content: space-between;
+  color: #d9ecff;
+}
+
+.attendance-bar {
+  height: 18px;
+  margin-top: 0.35rem;
+  overflow: hidden;
+  border: 1px solid #3d5e86;
+  border-radius: 999px;
+  background: #0e1b2e;
+}
+
+.attendance-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #32a8ff, #4fda91);
+}
+
+.attendance-summary p {
+  margin: 0.35rem 0 0;
+  color: #b9d9f6;
+}
+
+.child-rating-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: #d9ecff;
+}
+
+.child-stars {
+  display: flex;
+  gap: 0.2rem;
+  font-size: 2.1rem;
+  line-height: 1;
+}
+
+.child-star {
+  color: transparent;
+  background: linear-gradient(
+    90deg,
+    #ffd84d 0,
+    #ffd84d var(--star-fill),
+    #4b5870 var(--star-fill),
+    #4b5870 100%
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+}
+
+.child-status-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+}
+
+.child-status-summary span {
+  padding: 0.4rem 0.5rem;
+  border-radius: 7px;
+  background: #10203a;
+  color: #c5dcef;
+  font-size: 0.85rem;
 }
 
 .no-trainings {
@@ -642,6 +874,7 @@ footer a {
   .controls button,
   .add-player-form > *,
   .add-training-form > *,
+  .settings-row > *,
   .training-filter > *,
   .report-form > * {
     width: 100%;
@@ -665,6 +898,14 @@ footer a {
   .player-list li > select {
     width: 100%;
     min-width: 0;
+  }
+
+  .player-list li > .labeled-field {
+    width: 100%;
+  }
+
+  .report-view-switch {
+    flex-direction: column;
   }
 
   .player-list li > div > button,
