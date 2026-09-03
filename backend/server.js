@@ -10,6 +10,9 @@ const revision = process.env.RENDER_GIT_COMMIT?.slice(0, 7) || 'local';
 const Checklist = require('./models/Checklist');
 const Player = require('./models/Player');
 const Training = require('./models/Training');
+const AppSettings = require('./models/AppSettings');
+
+const TRAINING_LOCATIONS = ['Sportplatz', 'Turnhalle'];
 
 async function replaceCollectionSafely(Model, list, cleanDocument) {
   const existing = await Model.find({}).lean();
@@ -252,13 +255,28 @@ app.post('/trainings', async (req, res) => {
           ),
         ])
       );
+    const cleanReasons = value =>
+      Object.fromEntries(
+        Object.entries(cleanObject(value))
+          .map(([name, reason]) => [
+            name,
+            typeof reason === 'string' ? reason.trim() : '',
+          ])
+          .filter(([, reason]) => reason)
+      );
     const cleanTraining = (training, previous = null) => ({
       date: training.date.trim(),
+      location: TRAINING_LOCATIONS.includes(training.location)
+        ? training.location
+        : previous?.location || 'Sportplatz',
       participants: cleanObject(training.participants),
       ratings: cleanRatings(training.ratings),
       trainerStatus: cleanObject(training.trainerStatus),
       note: typeof training.note === 'string' ? training.note : '',
       playerNotes: cleanObject(training.playerNotes),
+      inactiveReasons: Object.prototype.hasOwnProperty.call(training, 'inactiveReasons')
+        ? cleanReasons(training.inactiveReasons)
+        : cleanReasons(previous?.inactiveReasons),
       createdBy:
         typeof training.createdBy === 'string' && training.createdBy.trim()
           ? training.createdBy.trim()
@@ -321,7 +339,38 @@ app.post('/trainings', async (req, res) => {
   }
 });
 
-// ---- 5.4 Checklists ----
+// ---- 5.4 App-Einstellungen ----
+app.get('/settings', async (_req, res) => {
+  try {
+    const settings = await AppSettings.findOne({ key: 'app' }).lean();
+    res.json({
+      defaultTrainingLocation: settings?.defaultTrainingLocation || 'Sportplatz',
+    });
+  } catch (err) {
+    console.error('Fehler GET /settings:', err);
+    res.status(500).json({ error: 'Datenbankfehler beim Laden der Einstellungen' });
+  }
+});
+
+app.post('/settings', async (req, res) => {
+  const defaultTrainingLocation = req.body?.defaultTrainingLocation;
+  if (!TRAINING_LOCATIONS.includes(defaultTrainingLocation)) {
+    return res.status(400).json({ error: 'Ungültiger Standard-Trainingsort.' });
+  }
+  try {
+    const settings = await AppSettings.findOneAndUpdate(
+      { key: 'app' },
+      { $set: { defaultTrainingLocation } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    ).lean();
+    res.json({ defaultTrainingLocation: settings.defaultTrainingLocation });
+  } catch (err) {
+    console.error('Fehler POST /settings:', err);
+    res.status(500).json({ error: 'Datenbankfehler beim Speichern der Einstellungen' });
+  }
+});
+
+// ---- 5.5 Checklists ----
 console.log('🧩 Registriere Checklisten-Endpunkte...');
 
 app.get('/checklists', async (_req, res) => {
