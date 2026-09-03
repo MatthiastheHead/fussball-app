@@ -1,5 +1,5 @@
-// Version 6.2: Checklisten-Bemerkungen, kindgerechter PDF-Export
-// und optimierte mobile Bedienung.
+// Version 6.3: auswählbare Spielerinnen in der Auswertung und ein
+// serverseitig geschütztes Login-Protokoll für Matthias.
 
 import React, { useState, useEffect } from 'react';
 import './App.css';
@@ -15,6 +15,7 @@ import {
   ratingPoints,
   seasonDateRange,
   seasonForTrainingDate,
+  selectReportPlayers,
   summarizePlayerTrainings,
 } from './trainingUtils.js';
 
@@ -152,6 +153,7 @@ async function ensureBackendAwake() {
 export default function App() {
   // State-Definitionen
   const [loggedInUser, setLoggedInUser] = useState(null);
+  const [authToken, setAuthToken] = useState('');
   const [loginName, setLoginName] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -160,6 +162,8 @@ export default function App() {
   const [loadError, setLoadError] = useState('');
 
   const [users, setUsers] = useState([]);
+  const [loginHistory, setLoginHistory] = useState([]);
+  const [adminLoadError, setAdminLoadError] = useState('');
   const [newUserName, setNewUserName] = useState('');
   const [newUserPass, setNewUserPass] = useState('');
   const [passwordDrafts, setPasswordDrafts] = useState({});
@@ -184,6 +188,7 @@ export default function App() {
   const [fromDate, setFromDate] = useState(INITIAL_SEASON_RANGE.from);
   const [toDate, setToDate] = useState(INITIAL_SEASON_RANGE.to);
   const [reportData, setReportData] = useState(null);
+  const [selectedReportPlayers, setSelectedReportPlayers] = useState(null);
   const [reportView, setReportView] = useState('children');
   const [expandedReportRow, setExpandedReportRow] = useState(null);
   const [showTrainings, setShowTrainings] = useState(false);
@@ -194,7 +199,7 @@ export default function App() {
   const [expandedChecklist, setExpandedChecklist] = useState(null);
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
-  const version = '6.2';
+  const version = '6.3';
   const currentYear = new Date().getFullYear();
 
   const createAuditEntry = (action) => ({
@@ -262,14 +267,12 @@ export default function App() {
   }
 
   async function refetchAll() {
-    const [u, p, t, c, s] = await Promise.all([
-      fetchJson('users'),
+    const [p, t, c, s] = await Promise.all([
       fetchJson('players'),
       fetchJson('trainings'),
       fetchJson('checklists'),
       fetchJson('settings'),
     ]);
-      setUsers(Array.isArray(u) ? u : []);
       setPlayers(
         Array.isArray(p)
           ? p.map((x) => ({
@@ -336,6 +339,39 @@ export default function App() {
       alert(`Standard-Trainingsort auf ${location} gesetzt.`);
     });
 
+  const authenticatedRequest = (path, options = {}, token = authToken) =>
+    apiRequest(path, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+  async function loadAdminData(token = authToken) {
+    if (!token) return false;
+    setAdminLoadError('');
+    const [usersResponse, historyResponse] = await Promise.all([
+      authenticatedRequest('admin/users', {}, token),
+      authenticatedRequest('admin/login-events?limit=200', {}, token),
+    ]);
+    if (!usersResponse.ok || !historyResponse.ok) {
+      if (usersResponse.status === 401 || historyResponse.status === 401) {
+        setAdminLoadError('Die Admin-Sitzung ist abgelaufen. Bitte erneut einloggen.');
+      } else {
+        setAdminLoadError('Die Admin-Daten konnten nicht geladen werden.');
+      }
+      return false;
+    }
+    const [adminUsers, events] = await Promise.all([
+      usersResponse.json(),
+      historyResponse.json(),
+    ]);
+    setUsers(Array.isArray(adminUsers) ? adminUsers : []);
+    setLoginHistory(Array.isArray(events) ? events : []);
+    return true;
+  }
+
   async function loadInitialData() {
     setInitializing(true);
     setLoadError('');
@@ -359,26 +395,64 @@ export default function App() {
     loadInitialData();
   }, []);
 
-  const handleLogin = () => {
+  useEffect(() => {
     if (initializing) return;
-    const trimmedName = loginName.trim();
-    const user = users.find(
-      (u) => u.name === trimmedName && u.password === loginPass
+    const eligibleNames = players
+      .filter((player) => !player.isTrainer && !player.inactive)
+      .map((player) => player.name);
+    const eligibleSet = new Set(eligibleNames);
+    setSelectedReportPlayers((selected) =>
+      selected === null
+        ? eligibleNames
+        : selected.filter((name) => eligibleSet.has(name))
     );
-    if (user) {
-      setLoggedInUser(user.name);
+  }, [players, initializing]);
+
+  const handleLogin = () =>
+    runOnce(async () => {
+      if (initializing) return false;
+      const trimmedName = loginName.trim();
+      if (!trimmedName || !loginPass) {
+        setLoginError('Bitte Benutzername und Passwort eingeben.');
+        return false;
+      }
+      const response = await apiRequest('auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmedName, password: loginPass }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        setLoginError(errorData.error || 'Falscher Benutzername oder Passwort.');
+        return false;
+      }
+      const session = await response.json();
+      setLoggedInUser(session.name);
+      setAuthToken(session.token);
       setLoginError('');
       setLoginName('');
       setLoginPass('');
       setShowStartMenu(true);
       setShowSettings(false);
-    } else {
-      setLoginError('Falscher Benutzername oder Passwort.');
-    }
-  };
+      if (session.isAdmin) {
+        await loadAdminData(session.token);
+      } else {
+        setUsers([]);
+        setLoginHistory([]);
+        setAdminLoadError('');
+      }
+      return true;
+    });
 
   const handleLogout = () => {
+    if (authToken) {
+      authenticatedRequest('auth/logout', { method: 'POST' }).catch(() => {});
+    }
     setLoggedInUser(null);
+    setAuthToken('');
+    setUsers([]);
+    setLoginHistory([]);
+    setAdminLoadError('');
     setShowStartMenu(true);
     setShowSettings(false);
     setShowChecklists(false);
@@ -397,17 +471,17 @@ export default function App() {
         alert('Dieser Benutzername existiert bereits.');
         return;
       }
-      const updated = [...users, { name, password: newUserPass }];
-      const res = await apiRequest('users', {
+      const res = await authenticatedRequest('admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset: true, list: updated }),
+        body: JSON.stringify({ name, password: newUserPass }),
       });
       if (!res.ok) {
-        alert('Fehler beim Anlegen des Benutzers.');
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.error || 'Fehler beim Anlegen des Benutzers.');
         return;
       }
-      await refetchAll();
+      await loadAdminData();
       setNewUserName('');
       setNewUserPass('');
       alert('Neuer Benutzer angelegt.');
@@ -420,22 +494,21 @@ export default function App() {
         return;
       }
       if (!users[index]) return;
-      const updated = users.map((user, userIndex) =>
-        userIndex === index ? { ...user, password: newPass } : user
-      );
-      const res = await apiRequest('users', {
-        method: 'POST',
+      const user = users[index];
+      const res = await authenticatedRequest(`admin/users/${user._id}/password`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset: true, list: updated }),
+        body: JSON.stringify({ password: newPass }),
       });
       if (!res.ok) {
-        alert('Fehler beim Aktualisieren des Passworts.');
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.error || 'Fehler beim Aktualisieren des Passworts.');
         return;
       }
-      await refetchAll();
+      await loadAdminData();
       const draftKey = users[index]._id || users[index].name;
       setPasswordDrafts((drafts) => ({ ...drafts, [draftKey]: '' }));
-      alert(`Passwort für ${updated[index].name} geändert.`);
+      alert(`Passwort für ${user.name} geändert.`);
     });
 
   const deleteUser = (index) =>
@@ -446,18 +519,15 @@ export default function App() {
         return;
       }
       if (!window.confirm(`Benutzer ${userToDelete.name} wirklich löschen?`)) return;
-      const updated = [...users];
-      updated.splice(index, 1);
-      const res = await apiRequest('users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset: true, list: updated }),
+      const res = await authenticatedRequest(`admin/users/${userToDelete._id}`, {
+        method: 'DELETE',
       });
       if (!res.ok) {
-        alert('Fehler beim Löschen des Benutzers.');
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.error || 'Fehler beim Löschen des Benutzers.');
         return;
       }
-      await refetchAll();
+      await loadAdminData();
       alert('Benutzer gelöscht.');
     });
 
@@ -562,6 +632,13 @@ export default function App() {
       if (responses.some((response) => !response.ok)) {
         alert('Fehler beim Bearbeiten.');
         return;
+      }
+      if (previousName !== nextName) {
+        setSelectedReportPlayers((selected) =>
+          selected === null
+            ? selected
+            : selected.map((name) => (name === previousName ? nextName : name))
+        );
       }
       await refetchAll();
       alert('Änderung gespeichert.');
@@ -978,6 +1055,25 @@ export default function App() {
 
   const sortedPlayers = [...players].sort((a, b) => a.name.localeCompare(b.name));
   const trainersFirst = [...sortedPlayers].sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0));
+  const reportPlayers = selectReportPlayers(sortedPlayers);
+  const selectedReportPlayerNames =
+    selectedReportPlayers === null
+      ? reportPlayers.map((player) => player.name)
+      : selectedReportPlayers;
+  const selectedReportPlayerSet = new Set(selectedReportPlayerNames);
+
+  const changeReportPlayerSelection = (nextSelection) => {
+    setSelectedReportPlayers(nextSelection);
+    setReportData(null);
+    setExpandedReportRow(null);
+  };
+
+  const toggleReportPlayer = (playerName) => {
+    const nextSelection = selectedReportPlayerSet.has(playerName)
+      ? selectedReportPlayerNames.filter((name) => name !== playerName)
+      : [...selectedReportPlayerNames, playerName];
+    changeReportPlayerSelection(nextSelection);
+  };
 
   const teamMembersForTraining = (training) => {
     const currentMembers = new Map(players.map((player) => [player.name, player]));
@@ -1158,6 +1254,12 @@ export default function App() {
   }
 
   if (showSettings) {
+    const loginOverviewNames = [
+      ...new Set([
+        ...users.map((user) => user.name),
+        ...loginHistory.map((event) => event.username),
+      ]),
+    ].sort((a, b) => a.localeCompare(b));
     return (
       <div className="App">
         <header>
@@ -1414,6 +1516,50 @@ export default function App() {
                 </li>
               ))}
             </ul>
+            <div className="login-history-block">
+              <div className="login-history-heading">
+                <div>
+                  <h3>Login-Übersicht</h3>
+                  <p>Gespeichert werden erfolgreiche Anmeldungen ab Version 6.3.</p>
+                </div>
+                <button
+                  className="btn-edit"
+                  onClick={() => runOnce(() => loadAdminData())}
+                  disabled={busy}
+                >
+                  Aktualisieren
+                </button>
+              </div>
+              {adminLoadError && <p className="login-error">{adminLoadError}</p>}
+              <div className="login-overview-grid">
+                {loginOverviewNames.map((name) => {
+                  const events = loginHistory.filter((event) => event.username === name);
+                  return (
+                    <article key={name} className="login-overview-card">
+                      <strong>{name}</strong>
+                      <span>
+                        Letzter Login: {events[0] ? formatAuditTime(events[0].loggedInAt) : 'Noch keiner'}
+                      </span>
+                      <small>
+                        {events.length} Anmeldung{events.length === 1 ? '' : 'en'} im angezeigten Protokoll
+                      </small>
+                    </article>
+                  );
+                })}
+              </div>
+              <details className="login-history-details">
+                <summary>Einzelne Anmeldungen anzeigen ({loginHistory.length})</summary>
+                <div className="login-history-list">
+                  {loginHistory.map((event) => (
+                    <div key={event._id || `${event.username}-${event.loggedInAt}`}>
+                      <strong>{event.username}</strong>
+                      <span>{formatAuditTime(event.loggedInAt)}</span>
+                    </div>
+                  ))}
+                  {loginHistory.length === 0 && <p>Noch keine Anmeldung protokolliert.</p>}
+                </div>
+              </details>
+            </div>
           </section>
         )}
         <button
@@ -1918,6 +2064,53 @@ export default function App() {
               0 Sterne = −1 Punkt. „Nicht abgemeldet“ wird separat gezählt.
               Trainingsbezogene Inaktivität wird nicht in die Quote oder Bewertung eingerechnet.
             </p>
+            <div className="report-player-selection">
+              <div className="report-player-selection-heading">
+                <div>
+                  <h3>Spielerinnen auswählen</h3>
+                  <span>
+                    {selectedReportPlayerNames.length} von {reportPlayers.length} ausgewählt
+                  </span>
+                </div>
+                <div className="report-player-selection-actions">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      changeReportPlayerSelection(reportPlayers.map((player) => player.name))
+                    }
+                    disabled={busy || selectedReportPlayerNames.length === reportPlayers.length}
+                  >
+                    Alle
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => changeReportPlayerSelection([])}
+                    disabled={busy || selectedReportPlayerNames.length === 0}
+                  >
+                    Keine
+                  </button>
+                </div>
+              </div>
+              <div className="report-player-options">
+                {reportPlayers.map((player) => (
+                  <label
+                    key={player.name}
+                    className={selectedReportPlayerSet.has(player.name) ? 'selected' : ''}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedReportPlayerSet.has(player.name)}
+                      onChange={() => toggleReportPlayer(player.name)}
+                      disabled={busy}
+                    />
+                    <span>{player.name}</span>
+                  </label>
+                ))}
+                {reportPlayers.length === 0 && (
+                  <p className="no-trainings">Keine aktiven Spielerinnen vorhanden.</p>
+                )}
+              </div>
+            </div>
             <div className="report-form">
               <label>
                 Von{' '}
@@ -2465,6 +2658,11 @@ export default function App() {
 
   // Auswertung berechnen – berücksichtigt nur aktive Spieler (kein Trainer, nicht inaktiv)
   function computeReport() {
+    if (selectedReportPlayerNames.length === 0) {
+      alert('Bitte mindestens eine Spielerin für die Auswertung auswählen.');
+      setReportData(null);
+      return;
+    }
     if (!fromDate || !toDate) {
       alert('Bitte Start- und Enddatum auswählen.');
       return;
@@ -2485,8 +2683,7 @@ export default function App() {
       setReportData(null);
       return;
     }
-    const report = trainersFirst
-      .filter((p) => !p.isTrainer && !p.inactive)
+    const report = selectReportPlayers(trainersFirst, selectedReportPlayerNames)
       .map((player) => {
         const summary = summarizePlayerTrainings(trainingsInRange, player.name);
         return {

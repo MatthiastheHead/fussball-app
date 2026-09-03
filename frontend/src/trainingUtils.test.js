@@ -10,6 +10,7 @@ import {
   seasonDateRange,
   seasonForInputDate,
   seasonForTrainingDate,
+  selectReportPlayers,
   summarizePlayerTrainings,
 } from './trainingUtils.js';
 
@@ -33,6 +34,23 @@ test('ordnet Trainings korrekt einer Saison von Juli bis Juni zu', () => {
     from: '2025-07-01',
     to: '2026-06-30',
   });
+});
+
+test('filtert die ausgewählten aktiven Spielerinnen für die Auswertung', () => {
+  const players = [
+    { name: 'Anna', isTrainer: false, inactive: false },
+    { name: 'Mia', isTrainer: false, inactive: false },
+    { name: 'Lea', isTrainer: false, inactive: true },
+    { name: 'Matthias', isTrainer: true, inactive: false },
+  ];
+  assert.deepEqual(
+    selectReportPlayers(players, ['Mia', 'Lea', 'Matthias']).map((player) => player.name),
+    ['Mia']
+  );
+  assert.deepEqual(
+    selectReportPlayers(players).map((player) => player.name),
+    ['Anna', 'Mia']
+  );
 });
 
 test('begrenzt Bewertungen auf null bis drei Sterne', () => {

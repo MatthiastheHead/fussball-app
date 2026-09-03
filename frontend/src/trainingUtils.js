@@ -81,6 +81,16 @@ export const seasonDateRange = (season) => {
   };
 };
 
+export const selectReportPlayers = (players, selectedNames = null) => {
+  const selectedSet = selectedNames === null ? null : new Set(selectedNames);
+  return (players || []).filter(
+    (player) =>
+      !player.isTrainer &&
+      !player.inactive &&
+      (selectedSet === null || selectedSet.has(player.name))
+  );
+};
+
 export const summarizePlayerTrainings = (trainings, playerName) => {
   let attendCount = 0;
   let excusedCount = 0;
