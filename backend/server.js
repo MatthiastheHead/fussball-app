@@ -14,6 +14,7 @@ const Training = require('./models/Training');
 const AppSettings = require('./models/AppSettings');
 const AdminRecovery = require('./models/AdminRecovery');
 const LoginEvent = require('./models/LoginEvent');
+const PasswordResetRequest = require('./models/PasswordResetRequest');
 const { hashPassword, isPasswordHash, verifyPassword } = require('./authUtils');
 const {
   createOtpAuthUrl,
@@ -308,16 +309,195 @@ app.post('/auth/logout', (req, res) => {
   res.status(204).end();
 });
 
-app.post('/auth/recover-matthias', async (req, res) => {
+const findRecoveryForUser = async user => {
+  if (!user?._id) return null;
+  const userId = String(user._id);
+  let recovery = await AdminRecovery.findOne({ userId });
+
+  // Ein eventuell bereits eingerichtetes Matthias-Konto aus Version 6.4
+  // wird beim ersten Zugriff automatisch dem Benutzerkonto zugeordnet.
+  if (!recovery && user.name === ADMIN_USERNAME) {
+    recovery = await AdminRecovery.findOne({ key: 'matthias' });
+  }
+  if (recovery && (recovery.userId !== userId || recovery.username !== user.name)) {
+    recovery.userId = userId;
+    recovery.username = user.name;
+    await recovery.save();
+  }
+  return recovery;
+};
+
+const recoveryStatusPayload = recovery => ({
+  enabled: !!(recovery?.encryptedSecret && recovery?.enabledAt),
+  enabledAt: recovery?.enabledAt || null,
+  updatedAt: recovery?.updatedAt || null,
+  remainingRecoveryCodes: Array.isArray(recovery?.recoveryCodeHashes)
+    ? recovery.recoveryCodeHashes.length
+    : 0,
+});
+
+const sendRecoveryStatus = async (req, res) => {
+  try {
+    const user = await User.findOne({ name: req.auth.username });
+    const recovery = await findRecoveryForUser(user);
+    res.set('Cache-Control', 'no-store');
+    res.json(recoveryStatusPayload(recovery));
+  } catch (err) {
+    console.error('Fehler GET Kontowiederherstellung:', err);
+    res.status(500).json({ error: 'Authenticator-Status konnte nicht geladen werden.' });
+  }
+};
+
+const startRecoverySetup = async (req, res) => {
+  const currentPassword =
+    typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : '';
+  if (!currentPassword || currentPassword.length > 256) {
+    return res.status(400).json({ error: 'Gib dein aktuelles Passwort ein.' });
+  }
+
+  const attemptKey = recoveryAttemptKey(req, `authenticator-setup:${req.auth.username}`);
+  pruneRecoveryAttempts();
+  if (isRecoveryBlocked(attemptKey)) {
+    return res.status(429).json({ error: 'Zu viele Versuche. Bitte warte 15 Minuten.' });
+  }
+
+  try {
+    const user = await User.findOne({ name: req.auth.username });
+    const passwordMatches = user
+      ? await verifyPassword(currentPassword, user.password)
+      : false;
+    if (!user || !passwordMatches) {
+      recordFailedRecovery(attemptKey);
+      return res.status(401).json({ error: 'Das aktuelle Passwort ist falsch.' });
+    }
+
+    const secret = generateAuthenticatorSecret();
+    const recoveryCodes = generateRecoveryCodes(8);
+    const pendingValues = {
+      userId: String(user._id),
+      username: user.name,
+      pendingEncryptedSecret: encryptSecret(secret, recoveryEncryptionKey),
+      pendingRecoveryCodeHashes: recoveryCodes.map(code =>
+        hashRecoveryCode(code, recoveryEncryptionKey)
+      ),
+      pendingCreatedAt: new Date(),
+    };
+    const existingRecovery = await findRecoveryForUser(user);
+    if (existingRecovery) {
+      Object.assign(existingRecovery, pendingValues);
+      await existingRecovery.save();
+    } else {
+      await AdminRecovery.create({
+        key: `user:${user._id}`,
+        ...pendingValues,
+      });
+    }
+
+    recoveryAttempts.delete(attemptKey);
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      secret,
+      otpAuthUrl: createOtpAuthUrl(secret, user.name, 'Fussball-App'),
+      recoveryCodes,
+      expiresInMs: RECOVERY_SETUP_TTL_MS,
+    });
+  } catch (err) {
+    console.error('Fehler POST Kontowiederherstellung/setup:', err);
+    res.status(500).json({ error: 'Authenticator-Einrichtung konnte nicht gestartet werden.' });
+  }
+};
+
+const confirmRecoverySetup = async (req, res) => {
+  const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
+  if (!/^\d{6}$/.test(code)) {
+    return res.status(400).json({ error: 'Gib den 6-stelligen Code aus der Authenticator-App ein.' });
+  }
+
+  const attemptKey = recoveryAttemptKey(req, `authenticator-confirm:${req.auth.username}`);
+  pruneRecoveryAttempts();
+  if (isRecoveryBlocked(attemptKey)) {
+    return res.status(429).json({ error: 'Zu viele Versuche. Bitte warte 15 Minuten.' });
+  }
+
+  try {
+    const user = await User.findOne({ name: req.auth.username });
+    const recovery = await findRecoveryForUser(user);
+    const pendingAge = recovery?.pendingCreatedAt
+      ? Date.now() - new Date(recovery.pendingCreatedAt).getTime()
+      : Number.POSITIVE_INFINITY;
+    if (!recovery?.pendingEncryptedSecret || pendingAge > RECOVERY_SETUP_TTL_MS) {
+      if (recovery?.pendingEncryptedSecret) {
+        await AdminRecovery.updateOne(
+          { _id: recovery._id },
+          {
+            $unset: {
+              pendingEncryptedSecret: 1,
+              pendingRecoveryCodeHashes: 1,
+              pendingCreatedAt: 1,
+            },
+          }
+        );
+      }
+      return res.status(410).json({
+        error: 'Die Einrichtung ist abgelaufen. Bitte starte sie erneut.',
+      });
+    }
+
+    const secret = decryptSecret(recovery.pendingEncryptedSecret, recoveryEncryptionKey);
+    const matchedCounter = verifyTotp(secret, code, { window: 1 });
+    if (matchedCounter === null) {
+      recordFailedRecovery(attemptKey);
+      return res.status(401).json({ error: 'Der Authenticator-Code ist ungültig.' });
+    }
+
+    const enabledAt = new Date();
+    const result = await AdminRecovery.updateOne(
+      { _id: recovery._id, pendingEncryptedSecret: recovery.pendingEncryptedSecret },
+      {
+        $set: {
+          encryptedSecret: recovery.pendingEncryptedSecret,
+          recoveryCodeHashes: recovery.pendingRecoveryCodeHashes,
+          lastUsedCounter: matchedCounter,
+          enabledAt,
+        },
+        $unset: {
+          pendingEncryptedSecret: 1,
+          pendingRecoveryCodeHashes: 1,
+          pendingCreatedAt: 1,
+        },
+      }
+    );
+    if (result.modifiedCount !== 1) {
+      return res.status(409).json({ error: 'Die Einrichtung wurde bereits erneuert. Bitte starte erneut.' });
+    }
+
+    recoveryAttempts.delete(attemptKey);
+    res.set('Cache-Control', 'no-store');
+    res.json({ enabled: true, enabledAt, remainingRecoveryCodes: 8 });
+  } catch (err) {
+    console.error('Fehler POST Kontowiederherstellung/confirm:', err);
+    res.status(500).json({ error: 'Authenticator-Einrichtung konnte nicht bestätigt werden.' });
+  }
+};
+
+const recoverPassword = async (req, res) => {
+  const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
   const credential = typeof req.body?.credential === 'string' ? req.body.credential.trim() : '';
   const newPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword : '';
-  if (!credential || credential.length > 100 || newPassword.length < 8 || newPassword.length > 256) {
+  if (
+    !username ||
+    username.length > 100 ||
+    !credential ||
+    credential.length > 100 ||
+    newPassword.length < 8 ||
+    newPassword.length > 256
+  ) {
     return res.status(400).json({
-      error: 'Gib einen gültigen Authenticator- oder Notfallcode und ein Passwort mit mindestens 8 Zeichen ein.',
+      error: 'Gib Benutzername, Authenticator- oder Notfallcode und ein Passwort mit mindestens 8 Zeichen ein.',
     });
   }
 
-  const attemptKey = recoveryAttemptKey(req, 'password-reset');
+  const attemptKey = recoveryAttemptKey(req, `password-reset:${username.toLowerCase()}`);
   pruneRecoveryAttempts();
   if (isRecoveryBlocked(attemptKey)) {
     return res.status(429).json({
@@ -327,15 +507,17 @@ app.post('/auth/recover-matthias', async (req, res) => {
 
   const rejectCredential = () => {
     recordFailedRecovery(attemptKey);
-    return res.status(401).json({ error: 'Der Authenticator- oder Notfallcode ist ungültig.' });
+    return res.status(401).json({
+      error: 'Benutzername oder Authenticator- beziehungsweise Notfallcode ist ungültig.',
+    });
   };
 
   try {
-    const [user, recovery, newPasswordHash] = await Promise.all([
-      User.findOne({ name: ADMIN_USERNAME }),
-      AdminRecovery.findOne({ key: 'matthias' }),
+    const [user, newPasswordHash] = await Promise.all([
+      User.findOne({ name: username }),
       hashPassword(newPassword),
     ]);
+    const recovery = user ? await findRecoveryForUser(user) : null;
     if (!user || !recovery?.encryptedSecret || !recovery.enabledAt) return rejectCredential();
 
     let consumed = false;
@@ -376,156 +558,123 @@ app.post('/auth/recover-matthias', async (req, res) => {
 
     user.password = newPasswordHash;
     await user.save();
-    invalidateSessionsForUsername(ADMIN_USERNAME);
-    clearLoginAttemptsForUsername(ADMIN_USERNAME);
+    invalidateSessionsForUsername(user.name);
+    clearLoginAttemptsForUsername(user.name);
+    await PasswordResetRequest.updateMany(
+      { userId: String(user._id), status: 'open' },
+      {
+        $set: {
+          status: 'resolved',
+          resolvedAt: new Date(),
+          resolvedBy: user.name,
+        },
+      }
+    );
     recoveryAttempts.delete(attemptKey);
     res.set('Cache-Control', 'no-store');
     res.json({ ok: true });
   } catch (err) {
-    console.error('Fehler POST /auth/recover-matthias:', err);
+    console.error('Fehler POST /auth/recover-password:', err);
     res.status(500).json({ error: 'Das Passwort konnte nicht zurückgesetzt werden.' });
   }
+};
+
+app.post('/auth/recover-password', recoverPassword);
+
+// Kompatibilität zur kurzzeitig veröffentlichten Version 6.4.
+app.post('/auth/recover-matthias', (req, res) => {
+  req.body = { ...(req.body || {}), username: ADMIN_USERNAME };
+  return recoverPassword(req, res);
 });
 
-app.get('/admin/recovery/status', requireAdmin, async (_req, res) => {
-  try {
-    const recovery = await AdminRecovery.findOne({ key: 'matthias' }).lean();
-    res.set('Cache-Control', 'no-store');
-    res.json({
-      enabled: !!(recovery?.encryptedSecret && recovery?.enabledAt),
-      enabledAt: recovery?.enabledAt || null,
-      updatedAt: recovery?.updatedAt || null,
-      remainingRecoveryCodes: Array.isArray(recovery?.recoveryCodeHashes)
-        ? recovery.recoveryCodeHashes.length
-        : 0,
-    });
-  } catch (err) {
-    console.error('Fehler GET /admin/recovery/status:', err);
-    res.status(500).json({ error: 'Authenticator-Status konnte nicht geladen werden.' });
-  }
-});
-
-app.post('/admin/recovery/setup', requireAdmin, async (req, res) => {
-  const currentPassword =
-    typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : '';
-  if (!currentPassword || currentPassword.length > 256) {
-    return res.status(400).json({ error: 'Gib dein aktuelles Passwort ein.' });
+app.post('/auth/password-reset-requests', async (req, res) => {
+  const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
+  if (!username || username.length > 100) {
+    return res.status(400).json({ error: 'Gib deinen Benutzernamen ein.' });
   }
 
-  const attemptKey = recoveryAttemptKey(req, 'authenticator-setup');
+  const attemptKey = recoveryAttemptKey(req, `reset-request:${username.toLowerCase()}`);
   pruneRecoveryAttempts();
   if (isRecoveryBlocked(attemptKey)) {
-    return res.status(429).json({ error: 'Zu viele Versuche. Bitte warte 15 Minuten.' });
+    return res.status(429).json({ error: 'Zu viele Anfragen. Bitte warte 15 Minuten.' });
   }
 
   try {
-    const user = await User.findOne({ name: ADMIN_USERNAME });
-    const passwordMatches = user
-      ? await verifyPassword(currentPassword, user.password)
-      : false;
-    if (!user || !passwordMatches) {
-      recordFailedRecovery(attemptKey);
-      return res.status(401).json({ error: 'Das aktuelle Passwort ist falsch.' });
+    const user = await User.findOne({ name: username });
+    if (user) {
+      const now = new Date();
+      await PasswordResetRequest.findOneAndUpdate(
+        { userId: String(user._id), status: 'open' },
+        {
+          $set: { username: user.name, lastRequestedAt: now },
+          $setOnInsert: {
+            userId: String(user._id),
+            status: 'open',
+            firstRequestedAt: now,
+          },
+          $inc: { requestCount: 1 },
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
     }
+    recordFailedRecovery(attemptKey);
+    res.status(202).json({ ok: true });
+  } catch (err) {
+    console.error('Fehler POST /auth/password-reset-requests:', err);
+    res.status(500).json({ error: 'Die Anfrage konnte nicht übermittelt werden.' });
+  }
+});
 
-    const secret = generateAuthenticatorSecret();
-    const recoveryCodes = generateRecoveryCodes(8);
-    await AdminRecovery.findOneAndUpdate(
-      { key: 'matthias' },
+app.get('/account/recovery/status', requireSession, sendRecoveryStatus);
+app.post('/account/recovery/setup', requireSession, startRecoverySetup);
+app.post('/account/recovery/confirm', requireSession, confirmRecoverySetup);
+
+// Die alten Matthias-Pfade bleiben während der Umstellung kompatibel und
+// erzwingen weiterhin eine angemeldete Admin-Sitzung.
+app.get('/admin/recovery/status', requireAdmin, sendRecoveryStatus);
+app.post('/admin/recovery/setup', requireAdmin, startRecoverySetup);
+app.post('/admin/recovery/confirm', requireAdmin, confirmRecoverySetup);
+
+app.get('/admin/password-reset-requests', requireAdmin, async (_req, res) => {
+  try {
+    const requests = await PasswordResetRequest.find({ status: 'open' })
+      .sort({ lastRequestedAt: -1 })
+      .limit(200)
+      .lean();
+    res.json(requests.map(request => ({
+      _id: request._id,
+      username: request.username,
+      firstRequestedAt: request.firstRequestedAt,
+      lastRequestedAt: request.lastRequestedAt,
+      requestCount: request.requestCount,
+    })));
+  } catch (err) {
+    console.error('Fehler GET /admin/password-reset-requests:', err);
+    res.status(500).json({ error: 'Passwortanfragen konnten nicht geladen werden.' });
+  }
+});
+
+app.patch('/admin/password-reset-requests/:id/resolve', requireAdmin, async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(400).json({ error: 'Ungültige Passwortanfrage.' });
+  }
+  try {
+    const request = await PasswordResetRequest.findByIdAndUpdate(
+      req.params.id,
       {
         $set: {
-          pendingEncryptedSecret: encryptSecret(secret, recoveryEncryptionKey),
-          pendingRecoveryCodeHashes: recoveryCodes.map(code =>
-            hashRecoveryCode(code, recoveryEncryptionKey)
-          ),
-          pendingCreatedAt: new Date(),
+          status: 'resolved',
+          resolvedAt: new Date(),
+          resolvedBy: req.auth.username,
         },
-        $setOnInsert: { key: 'matthias' },
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { new: true }
     );
-    recoveryAttempts.delete(attemptKey);
-    res.set('Cache-Control', 'no-store');
-    res.json({
-      secret,
-      otpAuthUrl: createOtpAuthUrl(secret, ADMIN_USERNAME, 'Fussball-App'),
-      recoveryCodes,
-      expiresInMs: RECOVERY_SETUP_TTL_MS,
-    });
+    if (!request) return res.status(404).json({ error: 'Passwortanfrage nicht gefunden.' });
+    res.json({ ok: true });
   } catch (err) {
-    console.error('Fehler POST /admin/recovery/setup:', err);
-    res.status(500).json({ error: 'Authenticator-Einrichtung konnte nicht gestartet werden.' });
-  }
-});
-
-app.post('/admin/recovery/confirm', requireAdmin, async (req, res) => {
-  const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
-  if (!/^\d{6}$/.test(code)) {
-    return res.status(400).json({ error: 'Gib den 6-stelligen Code aus der Authenticator-App ein.' });
-  }
-
-  const attemptKey = recoveryAttemptKey(req, 'authenticator-confirm');
-  pruneRecoveryAttempts();
-  if (isRecoveryBlocked(attemptKey)) {
-    return res.status(429).json({ error: 'Zu viele Versuche. Bitte warte 15 Minuten.' });
-  }
-
-  try {
-    const recovery = await AdminRecovery.findOne({ key: 'matthias' });
-    const pendingAge = recovery?.pendingCreatedAt
-      ? Date.now() - new Date(recovery.pendingCreatedAt).getTime()
-      : Number.POSITIVE_INFINITY;
-    if (!recovery?.pendingEncryptedSecret || pendingAge > RECOVERY_SETUP_TTL_MS) {
-      if (recovery?.pendingEncryptedSecret) {
-        await AdminRecovery.updateOne(
-          { _id: recovery._id },
-          {
-            $unset: {
-              pendingEncryptedSecret: 1,
-              pendingRecoveryCodeHashes: 1,
-              pendingCreatedAt: 1,
-            },
-          }
-        );
-      }
-      return res.status(410).json({
-        error: 'Die Einrichtung ist abgelaufen. Bitte starte sie erneut.',
-      });
-    }
-
-    const secret = decryptSecret(recovery.pendingEncryptedSecret, recoveryEncryptionKey);
-    const matchedCounter = verifyTotp(secret, code, { window: 1 });
-    if (matchedCounter === null) {
-      recordFailedRecovery(attemptKey);
-      return res.status(401).json({ error: 'Der Authenticator-Code ist ungültig.' });
-    }
-
-    const result = await AdminRecovery.updateOne(
-      { _id: recovery._id, pendingEncryptedSecret: recovery.pendingEncryptedSecret },
-      {
-        $set: {
-          encryptedSecret: recovery.pendingEncryptedSecret,
-          recoveryCodeHashes: recovery.pendingRecoveryCodeHashes,
-          lastUsedCounter: matchedCounter,
-          enabledAt: new Date(),
-        },
-        $unset: {
-          pendingEncryptedSecret: 1,
-          pendingRecoveryCodeHashes: 1,
-          pendingCreatedAt: 1,
-        },
-      }
-    );
-    if (result.modifiedCount !== 1) {
-      return res.status(409).json({ error: 'Die Einrichtung wurde bereits erneuert. Bitte starte erneut.' });
-    }
-
-    recoveryAttempts.delete(attemptKey);
-    res.set('Cache-Control', 'no-store');
-    res.json({ enabled: true, enabledAt: new Date(), remainingRecoveryCodes: 8 });
-  } catch (err) {
-    console.error('Fehler POST /admin/recovery/confirm:', err);
-    res.status(500).json({ error: 'Authenticator-Einrichtung konnte nicht bestätigt werden.' });
+    console.error('Fehler PATCH /admin/password-reset-requests/:id/resolve:', err);
+    res.status(500).json({ error: 'Passwortanfrage konnte nicht erledigt werden.' });
   }
 });
 
@@ -542,8 +691,10 @@ app.get('/admin/users', requireAdmin, async (_req, res) => {
 app.post('/admin/users', requireAdmin, async (req, res) => {
   const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
-  if (!name || !password || name.length > 100 || password.length > 256) {
-    return res.status(400).json({ error: 'Benutzername und Passwort werden benötigt.' });
+  if (!name || password.length < 8 || name.length > 100 || password.length > 256) {
+    return res.status(400).json({
+      error: 'Benutzername und ein Passwort mit mindestens 8 Zeichen werden benötigt.',
+    });
   }
   try {
     const user = await User.create({ name, password: await hashPassword(password) });
@@ -559,7 +710,11 @@ app.post('/admin/users', requireAdmin, async (req, res) => {
 
 app.patch('/admin/users/:id/password', requireAdmin, async (req, res) => {
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
-  if (!mongoose.isValidObjectId(req.params.id) || !password || password.length > 256) {
+  if (
+    !mongoose.isValidObjectId(req.params.id) ||
+    password.length < 8 ||
+    password.length > 256
+  ) {
     return res.status(400).json({ error: 'Ungültiger Benutzer oder ungültiges Passwort.' });
   }
   try {
@@ -569,6 +724,17 @@ app.patch('/admin/users/:id/password', requireAdmin, async (req, res) => {
       { new: true }
     );
     if (!user) return res.status(404).json({ error: 'Benutzer nicht gefunden.' });
+    invalidateSessionsForUsername(user.name);
+    await PasswordResetRequest.updateMany(
+      { userId: String(user._id), status: 'open' },
+      {
+        $set: {
+          status: 'resolved',
+          resolvedAt: new Date(),
+          resolvedBy: req.auth.username,
+        },
+      }
+    );
     res.json(safeUser(user));
   } catch (err) {
     console.error('Fehler PATCH /admin/users/:id/password:', err);
@@ -586,7 +752,12 @@ app.delete('/admin/users/:id', requireAdmin, async (req, res) => {
     if (user.name === ADMIN_USERNAME) {
       return res.status(400).json({ error: 'Der Administrator kann nicht gelöscht werden.' });
     }
-    await user.deleteOne();
+    invalidateSessionsForUsername(user.name);
+    await Promise.all([
+      user.deleteOne(),
+      AdminRecovery.deleteMany({ userId: String(user._id) }),
+      PasswordResetRequest.deleteMany({ userId: String(user._id) }),
+    ]);
     res.status(204).end();
   } catch (err) {
     console.error('Fehler DELETE /admin/users/:id:', err);

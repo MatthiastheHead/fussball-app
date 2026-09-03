@@ -46,9 +46,9 @@ test('erzeugt acht einmalige und normalisierbare Notfallcodes', () => {
   assert.equal(hashRecoveryCode(codes[0], key), hashRecoveryCode(codes[0].toLowerCase(), key));
 });
 
-test('erstellt einen kompatiblen otpauth-Link', () => {
-  const url = createOtpAuthUrl('ABCDEF234567', 'Matthias', 'Fussball-App');
-  assert.match(url, /^otpauth:\/\/totp\/Fussball-App%3AMatthias\?/);
+test('erstellt für beliebige Benutzer einen kompatiblen otpauth-Link', () => {
+  const url = createOtpAuthUrl('ABCDEF234567', 'Sabine Beispiel', 'Fussball-App');
+  assert.match(url, /^otpauth:\/\/totp\/Fussball-App%3ASabine%20Beispiel\?/);
   assert.match(url, /secret=ABCDEF234567/);
   assert.match(url, /period=30/);
 });
