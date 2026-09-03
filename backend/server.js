@@ -260,7 +260,8 @@ app.post('/trainings', async (req, res) => {
         typeof training.createdBy === 'string' && training.createdBy.trim()
           ? training.createdBy.trim()
           : previous?.createdBy || '',
-      createdAt: cleanDate(training.createdAt) || previous?.createdAt || new Date(),
+      createdAt:
+        cleanDate(training.createdAt) || previous?.createdAt || (previous ? null : new Date()),
       lastEdited: cleanAudit(training.lastEdited) || previous?.lastEdited || null,
       history: Array.isArray(training.history)
         ? training.history.map(cleanAudit).filter(Boolean).slice(-50)
