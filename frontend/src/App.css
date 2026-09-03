@@ -234,6 +234,7 @@ textarea::placeholder,
 .player-management,
 .admin-section,
 .report-section,
+.add-training-panel,
 .checklist-create,
 .checklist-list {
   margin-bottom: 1.25rem;
@@ -247,12 +248,14 @@ textarea::placeholder,
 .player-management h2,
 .admin-section h2,
 .report-section h2,
+.add-training-panel h2,
 .checklist-create h2 {
   margin-top: 0;
   color: #78c4ff;
 }
 
 .add-player-form,
+.add-training-form,
 .training-filter,
 .report-form,
 .edit-date-row {
@@ -264,6 +267,32 @@ textarea::placeholder,
 
 .add-player-form {
   margin-bottom: 1rem;
+}
+
+.add-training-panel {
+  margin-bottom: 1.25rem;
+}
+
+.add-training-panel p {
+  margin-top: -0.25rem;
+  color: #b8d7f7;
+}
+
+.add-training-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  color: #c6e4ff;
+  font-weight: 650;
+}
+
+.add-training-form input {
+  min-height: 44px;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #35517d;
+  border-radius: 8px;
+  background: #17233b;
+  color: #fff;
 }
 
 .add-player-form button,
@@ -389,6 +418,30 @@ textarea::placeholder,
   font-size: 0.92rem;
 }
 
+.audit-history {
+  margin: 0.7rem 0;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid #2d456d;
+  border-radius: 9px;
+  background: #121e34;
+  color: #b9daf6;
+}
+
+.audit-history summary {
+  cursor: pointer;
+  color: #79c9ff;
+  font-weight: 650;
+}
+
+.audit-history ul {
+  margin: 0.65rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.audit-history li {
+  margin: 0.3rem 0;
+}
+
 .edit-date-row {
   margin: 0.75rem 0;
 }
@@ -454,6 +507,44 @@ textarea::placeholder,
   color: #91d7ff;
 }
 
+.rating-field {
+  margin-top: 0.55rem;
+}
+
+.star-rating {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  margin-top: 0.3rem;
+}
+
+.star-rating button {
+  width: 44px;
+  min-height: 42px;
+  padding: 0.25rem;
+  border: 1px solid #59657a;
+  border-radius: 8px;
+  background: #26334d;
+  color: #7f8999;
+  cursor: pointer;
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.star-rating button.active {
+  border-color: #ffdc55;
+  background: #574817;
+  color: #ffe168;
+  box-shadow: 0 0 0 2px rgba(255, 218, 73, 0.18);
+}
+
+.rating-text {
+  margin-left: 0.25rem;
+  color: #f1d989;
+  font-size: 0.92rem;
+}
+
 .autosave-hint {
   margin: 0.6rem 0;
   color: #8fcfae;
@@ -464,6 +555,14 @@ textarea::placeholder,
   margin-bottom: 1rem;
 }
 
+.report-legend {
+  padding: 0.7rem 0.8rem;
+  border-radius: 9px;
+  background: #16243d;
+  color: #c5dcf5;
+  line-height: 1.45;
+}
+
 .report-results {
   overflow-x: auto;
 }
@@ -472,6 +571,10 @@ textarea::placeholder,
 .checklist-list table {
   width: 100%;
   border-collapse: collapse;
+}
+
+.report-results table {
+  min-width: 1050px;
 }
 
 .report-results th,
@@ -538,6 +641,7 @@ footer a {
   .main-func-btn,
   .controls button,
   .add-player-form > *,
+  .add-training-form > *,
   .training-filter > *,
   .report-form > * {
     width: 100%;
