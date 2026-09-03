@@ -5,15 +5,37 @@
 // - Die API-Basisadresse wird weiterhin zuerst aus ENV gelesen, ansonsten Fallback.
 
 import React, { useState, useEffect } from 'react';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 import './App.css';
 
-// API-Basis: zuerst ENV, ansonsten abhängig vom Hostname
-const API = import.meta.env.VITE_API_BASE ||
+// API-Basis: zuerst ENV, ansonsten abhängig vom Hostname. Ein abschließender
+// Schrägstrich wird entfernt, damit konfigurierte URLs zuverlässig funktionieren.
+const API = (import.meta.env.VITE_API_BASE ||
   (window.location.hostname === 'localhost'
-    ? 'http://localhost:3001/'
-    : 'https://fussball-api.onrender.com/');
+    ? 'http://localhost:3001'
+    : 'https://fussball-api.onrender.com/')).replace(/\/+$/, '');
+
+const REQUEST_TIMEOUT = 20000;
+
+async function apiRequest(path, options = {}, timeout = REQUEST_TIMEOUT) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeout);
+  try {
+    return await fetch(`${API}/${path.replace(/^\/+/, '')}`, {
+      ...options,
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+async function fetchJson(path) {
+  const response = await apiRequest(path, { cache: 'no-store' });
+  if (!response.ok) {
+    throw new Error(`${path}: HTTP ${response.status}`);
+  }
+  return response.json();
+}
 
 // Icons für den Teilnahme‑Status
 const STATUS_ICONS = ['✅', '❌', '⏳'];
@@ -50,11 +72,25 @@ const parseGermanDate = (str) => {
   return new Date(Number(y), Number(m) - 1, Number(d));
 };
 
+const renameObjectKey = (source, oldKey, newKey) => {
+  const result = { ...(source || {}) };
+  if (oldKey !== newKey && Object.prototype.hasOwnProperty.call(result, oldKey)) {
+    result[newKey] = result[oldKey];
+    delete result[oldKey];
+  }
+  return result;
+};
+
+const toIsoDate = (value) => {
+  const date = value ? new Date(value) : new Date();
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+};
+
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function healthcheck() {
   try {
-    const res = await fetch(API + 'health', { cache: 'no-store' });
+    const res = await apiRequest('health', { cache: 'no-store' }, 15000);
     return res.ok;
   } catch {
     return false;
@@ -62,10 +98,10 @@ async function healthcheck() {
 }
 
 async function ensureBackendAwake() {
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 4; i++) {
     const ok = await healthcheck();
     if (ok) return true;
-    await wait(1500 * (i + 1));
+    if (i < 3) await wait(2000 * (i + 1));
   }
   return false;
 }
@@ -77,12 +113,14 @@ export default function App() {
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [initializing, setInitializing] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const [users, setUsers] = useState([]);
   const [newUserName, setNewUserName] = useState('');
   const [newUserPass, setNewUserPass] = useState('');
+  const [passwordDrafts, setPasswordDrafts] = useState({});
   const [players, setPlayers] = useState([]);
-  const [showTeam, setShowTeam] = useState(false);
   const [editPlayerId, setEditPlayerId] = useState(null);
   const [playerDraft, setPlayerDraft] = useState({});
   const [newName, setNewName] = useState('');
@@ -90,9 +128,8 @@ export default function App() {
   const [newNote, setNewNote] = useState('');
   const [newMemberSince, setNewMemberSince] = useState('');
   const [trainings, setTrainings] = useState([]);
-  const [showAdmin, setShowAdmin] = useState(false);
   const [expandedTraining, setExpandedTraining] = useState(null);
-  const [editDateIdx, setEditDateIdx] = useState(null);
+  const [editTrainingKey, setEditTrainingKey] = useState(null);
   const [editDateValue, setEditDateValue] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [searchText, setSearchText] = useState('');
@@ -108,7 +145,8 @@ export default function App() {
   const [expandedChecklist, setExpandedChecklist] = useState(null);
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
-  const version = '5.1';
+  const version = '5.2';
+  const currentYear = new Date().getFullYear();
 
   async function runOnce(fn) {
     if (busy) return false;
@@ -116,19 +154,26 @@ export default function App() {
     try {
       await fn();
       return true;
+    } catch (error) {
+      console.error(error);
+      alert(
+        error?.name === 'AbortError'
+          ? 'Der Server antwortet nicht. Bitte versuche es erneut.'
+          : 'Die Aktion konnte nicht abgeschlossen werden.'
+      );
+      return false;
     } finally {
       setBusy(false);
     }
   }
 
   async function refetchAll() {
-    try {
-      const [u, p, t, c] = await Promise.all([
-        fetch(API + 'users').then((r) => (r.ok ? r.json() : [])),
-        fetch(API + 'players').then((r) => (r.ok ? r.json() : [])),
-        fetch(API + 'trainings').then((r) => (r.ok ? r.json() : [])),
-        fetch(API + 'checklists').then((r) => (r.ok ? r.json() : [])),
-      ]);
+    const [u, p, t, c] = await Promise.all([
+      fetchJson('users'),
+      fetchJson('players'),
+      fetchJson('trainings'),
+      fetchJson('checklists'),
+    ]);
       setUsers(Array.isArray(u) ? u : []);
       setPlayers(
         Array.isArray(p)
@@ -151,20 +196,46 @@ export default function App() {
             }))
           : []
       );
-      setChecklists(Array.isArray(c) ? c : []);
-    } catch {
-      // ignorieren
+      setChecklists(
+        Array.isArray(c)
+          ? c.map((checklist) => ({
+              ...checklist,
+              items: checklist.items || {},
+              createdAt: toIsoDate(checklist.createdAt),
+              lastEdited:
+                checklist.lastEdited?.by && checklist.lastEdited?.at
+                  ? checklist.lastEdited
+                  : null,
+            }))
+          : []
+      );
+  }
+
+  async function loadInitialData() {
+    setInitializing(true);
+    setLoadError('');
+    const awake = await ensureBackendAwake();
+    if (!awake) {
+      setLoadError('Der Server konnte nicht gestartet werden.');
+      setInitializing(false);
+      return;
+    }
+    try {
+      await refetchAll();
+    } catch (error) {
+      console.error(error);
+      setLoadError('Die Daten konnten nicht geladen werden.');
+    } finally {
+      setInitializing(false);
     }
   }
 
   useEffect(() => {
-    (async () => {
-      await ensureBackendAwake();
-      await refetchAll();
-    })();
+    loadInitialData();
   }, []);
 
   const handleLogin = () => {
+    if (initializing) return;
     const trimmedName = loginName.trim();
     const user = users.find(
       (u) => u.name === trimmedName && u.password === loginPass
@@ -185,8 +256,6 @@ export default function App() {
     setLoggedInUser(null);
     setShowStartMenu(true);
     setShowSettings(false);
-    setShowTeam(false);
-    setShowAdmin(false);
     setShowChecklists(false);
     setLoginError('');
   };
@@ -204,7 +273,7 @@ export default function App() {
         return;
       }
       const updated = [...users, { name, password: newUserPass }];
-      const res = await fetch(API + 'users', {
+      const res = await apiRequest('users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
@@ -221,9 +290,15 @@ export default function App() {
 
   const updateUserPassword = (index, newPass) =>
     runOnce(async () => {
-      const updated = [...users];
-      updated[index].password = newPass;
-      const res = await fetch(API + 'users', {
+      if (!newPass) {
+        alert('Bitte ein neues Passwort eingeben.');
+        return;
+      }
+      if (!users[index]) return;
+      const updated = users.map((user, userIndex) =>
+        userIndex === index ? { ...user, password: newPass } : user
+      );
+      const res = await apiRequest('users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
@@ -233,6 +308,8 @@ export default function App() {
         return;
       }
       await refetchAll();
+      const draftKey = users[index]._id || users[index].name;
+      setPasswordDrafts((drafts) => ({ ...drafts, [draftKey]: '' }));
       alert(`Passwort für ${updated[index].name} geändert.`);
     });
 
@@ -246,7 +323,7 @@ export default function App() {
       if (!window.confirm(`Benutzer ${userToDelete.name} wirklich löschen?`)) return;
       const updated = [...users];
       updated.splice(index, 1);
-      const res = await fetch(API + 'users', {
+      const res = await apiRequest('users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
@@ -274,9 +351,19 @@ export default function App() {
     runOnce(async () => {
       const idx = players.findIndex((p) => p.name === editPlayerId);
       if (idx === -1) return;
-      const updated = [...players];
-      updated[idx] = {
+      const nextName = (playerDraft.name || '').trim();
+      if (!nextName) {
+        alert('Bitte einen Namen eingeben.');
+        return;
+      }
+      if (players.some((p, playerIndex) => playerIndex !== idx && p.name === nextName)) {
+        alert('Dieser Name existiert bereits.');
+        return;
+      }
+      const previousName = players[idx].name;
+      const updatedPlayer = {
         ...playerDraft,
+        name: nextName,
         note: typeof playerDraft.note === 'string' ? playerDraft.note : '',
         memberSince:
           typeof playerDraft.memberSince === 'string'
@@ -284,14 +371,46 @@ export default function App() {
             : '',
         inactive: !!playerDraft.inactive,
       };
-      const res = await fetch(API + 'players', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset: true, list: updated }),
-      });
+      const updated = players.map((player, playerIndex) =>
+        playerIndex === idx ? updatedPlayer : player
+      );
+      const requests = [
+        apiRequest('players', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reset: true, list: updated }),
+        }),
+      ];
+
+      if (previousName !== nextName) {
+        const updatedTrainings = trainings.map((training) => ({
+          ...training,
+          participants: renameObjectKey(training.participants, previousName, nextName),
+          trainerStatus: renameObjectKey(training.trainerStatus, previousName, nextName),
+          playerNotes: renameObjectKey(training.playerNotes, previousName, nextName),
+        }));
+        const updatedChecklists = checklists.map((checklist) => ({
+          ...checklist,
+          items: renameObjectKey(checklist.items, previousName, nextName),
+        }));
+        requests.push(
+          apiRequest('trainings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reset: true, list: updatedTrainings }),
+          }),
+          apiRequest('checklists', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reset: true, list: updatedChecklists }),
+          })
+        );
+      }
+
+      const responses = await Promise.all(requests);
       setEditPlayerId(null);
       setPlayerDraft({});
-      if (!res.ok) {
+      if (responses.some((response) => !response.ok)) {
         alert('Fehler beim Bearbeiten.');
         return;
       }
@@ -311,6 +430,10 @@ export default function App() {
         alert('Bitte einen Namen eingeben.');
         return;
       }
+      if (players.some((player) => player.name.toLowerCase() === trimmed.toLowerCase())) {
+        alert('Dieser Name existiert bereits.');
+        return;
+      }
       const isTrainer = newRole === 'Trainer';
       const updated = [
         ...players,
@@ -322,7 +445,7 @@ export default function App() {
           inactive: false,
         },
       ];
-      const res = await fetch(API + 'players', {
+      const res = await apiRequest('players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
@@ -343,9 +466,10 @@ export default function App() {
     runOnce(async () => {
       const idx = players.findIndex((p) => p.name === player.name);
       if (idx === -1) return;
-      const updated = [...players];
-      updated[idx].note = noteValue;
-      const res = await fetch(API + 'players', {
+      const updated = players.map((item, itemIndex) =>
+        itemIndex === idx ? { ...item, note: noteValue } : item
+      );
+      const res = await apiRequest('players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
@@ -362,9 +486,10 @@ export default function App() {
     runOnce(async () => {
       const idx = players.findIndex((p) => p.name === player.name);
       if (idx === -1) return;
-      const updated = [...players];
-      updated[idx].memberSince = memberSinceValue;
-      const res = await fetch(API + 'players', {
+      const updated = players.map((item, itemIndex) =>
+        itemIndex === idx ? { ...item, memberSince: memberSinceValue } : item
+      );
+      const res = await apiRequest('players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
@@ -381,9 +506,10 @@ export default function App() {
     runOnce(async () => {
       const idx = players.findIndex((p) => p.name === player.name);
       if (idx === -1) return;
-      const updated = [...players];
-      updated[idx].isTrainer = role === 'Trainer';
-      const res = await fetch(API + 'players', {
+      const updated = players.map((item, itemIndex) =>
+        itemIndex === idx ? { ...item, isTrainer: role === 'Trainer' } : item
+      );
+      const res = await apiRequest('players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
@@ -403,7 +529,7 @@ export default function App() {
       if (idx === -1) return;
       const updated = [...players];
       updated.splice(idx, 1);
-      const res = await fetch(API + 'players', {
+      const res = await apiRequest('players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
@@ -421,9 +547,10 @@ export default function App() {
     runOnce(async () => {
       const idx = players.findIndex((p) => p.name === player.name);
       if (idx === -1) return;
-      const updated = [...players];
-      updated[idx].inactive = !updated[idx].inactive;
-      const res = await fetch(API + 'players', {
+      const updated = players.map((item, itemIndex) =>
+        itemIndex === idx ? { ...item, inactive: !item.inactive } : item
+      );
+      const res = await apiRequest('players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
@@ -447,6 +574,17 @@ export default function App() {
       return bd.localeCompare(ad);
     });
   }
+
+  const trainingKey = (training) =>
+    String(
+      training?._id ||
+        `${training?.date || ''}|${training?.createdBy || ''}|${training?.lastEdited?.at || ''}`
+    );
+
+  const findTrainingIndex = (training) => {
+    const key = trainingKey(training);
+    return trainings.findIndex((item) => trainingKey(item) === key);
+  };
 
   const addTraining = () =>
     runOnce(async () => {
@@ -476,7 +614,7 @@ export default function App() {
           note: '',
         },
       ];
-      const res = await fetch(API + 'trainings', {
+      const res = await apiRequest('trainings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
@@ -492,13 +630,11 @@ export default function App() {
   const deleteTraining = (training) =>
     runOnce(async () => {
       if (!window.confirm('Training wirklich löschen?')) return;
-      const idx = trainings.findIndex(
-        (t) => (t.date || '') + (t.createdBy || '') === training.date + (training.createdBy || '')
-      );
+      const idx = findTrainingIndex(training);
       if (idx === -1) return;
       const updated = [...trainings];
       updated.splice(idx, 1);
-      const res = await fetch(API + 'trainings', {
+      const res = await apiRequest('trainings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
@@ -513,13 +649,18 @@ export default function App() {
 
   const saveTrainingNote = (training, noteValue) =>
     runOnce(async () => {
-      const idx = trainings.findIndex(
-        (t) => (t.date || '') + (t.createdBy || '') === training.date + (training.createdBy || '')
-      );
+      const idx = findTrainingIndex(training);
       if (idx === -1) return;
-      const updated = [...trainings];
-      updated[idx].note = noteValue;
-      const res = await fetch(API + 'trainings', {
+      const updated = trainings.map((item, itemIndex) =>
+        itemIndex === idx
+          ? {
+              ...item,
+              note: noteValue,
+              lastEdited: { by: loggedInUser, at: formatDateTime(new Date()) },
+            }
+          : item
+      );
+      const res = await apiRequest('trainings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
@@ -534,16 +675,21 @@ export default function App() {
 
   const savePlayerNote = (training, playerName, noteValue) =>
     runOnce(async () => {
-      const idx = trainings.findIndex(
-        (t) => (t.date || '') + (t.createdBy || '') === training.date + (training.createdBy || '')
-      );
+      const idx = findTrainingIndex(training);
       if (idx === -1) return;
-      const updated = [...trainings];
-      updated[idx].playerNotes = {
-        ...(updated[idx].playerNotes || {}),
-        [playerName]: noteValue,
-      };
-      const res = await fetch(API + 'trainings', {
+      const updated = trainings.map((item, itemIndex) =>
+        itemIndex === idx
+          ? {
+              ...item,
+              playerNotes: {
+                ...(item.playerNotes || {}),
+                [playerName]: noteValue,
+              },
+              lastEdited: { by: loggedInUser, at: formatDateTime(new Date()) },
+            }
+          : item
+      );
+      const res = await apiRequest('trainings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
@@ -565,15 +711,14 @@ export default function App() {
       const formatted = `${weekday}, ${String(day).padStart(2, '0')}.${String(month).padStart(2, '0')}.${year}`;
       const now = new Date();
       const timestamp = formatDateTime(now);
-      const idx = trainings.findIndex(
-        (t) => (t.date || '') + (t.createdBy || '') === training.date + (training.createdBy || '')
-      );
+      const idx = findTrainingIndex(training);
       if (idx === -1) return;
-      const updated = [...trainings];
-      updated[idx].date = formatted;
-      updated[idx].isEditing = false;
-      updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
-      const res = await fetch(API + 'trainings', {
+      const updated = trainings.map((item, itemIndex) =>
+        itemIndex === idx
+          ? { ...item, date: formatted, lastEdited: { by: loggedInUser, at: timestamp } }
+          : item
+      );
+      const res = await apiRequest('trainings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
@@ -603,7 +748,7 @@ export default function App() {
         alert('Keine doppelten Trainings vorhanden.');
         return;
       }
-      const res = await fetch(API + 'trainings', {
+      const res = await apiRequest('trainings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: uniqueList }),
@@ -621,21 +766,24 @@ export default function App() {
     runOnce(async () => {
       const now = new Date();
       const timestamp = formatDateTime(now);
-      const idx = trainings.findIndex(
-        (t) => (t.date || '') + (t.createdBy || '') === training.date + (training.createdBy || '')
-      );
+      const idx = findTrainingIndex(training);
       if (idx === -1) return;
-      const updated = [...trainings];
-      updated[idx].participants = updated[idx].participants || {};
-      updated[idx].participants[name] = statusIcon;
-      updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
-      const res = await fetch(API + 'trainings', {
+      const updated = trainings.map((item, itemIndex) =>
+        itemIndex === idx
+          ? {
+              ...item,
+              participants: { ...(item.participants || {}), [name]: statusIcon },
+              lastEdited: { by: loggedInUser, at: timestamp },
+            }
+          : item
+      );
+      const res = await apiRequest('trainings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
       });
       if (!res.ok) {
-        console.error('Fehler beim Aktualisieren des Teilnahme-Status.');
+        alert('Fehler beim Aktualisieren des Teilnahme-Status.');
         return;
       }
       setTrainings(updated);
@@ -645,21 +793,24 @@ export default function App() {
     runOnce(async () => {
       const now = new Date();
       const timestamp = formatDateTime(now);
-      const idx = trainings.findIndex(
-        (t) => (t.date || '') + (t.createdBy || '') === training.date + (training.createdBy || '')
-      );
+      const idx = findTrainingIndex(training);
       if (idx === -1) return;
-      const updated = [...trainings];
-      updated[idx].trainerStatus = updated[idx].trainerStatus || {};
-      updated[idx].trainerStatus[name] = newStatus;
-      updated[idx].lastEdited = { by: loggedInUser, at: timestamp };
-      const res = await fetch(API + 'trainings', {
+      const updated = trainings.map((item, itemIndex) =>
+        itemIndex === idx
+          ? {
+              ...item,
+              trainerStatus: { ...(item.trainerStatus || {}), [name]: newStatus },
+              lastEdited: { by: loggedInUser, at: timestamp },
+            }
+          : item
+      );
+      const res = await apiRequest('trainings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
       });
       if (!res.ok) {
-        console.error('Fehler beim Aktualisieren des Trainer-Status.');
+        alert('Fehler beim Aktualisieren des Trainer-Status.');
         return;
       }
       setTrainings(updated);
@@ -699,23 +850,36 @@ export default function App() {
           <h1 className="login-headline">Fußball-App</h1>
           <div className="login-version">Version {version}</div>
           <div className="login-hint">
-            Nach längerer Inaktivität muss der Server aktiviert werden. Dies dauert einen Moment. Beim Start des Servers ist kein Login möglich.
+            {initializing
+              ? 'Der Server wird gestartet und die Daten werden geladen…'
+              : loadError || 'Die App ist bereit.'}
           </div>
           <input
             type="text"
             placeholder="Benutzername"
             value={loginName}
             onChange={(e) => setLoginName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+            autoComplete="username"
+            disabled={initializing}
           />
           <input
             type="password"
             placeholder="Passwort"
             value={loginPass}
             onChange={(e) => setLoginPass(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+            autoComplete="current-password"
+            disabled={initializing}
           />
-          <button onClick={handleLogin} disabled={busy}>
-            {busy ? 'Bitte warten…' : 'Einloggen'}
+          <button onClick={handleLogin} disabled={busy || initializing || !!loadError}>
+            {initializing ? 'Bitte warten…' : 'Einloggen'}
           </button>
+          {loadError && (
+            <button className="retry-button" onClick={loadInitialData} disabled={initializing}>
+              Erneut versuchen
+            </button>
+          )}
           {loginError && <p className="login-error">{loginError}</p>}
         </div>
       </div>
@@ -762,7 +926,7 @@ export default function App() {
           ⚙ Einstellungen
         </button>
         <div style={{ marginTop: '3.5em', textAlign: 'center', color: '#8bb2f4', fontSize: '1.04rem' }}>
-          © 2025 Matthias Kopf
+          © {currentYear} Matthias Kopf
         </div>
         <button
           style={{
@@ -822,10 +986,7 @@ export default function App() {
             </button>
           </div>
           <ul className="player-list">
-            {players
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0))
-              .map((p) =>
+            {trainersFirst.map((p) =>
                 editPlayerId === p.name ? (
                   <li
                     key={p.name}
@@ -845,7 +1006,6 @@ export default function App() {
                       onChange={(e) =>
                         setPlayerDraft((draft) => ({ ...draft, note: e.target.value }))
                       }
-                      onBlur={(e) => handlePlayerNoteBlur(playerDraft, e.target.value)}
                       placeholder="Notiz"
                     />
                     <input
@@ -854,7 +1014,6 @@ export default function App() {
                       onChange={(e) =>
                         setPlayerDraft((draft) => ({ ...draft, memberSince: e.target.value }))
                       }
-                      onBlur={(e) => handlePlayerMemberSinceBlur(playerDraft, e.target.value)}
                       placeholder="Hinweis"
                     />
                     <select
@@ -904,8 +1063,9 @@ export default function App() {
                       }}
                       onChange={(e) => {
                         const idx = players.findIndex((x) => x.name === p.name);
-                        const updated = [...players];
-                        updated[idx].note = e.target.value;
+                        const updated = players.map((player, playerIndex) =>
+                          playerIndex === idx ? { ...player, note: e.target.value } : player
+                        );
                         setPlayers(updated);
                       }}
                       onBlur={(e) => handlePlayerNoteBlur(p, e.target.value)}
@@ -925,8 +1085,11 @@ export default function App() {
                       }}
                       onChange={(e) => {
                         const idx = players.findIndex((x) => x.name === p.name);
-                        const updated = [...players];
-                        updated[idx].memberSince = e.target.value;
+                        const updated = players.map((player, playerIndex) =>
+                          playerIndex === idx
+                            ? { ...player, memberSince: e.target.value }
+                            : player
+                        );
                         setPlayers(updated);
                       }}
                       onBlur={(e) => handlePlayerMemberSinceBlur(p, e.target.value)}
@@ -973,10 +1136,11 @@ export default function App() {
                 onChange={(e) => setNewUserName(e.target.value)}
               />
               <input
-                type="text"
+                type="password"
                 placeholder="Passwort"
                 value={newUserPass}
                 onChange={(e) => setNewUserPass(e.target.value)}
+                autoComplete="new-password"
               />
               <button onClick={addNewUser} disabled={busy}>
                 {busy ? '…' : '➕ Erstellen'}
@@ -987,9 +1151,16 @@ export default function App() {
                 <li key={u.name}>
                   <span style={{ color: '#e0e0e0' }}>{u.name}</span>
                   <input
-                    type="text"
-                    value={u.password}
-                    onChange={(e) => updateUserPassword(idx, e.target.value)}
+                    type="password"
+                    placeholder="Neues Passwort"
+                    value={passwordDrafts[u._id || u.name] || ''}
+                    onChange={(e) =>
+                      setPasswordDrafts((drafts) => ({
+                        ...drafts,
+                        [u._id || u.name]: e.target.value,
+                      }))
+                    }
+                    autoComplete="new-password"
                     style={{
                       marginLeft: '0.5rem',
                       backgroundColor: '#232942',
@@ -999,6 +1170,15 @@ export default function App() {
                       padding: '0.3rem 0.6rem',
                     }}
                   />
+                  <button
+                    className="btn-save-players"
+                    onClick={() =>
+                      updateUserPassword(idx, passwordDrafts[u._id || u.name] || '')
+                    }
+                    disabled={busy || !passwordDrafts[u._id || u.name]}
+                  >
+                    Passwort speichern
+                  </button>
                   <button className="btn-delete" onClick={() => deleteUser(idx)} disabled={busy}>
                     ❌ Löschen
                   </button>
@@ -1028,7 +1208,7 @@ export default function App() {
         </button>
         <footer>
           <div style={{ marginTop: '2.5em', color: '#8bb2f4', fontSize: '0.97rem' }}>
-            © 2025 Matthias Kopf
+            © {currentYear} Matthias Kopf
           </div>
         </footer>
       </div>
@@ -1103,8 +1283,8 @@ export default function App() {
                 Filter zurücksetzen
               </button>
             </div>
-            {trainingsToShow.map((t, idx) => {
-              const tKey = (t._id || '') + (t.date || '') + (t.createdBy || '');
+            {trainingsToShow.map((t) => {
+              const tKey = trainingKey(t);
               const expandedKey = expandedTraining === tKey;
               return (
                 <div key={tKey} className="training">
@@ -1125,7 +1305,7 @@ export default function App() {
                           <strong>{t.lastEdited.by}</strong>
                         </div>
                       )}
-                      {editDateIdx === idx ? (
+                      {editTrainingKey === tKey ? (
                         <div className="edit-date-row">
                           <input
                             type="date"
@@ -1137,7 +1317,7 @@ export default function App() {
                             className="btn-save-date"
                             onClick={() => {
                               saveEditedDate(t, editDateValue);
-                              setEditDateIdx(null);
+                              setEditTrainingKey(null);
                               setEditDateValue('');
                             }}
                             disabled={busy}
@@ -1147,7 +1327,7 @@ export default function App() {
                           <button
                             className="btn-save-date"
                             onClick={() => {
-                              setEditDateIdx(null);
+                              setEditTrainingKey(null);
                               setEditDateValue('');
                             }}
                             disabled={busy}
@@ -1164,7 +1344,7 @@ export default function App() {
                               setEditDateValue(
                                 parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : ''
                               );
-                              setEditDateIdx(idx);
+                              setEditTrainingKey(tKey);
                             }}
                             disabled={busy}
                           >
@@ -1178,22 +1358,17 @@ export default function App() {
                           placeholder="Notiz zum Training (z.B. was gemacht wurde...)"
                           value={typeof t.note === 'string' ? t.note : ''}
                           onChange={(e) => {
-                            const idx2 = trainings.findIndex(
-                              (tr) =>
-                                (tr._id || '') + (tr.date || '') + (tr.createdBy || '') === tKey
-                            );
+                            const idx2 = trainings.findIndex((tr) => trainingKey(tr) === tKey);
                             if (idx2 === -1) return;
-                            const updated = [...trainings];
-                            updated[idx2].note = e.target.value;
+                            const updated = trainings.map((item, itemIndex) =>
+                              itemIndex === idx2 ? { ...item, note: e.target.value } : item
+                            );
                             setTrainings(updated);
                           }}
                           onBlur={(e) => saveTrainingNote(t, e.target.value)}
                         />
                       </div>
-                      {players
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .sort((a, b) => (b.isTrainer ? 1 : 0) - (a.isTrainer ? 1 : 0))
-                        .map((p, idxP) => {
+                      {trainersFirst.map((p, idxP) => {
                           const isTrainer = !!p.isTrainer;
                           const teamHinweis = p.memberSince || '';
                           const playerNote = (t.playerNotes && t.playerNotes[p.name]) || '';
@@ -1279,15 +1454,20 @@ export default function App() {
                                       value={playerNote}
                                       onChange={(e) => {
                                         const idxT = trainings.findIndex(
-                                          (tr) =>
-                                            (tr._id || '') + (tr.date || '') + (tr.createdBy || '') === tKey
+                                          (tr) => trainingKey(tr) === tKey
                                         );
                                         if (idxT === -1) return;
-                                        const updatedTrainings = [...trainings];
-                                        updatedTrainings[idxT].playerNotes = {
-                                          ...updatedTrainings[idxT].playerNotes,
-                                          [p.name]: e.target.value,
-                                        };
+                                        const updatedTrainings = trainings.map((item, itemIndex) =>
+                                          itemIndex === idxT
+                                            ? {
+                                                ...item,
+                                                playerNotes: {
+                                                  ...(item.playerNotes || {}),
+                                                  [p.name]: e.target.value,
+                                                },
+                                              }
+                                            : item
+                                        );
                                         setTrainings(updatedTrainings);
                                       }}
                                       onBlur={(e) => savePlayerNote(t, p.name, e.target.value)}
@@ -1298,24 +1478,14 @@ export default function App() {
                             );
                           }
                         })}
-                      {!t.isEditing && (
-                        <button
-                          className="btn-save-training"
-                          onClick={() => alert('Änderungen im Training wurden gespeichert.')}
-                          disabled={busy}
-                        >
-                          💾 Speichern
-                        </button>
-                      )}
-                      {!t.isEditing && (
-                        <button
-                          className="btn-delete-training"
-                          onClick={() => deleteTraining(t)}
-                          disabled={busy}
-                        >
-                          🗑 Training löschen
-                        </button>
-                      )}
+                      <div className="autosave-hint">Änderungen werden automatisch gespeichert.</div>
+                      <button
+                        className="btn-delete-training"
+                        onClick={() => deleteTraining(t)}
+                        disabled={busy}
+                      >
+                        🗑 Training löschen
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1364,7 +1534,7 @@ export default function App() {
                     border: 0,
                     cursor: 'pointer',
                   }}
-                  onClick={exportPDF}
+                  onClick={() => runOnce(exportPDF)}
                   disabled={busy}
                 >
                   Tabelle als PDF exportieren
@@ -1441,7 +1611,7 @@ export default function App() {
           <p
             style={{ fontSize: '0.93rem', color: '#8bb2f4', marginTop: '0.4rem', marginBottom: '1.3rem' }}
           >
-            © 2025 Matthias Kopf. Alle Rechte vorbehalten.
+            © {currentYear} Matthias Kopf. Alle Rechte vorbehalten.
           </p>
           <button
             style={{
@@ -1468,6 +1638,7 @@ export default function App() {
 
   if (showChecklists) {
     const playersOnly = trainersFirst.filter((p) => !p.isTrainer);
+    const activePlayersOnly = playersOnly.filter((p) => !p.inactive);
     const rowBg = (i) => (i % 2 === 0 ? '#1e2744' : '#19213a');
     const sanitizeList = (rawList, editorName = loggedInUser) =>
       (rawList || []).map((cl) => ({
@@ -1476,7 +1647,7 @@ export default function App() {
           Object.entries(cl.items || {}).map(([k, v]) => [k, !!v])
         ),
         createdBy: cl.createdBy || editorName || '',
-        createdAt: cl.createdAt || new Date(cl.createdAt).toISOString() || new Date().toISOString(),
+        createdAt: toIsoDate(cl.createdAt),
         lastEdited:
           cl.lastEdited && cl.lastEdited.by && cl.lastEdited.at
             ? cl.lastEdited
@@ -1484,20 +1655,17 @@ export default function App() {
         _id: cl._id || undefined,
       }));
     const saveChecklistList = async (rawList, editorName = loggedInUser) => {
-      try {
-        const cleaned = sanitizeList(rawList, editorName);
-        const res = await fetch(API + 'checklists', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reset: true, list: cleaned }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-        const serverList = await res.json();
-        setChecklists(Array.isArray(serverList) ? serverList : []);
-      } catch (err) {
-        console.error('POST checklists failed', err);
-        alert('Fehler beim Speichern der Checklisten.');
-      }
+      const cleaned = sanitizeList(rawList, editorName);
+      const res = await apiRequest('checklists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reset: true, list: cleaned }),
+      });
+      if (!res.ok) throw new Error(`Checklisten: HTTP ${res.status}`);
+      const serverList = await res.json();
+      const normalized = Array.isArray(serverList) ? serverList : [];
+      setChecklists(normalized);
+      return normalized;
     };
     const ensurePlayersPresent = (cl) => {
       const items = { ...(cl.items || {}) };
@@ -1510,7 +1678,7 @@ export default function App() {
       runOnce(async () => {
         const title = newChecklistTitle.trim() || 'Neue Checkliste';
         const items = {};
-        playersOnly.forEach((p) => {
+        activePlayersOnly.forEach((p) => {
           items[p.name] = false;
         });
         const newCl = {
@@ -1521,10 +1689,13 @@ export default function App() {
           lastEdited: { by: loggedInUser, at: formatDateTime(new Date()) },
         };
         const updated = [...checklists, newCl];
-        setChecklists(updated);
-        const key = (newCl._id || '') + newCl.createdAt + updated.length;
-        setExpandedChecklist(key);
-        await saveChecklistList(updated, loggedInUser);
+        const saved = await saveChecklistList(updated, loggedInUser);
+        const savedChecklist = saved.find((checklist) => checklist.createdAt === newCl.createdAt);
+        setExpandedChecklist(
+          savedChecklist
+            ? (savedChecklist._id || '') + (savedChecklist.createdAt || '') + saved.indexOf(savedChecklist)
+            : null
+        );
         setNewChecklistTitle('');
       });
     const renameChecklist = (idx, newTitle) =>
@@ -1535,7 +1706,6 @@ export default function App() {
           title: newTitle.trim() || 'Unbenannt',
           lastEdited: { by: loggedInUser, at: formatDateTime(new Date()) },
         };
-        setChecklists(updated);
         await saveChecklistList(updated, loggedInUser);
       });
     const deleteChecklist = (idx) =>
@@ -1543,24 +1713,22 @@ export default function App() {
         if (!window.confirm('Checkliste wirklich löschen?')) return;
         const updated = [...checklists];
         updated.splice(idx, 1);
-        setChecklists(updated);
         await saveChecklistList(updated, loggedInUser);
         setExpandedChecklist(null);
       });
     const toggleItem = (idx, playerName) =>
       runOnce(async () => {
         const updated = [...checklists];
-        const cl = { ...updated[idx] };
+        const cl = { ...ensurePlayersPresent(updated[idx]) };
         cl.items = { ...cl.items, [playerName]: !cl.items[playerName] };
         cl.lastEdited = { by: loggedInUser, at: formatDateTime(new Date()) };
         updated[idx] = cl;
-        setChecklists(updated);
         await saveChecklistList(updated, loggedInUser);
       });
     const markAll = (idx, value) =>
       runOnce(async () => {
         const updated = [...checklists];
-        const cl = { ...updated[idx] };
+        const cl = { ...ensurePlayersPresent(updated[idx]) };
         const newItems = { ...cl.items };
         Object.keys(newItems).forEach((k) => {
           newItems[k] = value;
@@ -1568,7 +1736,6 @@ export default function App() {
         cl.items = newItems;
         cl.lastEdited = { by: loggedInUser, at: formatDateTime(new Date()) };
         updated[idx] = cl;
-        setChecklists(updated);
         await saveChecklistList(updated, loggedInUser);
       });
     return (
@@ -1694,8 +1861,8 @@ export default function App() {
                       {cl.createdAt ? new Date(cl.createdAt).toLocaleString() : '–'}
                     </div>
                     <div style={{ marginTop: '0.15rem', fontSize: '0.92rem', color: '#9fe3a6' }}>
-                      Zuletzt geändert <strong>{cl.lastEdited.at || '-'}</strong> von{' '}
-                      <strong>{cl.lastEdited.by || '-'}</strong>
+                      Zuletzt geändert <strong>{cl.lastEdited?.at || '-'}</strong> von{' '}
+                      <strong>{cl.lastEdited?.by || '-'}</strong>
                     </div>
                   </div>
                 )}
@@ -1723,7 +1890,7 @@ export default function App() {
           <p
             style={{ fontSize: '0.93rem', color: '#8bb2f4', marginTop: '0.4rem', marginBottom: '1.3rem' }}
           >
-            © 2025 Matthias Kopf. Alle Rechte vorbehalten.
+            © {currentYear} Matthias Kopf. Alle Rechte vorbehalten.
           </p>
           <button
             style={{
@@ -1793,8 +1960,12 @@ export default function App() {
     alert('Auswertung aktualisiert.');
   }
 
-  function exportPDF() {
+  async function exportPDF() {
     if (!reportData) return;
+    const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable/es'),
+    ]);
     const doc = new jsPDF();
     doc.setFontSize(18);
     doc.text('⚽ Fußball-App – Trainingsteilnahme', 14, 18);
@@ -1807,7 +1978,7 @@ export default function App() {
       r.note,
       r.percent + ' %',
     ]);
-    doc.autoTable({
+    autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
       startY: 33,
@@ -1817,8 +1988,7 @@ export default function App() {
       styles: { fontSize: 10, cellPadding: 2, minCellHeight: 7 },
     });
     doc.setFontSize(11);
-    doc.text('© 2025 Matthias Kopf. Alle Rechte vorbehalten.', 14, doc.internal.pageSize.height - 10);
+    doc.text(`© ${currentYear} Matthias Kopf. Alle Rechte vorbehalten.`, 14, doc.internal.pageSize.height - 10);
     doc.save(`Training-Auswertung-${fromDate}-bis-${toDate}.pdf`);
   }
 }
-/* --------------------------------------------------

@@ -3,7 +3,6 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const bodyParser = require('body-parser');
 
 // === Modelle ===
 const Checklist = require('./models/Checklist');
@@ -43,17 +42,22 @@ const app = express();
 app.use(cors());
 
 // ⚙️ Body-Limit deutlich erhöht (Fix für HTTP 413)
-app.use(bodyParser.json({ limit: '10mb' }));
-app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // ---- Diagnose-/Health-Routen ----
-app.get('/__health', (req, res) => {
-  res.json({
-    ok: true,
-    db: mongoose.connection?.readyState === 1 ? 'connected' : 'not-connected',
-    cwd: process.cwd(),
+const sendHealth = (_req, res) => {
+  const connected = mongoose.connection?.readyState === 1;
+  res.status(connected ? 200 : 503).json({
+    ok: connected,
+    db: connected ? 'connected' : 'not-connected',
   });
-});
+};
+
+// Öffentlicher Healthcheck für Frontend und Hosting. Der alte Diagnosepfad
+// bleibt aus Kompatibilitätsgründen erhalten.
+app.get('/health', sendHealth);
+app.get('/__health', sendHealth);
 
 app.get('/__routes', (req, res) => {
   const routes = (app._router?.stack || [])
@@ -128,7 +132,8 @@ app.post('/players', async (req, res) => {
         name: p.name,
         isTrainer: !!p.isTrainer,
         note: typeof p.note === 'string' ? p.note : "",
-        memberSince: typeof p.memberSince === 'string' ? p.memberSince : ""
+        memberSince: typeof p.memberSince === 'string' ? p.memberSince : "",
+        inactive: !!p.inactive
       })));
     }
     const saved = await Player.find().lean();
@@ -204,7 +209,11 @@ app.post('/checklists', async (req, res) => {
         title: typeof cl.title === 'string' ? cl.title : 'Unbenannt',
         items: typeof cl.items === 'object' && cl.items !== null ? cl.items : {},
         createdBy: cl.createdBy || '',
-        createdAt: cl.createdAt ? new Date(cl.createdAt) : new Date()
+        createdAt: cl.createdAt ? new Date(cl.createdAt) : new Date(),
+        lastEdited:
+          cl.lastEdited && typeof cl.lastEdited === 'object'
+            ? cl.lastEdited
+            : null
       })));
     }
     const saved = await Checklist.find({}).sort({ createdAt: -1 }).lean();
