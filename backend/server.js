@@ -4,6 +4,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const { version } = require('./package.json');
+const revision = process.env.RENDER_GIT_COMMIT?.slice(0, 7) || 'local';
 
 // === Modelle ===
 const Checklist = require('./models/Checklist');
@@ -86,6 +87,8 @@ const sendHealth = (_req, res) => {
   res.status(connected ? 200 : 503).json({
     ok: connected,
     db: connected ? 'connected' : 'not-connected',
+    version,
+    revision,
   });
 };
 
@@ -109,7 +112,7 @@ app.get('/favicon.ico', (_req, res) => res.status(204).end());
 
 // Root-Info
 app.get('/', (_req, res) => {
-  res.json({ ok: true, service: 'fussball-api', version });
+  res.json({ ok: true, service: 'fussball-api', version, revision });
 });
 
 // === 5) API-Endpunkte ===
