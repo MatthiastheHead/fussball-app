@@ -1,6 +1,6 @@
 {
   "name": "fussball-backend",
-  "version": "1.0.0",
+  "version": "6.0.0",
   "description": "Backend für Fußball-App mit MongoDB",
   "main": "server.js",
   "scripts": {

@@ -3,11 +3,46 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const { version } = require('./package.json');
 
 // === Modelle ===
 const Checklist = require('./models/Checklist');
 const Player = require('./models/Player');
 const Training = require('./models/Training');
+
+async function replaceCollectionSafely(Model, list, cleanDocument) {
+  const existing = await Model.find({}).lean();
+  const existingById = new Map(existing.map(item => [String(item._id), item]));
+  const keepIds = [];
+  const newDocuments = [];
+  const updateOperations = [];
+
+  list.forEach(item => {
+    const id = String(item?._id || '');
+    const previous = mongoose.isValidObjectId(id) ? existingById.get(id) : null;
+    const clean = cleanDocument(item, previous || null);
+    if (previous) {
+      keepIds.push(id);
+      updateOperations.push({
+        replaceOne: {
+          filter: { _id: id },
+          replacement: clean,
+        },
+      });
+    } else {
+      newDocuments.push(clean);
+    }
+  });
+
+  if (newDocuments.length > 0) {
+    const inserted = await Model.insertMany(newDocuments);
+    keepIds.push(...inserted.map(item => String(item._id)));
+  }
+  if (updateOperations.length > 0) {
+    await Model.bulkWrite(updateOperations);
+  }
+  await Model.deleteMany(keepIds.length > 0 ? { _id: { $nin: keepIds } } : {});
+}
 
 // === 1) Überprüfung der Umgebung ===
 if (!process.env.MONGODB_URI) {
@@ -74,7 +109,7 @@ app.get('/favicon.ico', (_req, res) => res.status(204).end());
 
 // Root-Info
 app.get('/', (_req, res) => {
-  res.json({ ok: true, service: 'fussball-api', version: 1 });
+  res.json({ ok: true, service: 'fussball-api', version });
 });
 
 // === 5) API-Endpunkte ===
@@ -96,14 +131,27 @@ app.post('/users', async (req, res) => {
     return res.status(400).json({ error: 'Ungültige Anfrage: { reset: true, list: [...] } erwartet.' });
   }
   try {
-    await User.deleteMany({});
-    if (list.length > 0) {
-      await User.insertMany(list.map(u => ({ name: u.name, password: u.password })));
+    const cleanUsers = list.map(user => ({
+      name: typeof user?.name === 'string' ? user.name.trim() : '',
+      password: typeof user?.password === 'string' ? user.password : '',
+    }));
+    if (cleanUsers.some(user => !user.name || !user.password)) {
+      return res.status(400).json({ error: 'Jeder Benutzer benötigt Name und Passwort.' });
     }
+    if (new Set(cleanUsers.map(user => user.name)).size !== cleanUsers.length) {
+      return res.status(409).json({ error: 'Benutzernamen dürfen nicht doppelt vorkommen.' });
+    }
+    await replaceCollectionSafely(User, list, user => ({
+      name: user.name.trim(),
+      password: user.password,
+    }));
     const saved = await User.find().lean();
     res.json(saved);
   } catch (err) {
     console.error('Fehler POST /users:', err);
+    if (err?.code === 11000) {
+      return res.status(409).json({ error: 'Dieser Benutzername existiert bereits.' });
+    }
     res.status(500).json({ error: 'Datenbankfehler beim Speichern der Users' });
   }
 });
@@ -126,16 +174,22 @@ app.post('/players', async (req, res) => {
   }
 
   try {
-    await Player.deleteMany({});
-    if (list.length > 0) {
-      await Player.insertMany(list.map(p => ({
-        name: p.name,
+    const names = list.map(player =>
+      typeof player?.name === 'string' ? player.name.trim() : ''
+    );
+    if (names.some(name => !name)) {
+      return res.status(400).json({ error: 'Jedes Team-Mitglied benötigt einen Namen.' });
+    }
+    if (new Set(names.map(name => name.toLocaleLowerCase('de-DE'))).size !== names.length) {
+      return res.status(409).json({ error: 'Namen dürfen nicht doppelt vorkommen.' });
+    }
+    await replaceCollectionSafely(Player, list, p => ({
+        name: p.name.trim(),
         isTrainer: !!p.isTrainer,
         note: typeof p.note === 'string' ? p.note : "",
         memberSince: typeof p.memberSince === 'string' ? p.memberSince : "",
         inactive: !!p.inactive
-      })));
-    }
+      }));
     const saved = await Player.find().lean();
     res.json(saved);
   } catch (err) {
@@ -162,24 +216,103 @@ app.post('/trainings', async (req, res) => {
   }
 
   try {
-    await Training.deleteMany({});
-    if (list.length > 0) {
-      await Training.insertMany(
-        list.map(t => ({
-          date: t.date,
-          participants: t.participants || {},
-          trainerStatus: t.trainerStatus || {},
-          note: typeof t.note === 'string' ? t.note : "",
-          playerNotes: t.playerNotes || {},
-          createdBy: t.createdBy || '',
-          lastEdited: t.lastEdited || null
-        }))
-      );
+    const dates = list.map(t => (typeof t?.date === 'string' ? t.date.trim() : ''));
+    if (dates.some(date => !date)) {
+      return res.status(400).json({ error: 'Jedes Training benötigt ein gültiges Datum.' });
     }
+    if (new Set(dates).size !== dates.length) {
+      return res.status(409).json({ error: 'Für ein Datum darf nur ein Training angelegt werden.' });
+    }
+
+    const cleanObject = value =>
+      value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    const cleanDate = value => {
+      if (!value) return null;
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? null : date;
+    };
+    const cleanAudit = value => {
+      if (!value || typeof value !== 'object') return null;
+      return {
+        by: typeof value.by === 'string' ? value.by : '',
+        at: typeof value.at === 'string' ? value.at : '',
+        action: typeof value.action === 'string' ? value.action : '',
+      };
+    };
+    const cleanRatings = value =>
+      Object.fromEntries(
+        Object.entries(cleanObject(value)).map(([name, rating]) => [
+          name,
+          Math.max(
+            0,
+            Math.min(3, Number.isFinite(Number(rating)) ? Math.round(Number(rating)) : 0)
+          ),
+        ])
+      );
+    const cleanTraining = (training, previous = null) => ({
+      date: training.date.trim(),
+      participants: cleanObject(training.participants),
+      ratings: cleanRatings(training.ratings),
+      trainerStatus: cleanObject(training.trainerStatus),
+      note: typeof training.note === 'string' ? training.note : '',
+      playerNotes: cleanObject(training.playerNotes),
+      createdBy:
+        typeof training.createdBy === 'string' && training.createdBy.trim()
+          ? training.createdBy.trim()
+          : previous?.createdBy || '',
+      createdAt: cleanDate(training.createdAt) || previous?.createdAt || new Date(),
+      lastEdited: cleanAudit(training.lastEdited) || previous?.lastEdited || null,
+      history: Array.isArray(training.history)
+        ? training.history.map(cleanAudit).filter(Boolean).slice(-50)
+        : Array.isArray(previous?.history)
+          ? previous.history.slice(-50)
+          : [],
+    });
+
+    // Bestehende IDs bleiben erhalten. Neue Datensätze werden zuerst angelegt
+    // und erst danach werden entfernte Datensätze gelöscht. So kann ein Fehler
+    // nicht mehr die komplette Trainingssammlung leeren.
+    const existing = await Training.find({}).lean();
+    const existingIds = new Set(existing.map(item => String(item._id)));
+    const existingById = new Map(existing.map(item => [String(item._id), item]));
+    const keepIds = [];
+    const newDocuments = [];
+    const updateOperations = [];
+
+    list.forEach(training => {
+      const id = String(training?._id || '');
+      if (mongoose.isValidObjectId(id) && existingIds.has(id)) {
+        const clean = cleanTraining(training, existingById.get(id));
+        keepIds.push(id);
+        updateOperations.push({
+          replaceOne: {
+            filter: { _id: id },
+            replacement: clean,
+          },
+        });
+      } else {
+        newDocuments.push(cleanTraining(training));
+      }
+    });
+
+    if (newDocuments.length > 0) {
+      const inserted = await Training.insertMany(newDocuments);
+      keepIds.push(...inserted.map(item => String(item._id)));
+    }
+    if (updateOperations.length > 0) {
+      await Training.bulkWrite(updateOperations);
+    }
+    await Training.deleteMany(
+      keepIds.length > 0 ? { _id: { $nin: keepIds } } : {}
+    );
+
     const saved = await Training.find().lean();
     res.json(saved);
   } catch (err) {
     console.error('Fehler POST /trainings:', err);
+    if (err?.code === 11000) {
+      return res.status(409).json({ error: 'Für ein Datum darf nur ein Training angelegt werden.' });
+    }
     res.status(500).json({ error: 'Datenbankfehler beim Speichern der Trainings' });
   }
 });
@@ -203,19 +336,19 @@ app.post('/checklists', async (req, res) => {
     return res.status(400).json({ error: 'Ungültige Anfrage: { reset: true, list: [...] } erwartet.' });
   }
   try {
-    await Checklist.deleteMany({});
-    if (list.length > 0) {
-      await Checklist.insertMany(list.map(cl => ({
+    await replaceCollectionSafely(Checklist, list, (cl, previous) => ({
         title: typeof cl.title === 'string' ? cl.title : 'Unbenannt',
         items: typeof cl.items === 'object' && cl.items !== null ? cl.items : {},
-        createdBy: cl.createdBy || '',
-        createdAt: cl.createdAt ? new Date(cl.createdAt) : new Date(),
+        createdBy: cl.createdBy || previous?.createdBy || '',
+        createdAt:
+          cl.createdAt && !Number.isNaN(new Date(cl.createdAt).getTime())
+            ? new Date(cl.createdAt)
+            : previous?.createdAt || new Date(),
         lastEdited:
           cl.lastEdited && typeof cl.lastEdited === 'object'
             ? cl.lastEdited
-            : null
-      })));
-    }
+            : previous?.lastEdited || null
+      }));
     const saved = await Checklist.find({}).sort({ createdAt: -1 }).lean();
     res.json(saved);
   } catch (e) {
