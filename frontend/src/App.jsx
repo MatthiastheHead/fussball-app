@@ -1,7 +1,8 @@
-// Version 6.3: auswählbare Spielerinnen in der Auswertung und ein
-// serverseitig geschütztes Login-Protokoll für Matthias.
+// Version 6.4: übersichtliche Teamverwaltung und eine sichere
+// Authenticator-Wiederherstellung für Matthias.
 
 import React, { useState, useEffect } from 'react';
+import QRCode from 'qrcode';
 import './App.css';
 import {
   STATUS_OPTIONS,
@@ -157,6 +158,12 @@ export default function App() {
   const [loginName, setLoginName] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [loginNotice, setLoginNotice] = useState('');
+  const [showPasswordRecovery, setShowPasswordRecovery] = useState(false);
+  const [recoveryCredential, setRecoveryCredential] = useState('');
+  const [recoveryNewPassword, setRecoveryNewPassword] = useState('');
+  const [recoveryNewPasswordRepeat, setRecoveryNewPasswordRepeat] = useState('');
+  const [passwordRecoveryError, setPasswordRecoveryError] = useState('');
   const [busy, setBusy] = useState(false);
   const [initializing, setInitializing] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -164,6 +171,17 @@ export default function App() {
   const [users, setUsers] = useState([]);
   const [loginHistory, setLoginHistory] = useState([]);
   const [adminLoadError, setAdminLoadError] = useState('');
+  const [recoveryAdminError, setRecoveryAdminError] = useState('');
+  const [recoveryStatus, setRecoveryStatus] = useState({
+    enabled: false,
+    enabledAt: null,
+    remainingRecoveryCodes: 0,
+  });
+  const [recoverySetupPassword, setRecoverySetupPassword] = useState('');
+  const [recoverySetupData, setRecoverySetupData] = useState(null);
+  const [recoverySetupCode, setRecoverySetupCode] = useState('');
+  const [recoveryQrCode, setRecoveryQrCode] = useState('');
+  const [recoverySetupConfirmed, setRecoverySetupConfirmed] = useState(false);
   const [newUserName, setNewUserName] = useState('');
   const [newUserPass, setNewUserPass] = useState('');
   const [passwordDrafts, setPasswordDrafts] = useState({});
@@ -174,6 +192,8 @@ export default function App() {
   const [newRole, setNewRole] = useState('Spieler');
   const [newNote, setNewNote] = useState('');
   const [newMemberSince, setNewMemberSince] = useState('');
+  const [teamSearch, setTeamSearch] = useState('');
+  const [teamFilter, setTeamFilter] = useState('all');
   const [trainings, setTrainings] = useState([]);
   const [showAddTraining, setShowAddTraining] = useState(false);
   const [newTrainingDate, setNewTrainingDate] = useState(() => getLocalDateInputValue());
@@ -199,7 +219,7 @@ export default function App() {
   const [expandedChecklist, setExpandedChecklist] = useState(null);
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
-  const version = '6.3';
+  const version = '6.4';
   const currentYear = new Date().getFullYear();
 
   const createAuditEntry = (action) => ({
@@ -351,9 +371,11 @@ export default function App() {
   async function loadAdminData(token = authToken) {
     if (!token) return false;
     setAdminLoadError('');
-    const [usersResponse, historyResponse] = await Promise.all([
+    setRecoveryAdminError('');
+    const [usersResponse, historyResponse, recoveryResponse] = await Promise.all([
       authenticatedRequest('admin/users', {}, token),
       authenticatedRequest('admin/login-events?limit=200', {}, token),
+      authenticatedRequest('admin/recovery/status', {}, token),
     ]);
     if (!usersResponse.ok || !historyResponse.ok) {
       if (usersResponse.status === 401 || historyResponse.status === 401) {
@@ -369,6 +391,20 @@ export default function App() {
     ]);
     setUsers(Array.isArray(adminUsers) ? adminUsers : []);
     setLoginHistory(Array.isArray(events) ? events : []);
+    if (recoveryResponse.ok) {
+      const status = await recoveryResponse.json();
+      setRecoveryStatus({
+        enabled: !!status.enabled,
+        enabledAt: status.enabledAt || null,
+        remainingRecoveryCodes: Number(status.remainingRecoveryCodes) || 0,
+      });
+    } else {
+      setRecoveryAdminError(
+        recoveryResponse.status === 404
+          ? 'Die Authenticator-Funktion wird gerade bereitgestellt.'
+          : 'Der Authenticator-Status konnte nicht geladen werden.'
+      );
+    }
     return true;
   }
 
@@ -430,6 +466,7 @@ export default function App() {
       setLoggedInUser(session.name);
       setAuthToken(session.token);
       setLoginError('');
+      setLoginNotice('');
       setLoginName('');
       setLoginPass('');
       setShowStartMenu(true);
@@ -453,10 +490,148 @@ export default function App() {
     setUsers([]);
     setLoginHistory([]);
     setAdminLoadError('');
+    setRecoveryAdminError('');
+    setRecoveryStatus({ enabled: false, enabledAt: null, remainingRecoveryCodes: 0 });
+    setRecoverySetupPassword('');
+    setRecoverySetupData(null);
+    setRecoverySetupCode('');
+    setRecoveryQrCode('');
+    setRecoverySetupConfirmed(false);
     setShowStartMenu(true);
     setShowSettings(false);
     setShowChecklists(false);
     setLoginError('');
+  };
+
+  const handlePasswordRecovery = () =>
+    runOnce(async () => {
+      setPasswordRecoveryError('');
+      if (!recoveryCredential.trim()) {
+        setPasswordRecoveryError('Gib den Code aus deiner App oder einen Notfallcode ein.');
+        return false;
+      }
+      if (recoveryNewPassword.length < 8) {
+        setPasswordRecoveryError('Das neue Passwort muss mindestens 8 Zeichen lang sein.');
+        return false;
+      }
+      if (recoveryNewPassword !== recoveryNewPasswordRepeat) {
+        setPasswordRecoveryError('Die beiden Passwörter stimmen nicht überein.');
+        return false;
+      }
+
+      const response = await apiRequest('auth/recover-matthias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          credential: recoveryCredential.trim(),
+          newPassword: recoveryNewPassword,
+        }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        setPasswordRecoveryError(
+          errorData.error || 'Das Passwort konnte nicht zurückgesetzt werden.'
+        );
+        return false;
+      }
+
+      setRecoveryCredential('');
+      setRecoveryNewPassword('');
+      setRecoveryNewPasswordRepeat('');
+      setShowPasswordRecovery(false);
+      setLoginName('Matthias');
+      setLoginPass('');
+      setLoginNotice('Dein Passwort wurde geändert. Du kannst dich jetzt neu einloggen.');
+      return true;
+    });
+
+  const startAuthenticatorSetup = () =>
+    runOnce(async () => {
+      setRecoveryAdminError('');
+      if (!recoverySetupPassword) {
+        setRecoveryAdminError('Gib zuerst dein aktuelles Passwort ein.');
+        return false;
+      }
+      const response = await authenticatedRequest('admin/recovery/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: recoverySetupPassword }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        setRecoveryAdminError(
+          errorData.error || 'Die Authenticator-Einrichtung konnte nicht gestartet werden.'
+        );
+        return false;
+      }
+
+      const setup = await response.json();
+      let qrCode = '';
+      try {
+        qrCode = await QRCode.toDataURL(setup.otpAuthUrl, {
+          width: 240,
+          margin: 2,
+          errorCorrectionLevel: 'M',
+          color: { dark: '#0b1320', light: '#ffffff' },
+        });
+      } catch (error) {
+        console.error('QR-Code konnte nicht erstellt werden:', error);
+      }
+      setRecoverySetupPassword('');
+      setRecoverySetupData(setup);
+      setRecoverySetupCode('');
+      setRecoveryQrCode(qrCode);
+      setRecoverySetupConfirmed(false);
+      return true;
+    });
+
+  const confirmAuthenticatorSetup = () =>
+    runOnce(async () => {
+      setRecoveryAdminError('');
+      if (!/^\d{6}$/.test(recoverySetupCode.trim())) {
+        setRecoveryAdminError('Gib den 6-stelligen Code aus deiner Authenticator-App ein.');
+        return false;
+      }
+      const response = await authenticatedRequest('admin/recovery/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: recoverySetupCode.trim() }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        setRecoveryAdminError(
+          errorData.error || 'Der Authenticator-Code konnte nicht bestätigt werden.'
+        );
+        return false;
+      }
+      const status = await response.json();
+      setRecoveryStatus({
+        enabled: true,
+        enabledAt: status.enabledAt || new Date().toISOString(),
+        remainingRecoveryCodes: Number(status.remainingRecoveryCodes) || 8,
+      });
+      setRecoverySetupConfirmed(true);
+      setRecoverySetupCode('');
+      return true;
+    });
+
+  const copyRecoveryCodes = async () => {
+    const codes = recoverySetupData?.recoveryCodes;
+    if (!Array.isArray(codes) || codes.length === 0) return;
+    try {
+      await navigator.clipboard.writeText(codes.join('\n'));
+      alert('Notfallcodes kopiert. Bewahre sie an einem sicheren Ort auf.');
+    } catch {
+      alert('Automatisches Kopieren ging nicht. Markiere und kopiere die Codes bitte von Hand.');
+    }
+  };
+
+  const finishAuthenticatorSetup = () => {
+    setRecoverySetupData(null);
+    setRecoverySetupCode('');
+    setRecoveryQrCode('');
+    setRecoverySetupConfirmed(false);
+    setRecoveryAdminError('');
   };
 
   // Neue Benutzerverwaltung
@@ -686,66 +861,6 @@ export default function App() {
       setNewNote('');
       setNewMemberSince('');
       alert('Team-Mitglied hinzugefügt.');
-    });
-
-  const handlePlayerNoteBlur = (player, noteValue) =>
-    runOnce(async () => {
-      const idx = players.findIndex((p) => p.name === player.name);
-      if (idx === -1) return;
-      const updated = players.map((item, itemIndex) =>
-        itemIndex === idx ? { ...item, note: noteValue } : item
-      );
-      const res = await apiRequest('players', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset: true, list: updated }),
-      });
-      if (!res.ok) {
-        alert('Fehler beim Speichern der Notiz.');
-        return;
-      }
-      await refetchAll();
-      alert('Notiz gespeichert.');
-    });
-
-  const handlePlayerMemberSinceBlur = (player, memberSinceValue) =>
-    runOnce(async () => {
-      const idx = players.findIndex((p) => p.name === player.name);
-      if (idx === -1) return;
-      const updated = players.map((item, itemIndex) =>
-        itemIndex === idx ? { ...item, memberSince: memberSinceValue } : item
-      );
-      const res = await apiRequest('players', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset: true, list: updated }),
-      });
-      if (!res.ok) {
-        alert('Fehler beim Speichern des Hinweises.');
-        return;
-      }
-      await refetchAll();
-      alert('Hinweis gespeichert.');
-    });
-
-  const changeRole = (player, role) =>
-    runOnce(async () => {
-      const idx = players.findIndex((p) => p.name === player.name);
-      if (idx === -1) return;
-      const updated = players.map((item, itemIndex) =>
-        itemIndex === idx ? { ...item, isTrainer: role === 'Trainer' } : item
-      );
-      const res = await apiRequest('players', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset: true, list: updated }),
-      });
-      if (!res.ok) {
-        alert('Fehler beim Ändern der Rolle.');
-        return;
-      }
-      await refetchAll();
-      alert('Rolle geändert.');
     });
 
   const deletePlayer = (player) =>
@@ -1152,38 +1267,125 @@ export default function App() {
         <div>
           <h1 className="login-headline">Fußball-App</h1>
           <div className="login-version">Version {version}</div>
-          <div className="login-hint">
-            {initializing
-              ? 'Der Server wird gestartet und die Daten werden geladen…'
-              : loadError || 'Die App ist bereit.'}
-          </div>
-          <input
-            type="text"
-            placeholder="Benutzername"
-            value={loginName}
-            onChange={(e) => setLoginName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-            autoComplete="username"
-            disabled={initializing}
-          />
-          <input
-            type="password"
-            placeholder="Passwort"
-            value={loginPass}
-            onChange={(e) => setLoginPass(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-            autoComplete="current-password"
-            disabled={initializing}
-          />
-          <button onClick={handleLogin} disabled={busy || initializing || !!loadError}>
-            {initializing ? 'Bitte warten…' : 'Einloggen'}
-          </button>
-          {loadError && (
-            <button className="retry-button" onClick={loadInitialData} disabled={initializing}>
-              Erneut versuchen
-            </button>
+          {showPasswordRecovery ? (
+            <div className="password-recovery-form">
+              <h2>Passwort für Matthias zurücksetzen</h2>
+              <p>
+                Nutze einen aktuellen 6-stelligen Code aus deiner Authenticator-App oder einen
+                einmaligen Notfallcode.
+              </p>
+              <label className="login-field">
+                <span>Authenticator- oder Notfallcode</span>
+                <input
+                  type="text"
+                  placeholder="123456 oder XXXX-XXXX-XXXX"
+                  value={recoveryCredential}
+                  onChange={(event) => setRecoveryCredential(event.target.value)}
+                  autoComplete="one-time-code"
+                  autoCapitalize="characters"
+                  inputMode="text"
+                  disabled={busy || initializing}
+                />
+              </label>
+              <label className="login-field">
+                <span>Neues Passwort</span>
+                <input
+                  type="password"
+                  placeholder="Mindestens 8 Zeichen"
+                  value={recoveryNewPassword}
+                  onChange={(event) => setRecoveryNewPassword(event.target.value)}
+                  autoComplete="new-password"
+                  minLength={8}
+                  disabled={busy || initializing}
+                />
+              </label>
+              <label className="login-field">
+                <span>Neues Passwort wiederholen</span>
+                <input
+                  type="password"
+                  placeholder="Passwort wiederholen"
+                  value={recoveryNewPasswordRepeat}
+                  onChange={(event) => setRecoveryNewPasswordRepeat(event.target.value)}
+                  onKeyDown={(event) =>
+                    event.key === 'Enter' && handlePasswordRecovery()
+                  }
+                  autoComplete="new-password"
+                  minLength={8}
+                  disabled={busy || initializing}
+                />
+              </label>
+              <button
+                onClick={handlePasswordRecovery}
+                disabled={busy || initializing || !!loadError}
+              >
+                {busy ? 'Passwort wird geändert…' : 'Neues Passwort speichern'}
+              </button>
+              <button
+                className="login-secondary-button"
+                onClick={() => {
+                  setShowPasswordRecovery(false);
+                  setPasswordRecoveryError('');
+                  setRecoveryCredential('');
+                  setRecoveryNewPassword('');
+                  setRecoveryNewPasswordRepeat('');
+                }}
+                disabled={busy}
+              >
+                Zurück zur Anmeldung
+              </button>
+              {passwordRecoveryError && (
+                <p className="login-error">{passwordRecoveryError}</p>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="login-hint">
+                {initializing
+                  ? 'Der Server wird gestartet und die Daten werden geladen…'
+                  : loadError || 'Die App ist bereit.'}
+              </div>
+              <input
+                type="text"
+                placeholder="Benutzername"
+                value={loginName}
+                onChange={(e) => setLoginName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                autoComplete="username"
+                disabled={initializing}
+              />
+              <input
+                type="password"
+                placeholder="Passwort"
+                value={loginPass}
+                onChange={(e) => setLoginPass(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                autoComplete="current-password"
+                disabled={initializing}
+              />
+              <button onClick={handleLogin} disabled={busy || initializing || !!loadError}>
+                {initializing ? 'Bitte warten…' : 'Einloggen'}
+              </button>
+              <button
+                className="login-secondary-button"
+                onClick={() => {
+                  setShowPasswordRecovery(true);
+                  setLoginError('');
+                  setLoginNotice('');
+                  setPasswordRecoveryError('');
+                }}
+                disabled={busy || initializing || !!loadError}
+              >
+                Passwort vergessen, Matthias?
+              </button>
+              {loadError && (
+                <button className="retry-button" onClick={loadInitialData} disabled={initializing}>
+                  Erneut versuchen
+                </button>
+              )}
+              {loginNotice && <p className="login-notice">{loginNotice}</p>}
+              {loginError && <p className="login-error">{loginError}</p>}
+            </>
           )}
-          {loginError && <p className="login-error">{loginError}</p>}
         </div>
       </div>
     );
@@ -1260,6 +1462,195 @@ export default function App() {
         ...loginHistory.map((event) => event.username),
       ]),
     ].sort((a, b) => a.localeCompare(b));
+    const playersCount = players.filter((player) => !player.isTrainer).length;
+    const trainersCount = players.filter((player) => player.isTrainer).length;
+    const inactiveMembersCount = players.filter((player) => player.inactive).length;
+    const normalizedTeamSearch = teamSearch.trim().toLocaleLowerCase('de-DE');
+    const filteredTeamMembers = sortedPlayers
+      .filter((player) => {
+        const matchesSearch =
+          !normalizedTeamSearch ||
+          [player.name, player.note, player.memberSince].some((value) =>
+            String(value || '').toLocaleLowerCase('de-DE').includes(normalizedTeamSearch)
+          );
+        const matchesFilter =
+          teamFilter === 'all' ||
+          (teamFilter === 'players' && !player.isTrainer) ||
+          (teamFilter === 'trainers' && player.isTrainer) ||
+          (teamFilter === 'inactive' && player.inactive);
+        return matchesSearch && matchesFilter;
+      })
+      .sort(
+        (a, b) =>
+          Number(a.inactive) - Number(b.inactive) || a.name.localeCompare(b.name)
+      );
+    const teamGroups = [
+      {
+        key: 'players',
+        title: 'Spielerinnen',
+        members: filteredTeamMembers.filter((player) => !player.isTrainer),
+      },
+      {
+        key: 'trainers',
+        title: 'Trainer',
+        members: filteredTeamMembers.filter((player) => player.isTrainer),
+      },
+    ].filter((group) => group.members.length > 0);
+
+    const renderTeamMember = (player) => {
+      const isEditing = editPlayerId === player.name;
+      if (isEditing) {
+        return (
+          <li key={player.name} className="team-member-card editing">
+            <form
+              className="team-member-edit-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                saveEditPlayer();
+              }}
+            >
+              <div className="team-member-edit-heading">
+                <strong>{player.name} bearbeiten</strong>
+                <span>Alle Änderungen werden zusammen gespeichert.</span>
+              </div>
+              <div className="team-form-grid">
+                <label className="labeled-field">
+                  <span>Name</span>
+                  <input
+                    type="text"
+                    value={playerDraft.name || ''}
+                    onChange={(event) =>
+                      setPlayerDraft((draft) => ({ ...draft, name: event.target.value }))
+                    }
+                    autoFocus
+                    disabled={busy}
+                  />
+                </label>
+                <label className="labeled-field">
+                  <span>Rolle</span>
+                  <select
+                    value={playerDraft.isTrainer ? 'Trainer' : 'Spieler'}
+                    onChange={(event) =>
+                      setPlayerDraft((draft) => ({
+                        ...draft,
+                        isTrainer: event.target.value === 'Trainer',
+                      }))
+                    }
+                    disabled={busy}
+                  >
+                    <option value="Spieler">Spielerin</option>
+                    <option value="Trainer">Trainer</option>
+                  </select>
+                </label>
+                <label className="labeled-field">
+                  <span>Hinweis hinter dem Namen</span>
+                  <input
+                    type="text"
+                    value={playerDraft.memberSince || ''}
+                    onChange={(event) =>
+                      setPlayerDraft((draft) => ({
+                        ...draft,
+                        memberSince: event.target.value,
+                      }))
+                    }
+                    placeholder="z. B. Torhüterin"
+                    disabled={busy}
+                  />
+                </label>
+                <label className="labeled-field">
+                  <span>Interne Notiz</span>
+                  <input
+                    type="text"
+                    value={playerDraft.note || ''}
+                    onChange={(event) =>
+                      setPlayerDraft((draft) => ({ ...draft, note: event.target.value }))
+                    }
+                    placeholder="Optional"
+                    disabled={busy}
+                  />
+                </label>
+              </div>
+              <label className="team-inactive-switch">
+                <input
+                  type="checkbox"
+                  checked={!!playerDraft.inactive}
+                  onChange={(event) =>
+                    setPlayerDraft((draft) => ({
+                      ...draft,
+                      inactive: event.target.checked,
+                    }))
+                  }
+                  disabled={busy}
+                />
+                <span>Teammitglied allgemein inaktiv</span>
+              </label>
+              <div className="team-member-actions">
+                <button type="submit" className="btn-save-players" disabled={busy}>
+                  {busy ? 'Speichert…' : 'Speichern'}
+                </button>
+                <button type="button" className="btn-edit" onClick={cancelEditPlayer} disabled={busy}>
+                  Abbrechen
+                </button>
+              </div>
+            </form>
+          </li>
+        );
+      }
+
+      return (
+        <li key={player.name} className={`team-member-card${player.inactive ? ' is-inactive' : ''}`}>
+          <div className="team-member-main">
+            <span className="team-member-avatar" aria-hidden="true">
+              {player.name.trim().charAt(0).toLocaleUpperCase('de-DE') || '?'}
+            </span>
+            <div className="team-member-identity">
+              <strong>{player.name}</strong>
+              <div className="team-member-badges">
+                <span className={player.isTrainer ? 'team-role trainer' : 'team-role player'}>
+                  {player.isTrainer ? 'Trainer' : 'Spielerin'}
+                </span>
+                <span className={player.inactive ? 'team-status off' : 'team-status active'}>
+                  {player.inactive ? 'Inaktiv' : 'Aktiv'}
+                </span>
+              </div>
+            </div>
+            <div className="team-member-actions">
+              <button type="button" className="btn-edit" onClick={() => startEditPlayer(player)} disabled={busy}>
+                Bearbeiten
+              </button>
+              <button
+                type="button"
+                className="btn-status"
+                onClick={() => toggleInactive(player)}
+                disabled={busy}
+              >
+                {player.inactive ? 'Aktivieren' : 'Inaktiv setzen'}
+              </button>
+              <button type="button" className="btn-delete" onClick={() => deletePlayer(player)} disabled={busy}>
+                Löschen
+              </button>
+            </div>
+          </div>
+          {(player.memberSince || player.note) && (
+            <dl className="team-member-details">
+              {player.memberSince && (
+                <div>
+                  <dt>Hinweis</dt>
+                  <dd>{player.memberSince}</dd>
+                </div>
+              )}
+              {player.note && (
+                <div>
+                  <dt>Notiz</dt>
+                  <dd>{player.note}</dd>
+                </div>
+              )}
+            </dl>
+          )}
+        </li>
+      );
+    };
+
     return (
       <div className="App">
         <header>
@@ -1287,178 +1678,270 @@ export default function App() {
           </div>
         </section>
         <section className="player-management">
-          <h2>Spielerinnen und Trainer</h2>
-          <div className="add-player-form">
-            <input
-              type="text"
-              placeholder="Name eingeben"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-            />
-            <select value={newRole} onChange={(e) => setNewRole(e.target.value)}>
-              <option value="Spieler">Spielerin</option>
-              <option value="Trainer">Trainer</option>
-            </select>
-            <label className="labeled-field">
-              <span>Notiz</span>
-              <input
-                type="text"
-                placeholder="Notiz"
-                value={newNote}
-                onChange={(e) => setNewNote(e.target.value)}
-              />
-            </label>
-            <label className="labeled-field">
-              <span>Hinweis hinter dem Namen</span>
-              <input
-                type="text"
-                placeholder="z. B. Torhüterin"
-                value={newMemberSince}
-                onChange={(e) => setNewMemberSince(e.target.value)}
-              />
-            </label>
-            <button onClick={addPlayer} disabled={busy}>
-              {busy ? 'Bitte warten…' : '➕ Hinzufügen'}
-            </button>
+          <div className="team-management-heading">
+            <div>
+              <h2>Team verwalten</h2>
+              <p>Spielerinnen und Trainer anlegen, suchen und bearbeiten.</p>
+            </div>
+            <div className="team-counts" aria-label="Teamübersicht">
+              <span><strong>{playersCount}</strong> Spielerinnen</span>
+              <span><strong>{trainersCount}</strong> Trainer</span>
+              <span><strong>{inactiveMembersCount}</strong> inaktiv</span>
+            </div>
           </div>
-          <ul className="player-list">
-            {trainersFirst.map((p) =>
-                editPlayerId === p.name ? (
-                  <li
-                    key={p.name}
-                    className="edit-player-row"
-                    style={{ opacity: p.inactive ? 0.5 : 1 }}
-                  >
-                    <input
-                      type="text"
-                      value={playerDraft.name}
-                      onChange={(e) =>
-                        setPlayerDraft((draft) => ({ ...draft, name: e.target.value }))
-                      }
-                    />
-                    <label className="labeled-field">
-                      <span>Notiz</span>
-                      <input
-                        type="text"
-                        value={playerDraft.note}
-                        onChange={(e) =>
-                          setPlayerDraft((draft) => ({ ...draft, note: e.target.value }))
-                        }
-                        placeholder="Notiz"
-                      />
-                    </label>
-                    <label className="labeled-field">
-                      <span>Hinweis hinter dem Namen</span>
-                      <input
-                        type="text"
-                        value={playerDraft.memberSince}
-                        onChange={(e) =>
-                          setPlayerDraft((draft) => ({ ...draft, memberSince: e.target.value }))
-                        }
-                        placeholder="Hinweis"
-                      />
-                    </label>
-                    <select
-                      className="role-dropdown"
-                      value={playerDraft.isTrainer ? 'Trainer' : 'Spieler'}
-                      onChange={(e) =>
-                        setPlayerDraft((draft) => ({ ...draft, isTrainer: e.target.value === 'Trainer' }))
-                      }
-                    >
-                      <option value="Spieler">Spielerin</option>
-                      <option value="Trainer">Trainer</option>
-                    </select>
-                    <label style={{ marginLeft: '0.5rem', color: '#ccc' }}>
-                      <input
-                        type="checkbox"
-                        checked={!!playerDraft.inactive}
-                        onChange={(e) =>
-                          setPlayerDraft((draft) => ({ ...draft, inactive: e.target.checked }))
-                        }
-                      />{' '}
-                      Inaktiv
-                    </label>
-                    <button className="btn-save-players" onClick={saveEditPlayer} disabled={busy}>
-                      {busy ? '…' : '💾 Speichern'}
-                    </button>
-                    <button className="btn-delete" onClick={cancelEditPlayer} disabled={busy}>
-                      Abbrechen
-                    </button>
-                  </li>
-                ) : (
-                  <li
-                    key={p.name}
-                    style={{ opacity: p.inactive ? 0.5 : 1 }}
-                  >
-                    <span className={p.isTrainer ? 'role-trainer' : 'role-player'}>{p.name}</span>
-                    <label className="labeled-field">
-                      <span>Notiz</span>
-                      <input
-                        type="text"
-                        value={p.note || ''}
-                        placeholder="Notiz"
-                        onChange={(e) => {
-                          const idx = players.findIndex((x) => x.name === p.name);
-                          const updated = players.map((player, playerIndex) =>
-                            playerIndex === idx ? { ...player, note: e.target.value } : player
-                          );
-                          setPlayers(updated);
-                        }}
-                        onBlur={(e) => handlePlayerNoteBlur(p, e.target.value)}
-                      />
-                    </label>
-                    <label className="labeled-field">
-                      <span>Hinweis hinter dem Namen</span>
-                      <input
-                        type="text"
-                        value={p.memberSince || ''}
-                        placeholder="Hinweis"
-                        onChange={(e) => {
-                          const idx = players.findIndex((x) => x.name === p.name);
-                          const updated = players.map((player, playerIndex) =>
-                            playerIndex === idx
-                              ? { ...player, memberSince: e.target.value }
-                              : player
-                          );
-                          setPlayers(updated);
-                        }}
-                        onBlur={(e) => handlePlayerMemberSinceBlur(p, e.target.value)}
-                      />
-                    </label>
-                    <div>
-                      <select
-                        className="role-dropdown"
-                        value={p.isTrainer ? 'Trainer' : 'Spieler'}
-                        onChange={(e) => changeRole(p, e.target.value)}
-                        disabled={busy}
-                      >
-                        <option value="Spieler">Spielerin</option>
-                        <option value="Trainer">Trainer</option>
-                      </select>
-                      <label style={{ marginLeft: '0.5rem', color: '#ccc' }}>
-                        <input
-                          type="checkbox"
-                          checked={!!p.inactive}
-                          onChange={() => toggleInactive(p)}
-                          disabled={busy}
-                        />{' '}
-                        Inaktiv
-                      </label>
-                      <button className="btn-edit" onClick={() => startEditPlayer(p)} disabled={busy}>
-                        ✏ Bearbeiten
-                      </button>
-                      <button className="btn-delete" onClick={() => deletePlayer(p)} disabled={busy}>
-                        ❌ Löschen
-                      </button>
-                    </div>
-                  </li>
-                )
-              )}
-          </ul>
+
+          <form
+            className="team-add-card"
+            onSubmit={(event) => {
+              event.preventDefault();
+              addPlayer();
+            }}
+          >
+            <div className="team-add-heading">
+              <h3>Neues Teammitglied</h3>
+              <span>Notiz und Hinweis sind freiwillig.</span>
+            </div>
+            <div className="team-form-grid">
+              <label className="labeled-field">
+                <span>Name</span>
+                <input
+                  type="text"
+                  placeholder="Vor- und Nachname"
+                  value={newName}
+                  onChange={(event) => setNewName(event.target.value)}
+                  disabled={busy}
+                />
+              </label>
+              <label className="labeled-field">
+                <span>Rolle</span>
+                <select value={newRole} onChange={(event) => setNewRole(event.target.value)} disabled={busy}>
+                  <option value="Spieler">Spielerin</option>
+                  <option value="Trainer">Trainer</option>
+                </select>
+              </label>
+              <label className="labeled-field">
+                <span>Hinweis hinter dem Namen</span>
+                <input
+                  type="text"
+                  placeholder="z. B. Torhüterin"
+                  value={newMemberSince}
+                  onChange={(event) => setNewMemberSince(event.target.value)}
+                  disabled={busy}
+                />
+              </label>
+              <label className="labeled-field">
+                <span>Interne Notiz</span>
+                <input
+                  type="text"
+                  placeholder="Optional"
+                  value={newNote}
+                  onChange={(event) => setNewNote(event.target.value)}
+                  disabled={busy}
+                />
+              </label>
+            </div>
+            <button type="submit" className="team-add-button" disabled={busy}>
+              {busy ? 'Wird angelegt…' : 'Teammitglied anlegen'}
+            </button>
+          </form>
+
+          <div className="team-toolbar">
+            <label className="team-search">
+              <span>Team durchsuchen</span>
+              <input
+                type="search"
+                placeholder="Name, Hinweis oder Notiz"
+                value={teamSearch}
+                onChange={(event) => setTeamSearch(event.target.value)}
+              />
+            </label>
+            <div className="team-filter" aria-label="Team filtern">
+              {[
+                ['all', 'Alle'],
+                ['players', 'Spielerinnen'],
+                ['trainers', 'Trainer'],
+                ['inactive', 'Inaktive'],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={teamFilter === value ? 'active' : ''}
+                  aria-pressed={teamFilter === value}
+                  onClick={() => setTeamFilter(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="team-groups">
+            {teamGroups.map((group) => (
+              <section key={group.key} className="team-group" aria-labelledby={`team-${group.key}`}>
+                <div className="team-group-heading">
+                  <h3 id={`team-${group.key}`}>{group.title}</h3>
+                  <span>{group.members.length}</span>
+                </div>
+                <ul className="team-member-list">{group.members.map(renderTeamMember)}</ul>
+              </section>
+            ))}
+            {teamGroups.length === 0 && (
+              <div className="team-empty-state">
+                <strong>Keine passenden Teammitglieder gefunden.</strong>
+                <span>Ändere den Suchbegriff oder den ausgewählten Filter.</span>
+              </div>
+            )}
+          </div>
         </section>
         {loggedInUser === 'Matthias' && (
           <section className="admin-section">
-            <h2>Benutzerverwaltung</h2>
+            <h2>App-Zugänge</h2>
+            <p className="admin-section-intro">
+              Hier verwaltest du die Anmeldedaten. Teammitglieder werden oben angelegt.
+            </p>
+            <div className="recovery-admin-card">
+              <div className="recovery-admin-heading">
+                <div>
+                  <h3>Passwort-Wiederherstellung für Matthias</h3>
+                  <p>
+                    Damit kannst du dein Passwort mit einer Authenticator-App oder einem
+                    Notfallcode neu setzen.
+                  </p>
+                </div>
+                <span className={recoveryStatus.enabled ? 'recovery-badge active' : 'recovery-badge'}>
+                  {recoveryStatus.enabled ? 'Aktiv' : 'Nicht eingerichtet'}
+                </span>
+              </div>
+
+              {recoveryStatus.enabled && !recoverySetupData && (
+                <div className="recovery-status-details">
+                  <span>
+                    Eingerichtet: {formatAuditTime(recoveryStatus.enabledAt)}
+                  </span>
+                  <span className={recoveryStatus.remainingRecoveryCodes <= 2 ? 'warning' : ''}>
+                    {recoveryStatus.remainingRecoveryCodes} Notfallcodes übrig
+                  </span>
+                </div>
+              )}
+
+              {recoverySetupData ? (
+                <div className="recovery-setup">
+                  <section className="recovery-step">
+                    <span className="recovery-step-number">1</span>
+                    <div>
+                      <h4>Authenticator-App verbinden</h4>
+                      <p>
+                        Scanne den QR-Code mit Google Authenticator, Microsoft Authenticator
+                        oder einer anderen TOTP-App.
+                      </p>
+                      <div className="recovery-qr-area">
+                        {recoveryQrCode && (
+                          <img src={recoveryQrCode} alt="QR-Code für die Authenticator-App" />
+                        )}
+                        <div className="recovery-manual-key">
+                          <span>Manueller Schlüssel</span>
+                          <code>
+                            {String(recoverySetupData.secret || '').match(/.{1,4}/g)?.join(' ') || ''}
+                          </code>
+                          <a href={recoverySetupData.otpAuthUrl}>
+                            In Authenticator-App öffnen
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="recovery-step">
+                    <span className="recovery-step-number">2</span>
+                    <div>
+                      <h4>Notfallcodes sicher speichern</h4>
+                      <p>
+                        Jeder Code funktioniert genau einmal. Speichere sie getrennt vom Handy.
+                        Sie werden später nicht noch einmal angezeigt.
+                      </p>
+                      <div className="recovery-code-grid">
+                        {recoverySetupData.recoveryCodes.map((code) => (
+                          <code key={code}>{code}</code>
+                        ))}
+                      </div>
+                      <button type="button" className="btn-edit" onClick={copyRecoveryCodes}>
+                        Alle Notfallcodes kopieren
+                      </button>
+                    </div>
+                  </section>
+
+                  {!recoverySetupConfirmed ? (
+                    <section className="recovery-step">
+                      <span className="recovery-step-number">3</span>
+                      <div>
+                        <h4>Einrichtung bestätigen</h4>
+                        <p>Gib den aktuell angezeigten 6-stelligen Code aus der App ein.</p>
+                        <div className="recovery-confirm-row">
+                          <input
+                            type="text"
+                            value={recoverySetupCode}
+                            onChange={(event) =>
+                              setRecoverySetupCode(
+                                event.target.value.replace(/\D/g, '').slice(0, 6)
+                              )
+                            }
+                            onKeyDown={(event) =>
+                              event.key === 'Enter' && confirmAuthenticatorSetup()
+                            }
+                            placeholder="123456"
+                            inputMode="numeric"
+                            autoComplete="one-time-code"
+                            aria-label="6-stelliger Authenticator-Code"
+                            disabled={busy}
+                          />
+                          <button
+                            type="button"
+                            className="btn-save-players"
+                            onClick={confirmAuthenticatorSetup}
+                            disabled={busy || recoverySetupCode.length !== 6}
+                          >
+                            {busy ? 'Prüft…' : 'Authenticator aktivieren'}
+                          </button>
+                        </div>
+                      </div>
+                    </section>
+                  ) : (
+                    <div className="recovery-success">
+                      <strong>Die Passwort-Wiederherstellung ist jetzt aktiv.</strong>
+                      <span>
+                        Prüfe noch einmal, ob du die acht Notfallcodes sicher gespeichert hast.
+                      </span>
+                      <button type="button" className="btn-save-players" onClick={finishAuthenticatorSetup}>
+                        Einrichtung abschließen
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="recovery-start-row">
+                  <label className="labeled-field">
+                    <span>Aktuelles Passwort von Matthias</span>
+                    <input
+                      type="password"
+                      value={recoverySetupPassword}
+                      onChange={(event) => setRecoverySetupPassword(event.target.value)}
+                      placeholder="Aktuelles Passwort"
+                      autoComplete="current-password"
+                      disabled={busy}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="btn-save-players"
+                    onClick={startAuthenticatorSetup}
+                    disabled={busy || !recoverySetupPassword}
+                  >
+                    {recoveryStatus.enabled ? 'Neu einrichten' : 'Jetzt einrichten'}
+                  </button>
+                </div>
+              )}
+              {recoveryAdminError && <p className="login-error">{recoveryAdminError}</p>}
+            </div>
             <div className="add-player-form">
               <input
                 type="text"
