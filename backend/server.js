@@ -12,16 +12,33 @@ const Checklist = require('./models/Checklist');
 const Player = require('./models/Player');
 const Training = require('./models/Training');
 const AppSettings = require('./models/AppSettings');
+const AdminRecovery = require('./models/AdminRecovery');
 const LoginEvent = require('./models/LoginEvent');
 const { hashPassword, isPasswordHash, verifyPassword } = require('./authUtils');
+const {
+  createOtpAuthUrl,
+  decryptSecret,
+  deriveRecoveryKey,
+  encryptSecret,
+  generateAuthenticatorSecret,
+  generateRecoveryCodes,
+  hashRecoveryCode,
+  normalizeRecoveryCode,
+  safeStringEqual,
+  verifyTotp,
+} = require('./recoveryUtils');
 
 const TRAINING_LOCATIONS = ['Sportplatz', 'Turnhalle'];
 const ADMIN_USERNAME = 'Matthias';
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const MAX_LOGIN_ATTEMPTS = 10;
+const RECOVERY_WINDOW_MS = 15 * 60 * 1000;
+const RECOVERY_SETUP_TTL_MS = 15 * 60 * 1000;
+const MAX_RECOVERY_ATTEMPTS = 5;
 const sessions = new Map();
 const loginAttempts = new Map();
+const recoveryAttempts = new Map();
 
 const pruneSessions = () => {
   const now = Date.now();
@@ -82,6 +99,47 @@ const recordFailedLogin = key => {
   current.count += 1;
 };
 
+const recoveryAttemptKey = (req, purpose) =>
+  `${req.ip || req.socket?.remoteAddress || 'unknown'}|${purpose}`;
+
+const pruneRecoveryAttempts = () => {
+  const now = Date.now();
+  for (const [key, attempt] of recoveryAttempts.entries()) {
+    if (now - attempt.startedAt > RECOVERY_WINDOW_MS) recoveryAttempts.delete(key);
+  }
+};
+
+const isRecoveryBlocked = key => {
+  const attempt = recoveryAttempts.get(key);
+  if (!attempt || Date.now() - attempt.startedAt > RECOVERY_WINDOW_MS) {
+    recoveryAttempts.delete(key);
+    return false;
+  }
+  return attempt.count >= MAX_RECOVERY_ATTEMPTS;
+};
+
+const recordFailedRecovery = key => {
+  const current = recoveryAttempts.get(key);
+  if (!current || Date.now() - current.startedAt > RECOVERY_WINDOW_MS) {
+    recoveryAttempts.set(key, { count: 1, startedAt: Date.now() });
+    return;
+  }
+  current.count += 1;
+};
+
+const invalidateSessionsForUsername = username => {
+  for (const [token, session] of sessions.entries()) {
+    if (session.username === username) sessions.delete(token);
+  }
+};
+
+const clearLoginAttemptsForUsername = username => {
+  const suffix = `|${String(username).toLowerCase()}`;
+  for (const key of loginAttempts.keys()) {
+    if (key.endsWith(suffix)) loginAttempts.delete(key);
+  }
+};
+
 async function replaceCollectionSafely(Model, list, cleanDocument) {
   const existing = await Model.find({}).lean();
   const existingById = new Map(existing.map(item => [String(item._id), item]));
@@ -122,6 +180,10 @@ if (!process.env.MONGODB_URI) {
   process.exit(1);
 }
 
+// Die Verschlüsselung ist an das nur auf dem Server vorhandene Datenbank-Geheimnis
+// gebunden. Im Repository und in der Datenbank liegt dadurch kein Klartext-Schlüssel.
+const recoveryEncryptionKey = deriveRecoveryKey(process.env.MONGODB_URI);
+
 // === 2) Mit MongoDB verbinden ===
 mongoose
   .connect(process.env.MONGODB_URI, {
@@ -146,6 +208,9 @@ const User = mongoose.model('User', userSchema);
 
 // === 4) Express-App konfigurieren ===
 const app = express();
+// Render leitet die echte Client-IP über genau einen vorgeschalteten Proxy weiter.
+// Das ist wichtig, damit die Anmelde- und Wiederherstellungsbremse pro Gerät greift.
+app.set('trust proxy', 1);
 app.use(cors());
 
 // ⚙️ Body-Limit deutlich erhöht (Fix für HTTP 413)
@@ -241,6 +306,227 @@ app.post('/auth/logout', (req, res) => {
   const token = getBearerToken(req);
   if (token) sessions.delete(token);
   res.status(204).end();
+});
+
+app.post('/auth/recover-matthias', async (req, res) => {
+  const credential = typeof req.body?.credential === 'string' ? req.body.credential.trim() : '';
+  const newPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword : '';
+  if (!credential || credential.length > 100 || newPassword.length < 8 || newPassword.length > 256) {
+    return res.status(400).json({
+      error: 'Gib einen gültigen Authenticator- oder Notfallcode und ein Passwort mit mindestens 8 Zeichen ein.',
+    });
+  }
+
+  const attemptKey = recoveryAttemptKey(req, 'password-reset');
+  pruneRecoveryAttempts();
+  if (isRecoveryBlocked(attemptKey)) {
+    return res.status(429).json({
+      error: 'Zu viele Wiederherstellungsversuche. Bitte warte 15 Minuten.',
+    });
+  }
+
+  const rejectCredential = () => {
+    recordFailedRecovery(attemptKey);
+    return res.status(401).json({ error: 'Der Authenticator- oder Notfallcode ist ungültig.' });
+  };
+
+  try {
+    const [user, recovery, newPasswordHash] = await Promise.all([
+      User.findOne({ name: ADMIN_USERNAME }),
+      AdminRecovery.findOne({ key: 'matthias' }),
+      hashPassword(newPassword),
+    ]);
+    if (!user || !recovery?.encryptedSecret || !recovery.enabledAt) return rejectCredential();
+
+    let consumed = false;
+    if (/^\d{6}$/.test(credential)) {
+      const secret = decryptSecret(recovery.encryptedSecret, recoveryEncryptionKey);
+      const matchedCounter = verifyTotp(secret, credential, { window: 1 });
+      if (matchedCounter !== null && matchedCounter > (recovery.lastUsedCounter ?? -1)) {
+        const result = await AdminRecovery.updateOne(
+          {
+            _id: recovery._id,
+            $or: [
+              { lastUsedCounter: { $lt: matchedCounter } },
+              { lastUsedCounter: { $exists: false } },
+            ],
+          },
+          { $set: { lastUsedCounter: matchedCounter } }
+        );
+        consumed = result.modifiedCount === 1;
+      }
+    } else {
+      const normalizedCode = normalizeRecoveryCode(credential);
+      if (normalizedCode.length === 12) {
+        const candidateHash = hashRecoveryCode(normalizedCode, recoveryEncryptionKey);
+        const storedHash = recovery.recoveryCodeHashes.find(hash =>
+          safeStringEqual(hash, candidateHash)
+        );
+        if (storedHash) {
+          const result = await AdminRecovery.updateOne(
+            { _id: recovery._id, recoveryCodeHashes: storedHash },
+            { $pull: { recoveryCodeHashes: storedHash } }
+          );
+          consumed = result.modifiedCount === 1;
+        }
+      }
+    }
+
+    if (!consumed) return rejectCredential();
+
+    user.password = newPasswordHash;
+    await user.save();
+    invalidateSessionsForUsername(ADMIN_USERNAME);
+    clearLoginAttemptsForUsername(ADMIN_USERNAME);
+    recoveryAttempts.delete(attemptKey);
+    res.set('Cache-Control', 'no-store');
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Fehler POST /auth/recover-matthias:', err);
+    res.status(500).json({ error: 'Das Passwort konnte nicht zurückgesetzt werden.' });
+  }
+});
+
+app.get('/admin/recovery/status', requireAdmin, async (_req, res) => {
+  try {
+    const recovery = await AdminRecovery.findOne({ key: 'matthias' }).lean();
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      enabled: !!(recovery?.encryptedSecret && recovery?.enabledAt),
+      enabledAt: recovery?.enabledAt || null,
+      updatedAt: recovery?.updatedAt || null,
+      remainingRecoveryCodes: Array.isArray(recovery?.recoveryCodeHashes)
+        ? recovery.recoveryCodeHashes.length
+        : 0,
+    });
+  } catch (err) {
+    console.error('Fehler GET /admin/recovery/status:', err);
+    res.status(500).json({ error: 'Authenticator-Status konnte nicht geladen werden.' });
+  }
+});
+
+app.post('/admin/recovery/setup', requireAdmin, async (req, res) => {
+  const currentPassword =
+    typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : '';
+  if (!currentPassword || currentPassword.length > 256) {
+    return res.status(400).json({ error: 'Gib dein aktuelles Passwort ein.' });
+  }
+
+  const attemptKey = recoveryAttemptKey(req, 'authenticator-setup');
+  pruneRecoveryAttempts();
+  if (isRecoveryBlocked(attemptKey)) {
+    return res.status(429).json({ error: 'Zu viele Versuche. Bitte warte 15 Minuten.' });
+  }
+
+  try {
+    const user = await User.findOne({ name: ADMIN_USERNAME });
+    const passwordMatches = user
+      ? await verifyPassword(currentPassword, user.password)
+      : false;
+    if (!user || !passwordMatches) {
+      recordFailedRecovery(attemptKey);
+      return res.status(401).json({ error: 'Das aktuelle Passwort ist falsch.' });
+    }
+
+    const secret = generateAuthenticatorSecret();
+    const recoveryCodes = generateRecoveryCodes(8);
+    await AdminRecovery.findOneAndUpdate(
+      { key: 'matthias' },
+      {
+        $set: {
+          pendingEncryptedSecret: encryptSecret(secret, recoveryEncryptionKey),
+          pendingRecoveryCodeHashes: recoveryCodes.map(code =>
+            hashRecoveryCode(code, recoveryEncryptionKey)
+          ),
+          pendingCreatedAt: new Date(),
+        },
+        $setOnInsert: { key: 'matthias' },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    recoveryAttempts.delete(attemptKey);
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      secret,
+      otpAuthUrl: createOtpAuthUrl(secret, ADMIN_USERNAME, 'Fussball-App'),
+      recoveryCodes,
+      expiresInMs: RECOVERY_SETUP_TTL_MS,
+    });
+  } catch (err) {
+    console.error('Fehler POST /admin/recovery/setup:', err);
+    res.status(500).json({ error: 'Authenticator-Einrichtung konnte nicht gestartet werden.' });
+  }
+});
+
+app.post('/admin/recovery/confirm', requireAdmin, async (req, res) => {
+  const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
+  if (!/^\d{6}$/.test(code)) {
+    return res.status(400).json({ error: 'Gib den 6-stelligen Code aus der Authenticator-App ein.' });
+  }
+
+  const attemptKey = recoveryAttemptKey(req, 'authenticator-confirm');
+  pruneRecoveryAttempts();
+  if (isRecoveryBlocked(attemptKey)) {
+    return res.status(429).json({ error: 'Zu viele Versuche. Bitte warte 15 Minuten.' });
+  }
+
+  try {
+    const recovery = await AdminRecovery.findOne({ key: 'matthias' });
+    const pendingAge = recovery?.pendingCreatedAt
+      ? Date.now() - new Date(recovery.pendingCreatedAt).getTime()
+      : Number.POSITIVE_INFINITY;
+    if (!recovery?.pendingEncryptedSecret || pendingAge > RECOVERY_SETUP_TTL_MS) {
+      if (recovery?.pendingEncryptedSecret) {
+        await AdminRecovery.updateOne(
+          { _id: recovery._id },
+          {
+            $unset: {
+              pendingEncryptedSecret: 1,
+              pendingRecoveryCodeHashes: 1,
+              pendingCreatedAt: 1,
+            },
+          }
+        );
+      }
+      return res.status(410).json({
+        error: 'Die Einrichtung ist abgelaufen. Bitte starte sie erneut.',
+      });
+    }
+
+    const secret = decryptSecret(recovery.pendingEncryptedSecret, recoveryEncryptionKey);
+    const matchedCounter = verifyTotp(secret, code, { window: 1 });
+    if (matchedCounter === null) {
+      recordFailedRecovery(attemptKey);
+      return res.status(401).json({ error: 'Der Authenticator-Code ist ungültig.' });
+    }
+
+    const result = await AdminRecovery.updateOne(
+      { _id: recovery._id, pendingEncryptedSecret: recovery.pendingEncryptedSecret },
+      {
+        $set: {
+          encryptedSecret: recovery.pendingEncryptedSecret,
+          recoveryCodeHashes: recovery.pendingRecoveryCodeHashes,
+          lastUsedCounter: matchedCounter,
+          enabledAt: new Date(),
+        },
+        $unset: {
+          pendingEncryptedSecret: 1,
+          pendingRecoveryCodeHashes: 1,
+          pendingCreatedAt: 1,
+        },
+      }
+    );
+    if (result.modifiedCount !== 1) {
+      return res.status(409).json({ error: 'Die Einrichtung wurde bereits erneuert. Bitte starte erneut.' });
+    }
+
+    recoveryAttempts.delete(attemptKey);
+    res.set('Cache-Control', 'no-store');
+    res.json({ enabled: true, enabledAt: new Date(), remainingRecoveryCodes: 8 });
+  } catch (err) {
+    console.error('Fehler POST /admin/recovery/confirm:', err);
+    res.status(500).json({ error: 'Authenticator-Einrichtung konnte nicht bestätigt werden.' });
+  }
 });
 
 app.get('/admin/users', requireAdmin, async (_req, res) => {
