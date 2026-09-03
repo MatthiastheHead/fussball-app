@@ -389,9 +389,21 @@ app.post('/checklists', async (req, res) => {
     return res.status(400).json({ error: 'Ungültige Anfrage: { reset: true, list: [...] } erwartet.' });
   }
   try {
+    const cleanRemarks = value =>
+      Object.fromEntries(
+        Object.entries(value && typeof value === 'object' && !Array.isArray(value) ? value : {})
+          .map(([name, remark]) => [
+            name,
+            typeof remark === 'string' ? remark.trim() : '',
+          ])
+          .filter(([, remark]) => remark)
+      );
     await replaceCollectionSafely(Checklist, list, (cl, previous) => ({
         title: typeof cl.title === 'string' ? cl.title : 'Unbenannt',
         items: typeof cl.items === 'object' && cl.items !== null ? cl.items : {},
+        remarks: Object.prototype.hasOwnProperty.call(cl, 'remarks')
+          ? cleanRemarks(cl.remarks)
+          : cleanRemarks(previous?.remarks),
         createdBy: cl.createdBy || previous?.createdBy || '',
         createdAt:
           cl.createdAt && !Number.isNaN(new Date(cl.createdAt).getTime())
