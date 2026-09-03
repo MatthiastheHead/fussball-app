@@ -326,47 +326,21 @@ app.get('/admin/login-events', requireAdmin, async (req, res) => {
   }
 });
 
-// Diese beiden Endpunkte bleiben während des gestaffelten Updates zunächst
-// für die vorherige Oberfläche verfügbar und werden danach abgesichert.
-app.get('/users', async (req, res) => {
+// Kompatibler Pfad ohne Passwortausgabe. Auch dieser Zugriff bleibt Matthias vorbehalten.
+app.get('/users', requireAdmin, async (_req, res) => {
   try {
-    const allUsers = await User.find().lean();
-    res.json(allUsers);
+    const allUsers = await User.find().sort({ name: 1 }).lean();
+    res.json(allUsers.map(safeUser));
   } catch (err) {
     console.error('Fehler GET /users:', err);
-    res.status(500).json({ error: 'Datenbankfehler beim Laden der Users' });
+    res.status(500).json({ error: 'Benutzer konnten nicht geladen werden.' });
   }
 });
 
-app.post('/users', async (req, res) => {
-  const { reset, list } = req.body || {};
-  if (!reset || !Array.isArray(list)) {
-    return res.status(400).json({ error: 'Ungültige Anfrage: { reset: true, list: [...] } erwartet.' });
-  }
-  try {
-    const cleanUsers = list.map(user => ({
-      name: typeof user?.name === 'string' ? user.name.trim() : '',
-      password: typeof user?.password === 'string' ? user.password : '',
-    }));
-    if (cleanUsers.some(user => !user.name || !user.password)) {
-      return res.status(400).json({ error: 'Jeder Benutzer benötigt Name und Passwort.' });
-    }
-    if (new Set(cleanUsers.map(user => user.name)).size !== cleanUsers.length) {
-      return res.status(409).json({ error: 'Benutzernamen dürfen nicht doppelt vorkommen.' });
-    }
-    await replaceCollectionSafely(User, list, user => ({
-      name: user.name.trim(),
-      password: user.password,
-    }));
-    const saved = await User.find().lean();
-    res.json(saved);
-  } catch (err) {
-    console.error('Fehler POST /users:', err);
-    if (err?.code === 11000) {
-      return res.status(409).json({ error: 'Dieser Benutzername existiert bereits.' });
-    }
-    res.status(500).json({ error: 'Datenbankfehler beim Speichern der Users' });
-  }
+app.post('/users', requireAdmin, (_req, res) => {
+  res.status(410).json({
+    error: 'Dieser alte Benutzer-Endpunkt wurde aus Sicherheitsgründen abgeschaltet.',
+  });
 });
 
 // ---- 5.2 Players ----
