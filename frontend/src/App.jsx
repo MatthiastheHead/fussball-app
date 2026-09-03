@@ -1,5 +1,5 @@
-// Version 6.1: Saisonwahl, Trainingsort, begründete Trainings-Inaktivität
-// und eine kindgerechte Auswertung.
+// Version 6.2: Checklisten-Bemerkungen, kindgerechter PDF-Export
+// und optimierte mobile Bedienung.
 
 import React, { useState, useEffect } from 'react';
 import './App.css';
@@ -104,6 +104,28 @@ const toIsoDate = (value) => {
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const drawPdfStar = (doc, centerX, centerY, radius, filled) => {
+  const points = Array.from({ length: 10 }, (_, index) => {
+    const angle = -Math.PI / 2 + (index * Math.PI) / 5;
+    const pointRadius = index % 2 === 0 ? radius : radius * 0.44;
+    return {
+      x: centerX + Math.cos(angle) * pointRadius,
+      y: centerY + Math.sin(angle) * pointRadius,
+    };
+  });
+  const segments = points.slice(1).map((point, index) => [
+    point.x - points[index].x,
+    point.y - points[index].y,
+  ]);
+  segments.push([
+    points[0].x - points[points.length - 1].x,
+    points[0].y - points[points.length - 1].y,
+  ]);
+  doc.setDrawColor(199, 151, 24);
+  doc.setFillColor(...(filled ? [255, 207, 51] : [218, 226, 238]));
+  doc.lines(segments, points[0].x, points[0].y, [1, 1], 'FD', true);
+};
+
 async function healthcheck() {
   // Während eines gestaffelten Deployments kann das Backend noch den älteren
   // Diagnosepfad verwenden. Beide Varianten halten die App funktionsfähig.
@@ -172,7 +194,7 @@ export default function App() {
   const [expandedChecklist, setExpandedChecklist] = useState(null);
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
-  const version = '6.1';
+  const version = '6.2';
   const currentYear = new Date().getFullYear();
 
   const createAuditEntry = (action) => ({
@@ -281,6 +303,7 @@ export default function App() {
           ? c.map((checklist) => ({
               ...checklist,
               items: checklist.items || {},
+              remarks: checklist.remarks || {},
               createdAt: toIsoDate(checklist.createdAt),
               lastEdited:
                 checklist.lastEdited?.by && checklist.lastEdited?.at
@@ -509,10 +532,12 @@ export default function App() {
           });
         });
         const updatedChecklists = checklists.map((checklist) =>
-          Object.prototype.hasOwnProperty.call(checklist.items || {}, previousName)
+          Object.prototype.hasOwnProperty.call(checklist.items || {}, previousName) ||
+          Object.prototype.hasOwnProperty.call(checklist.remarks || {}, previousName)
             ? {
                 ...checklist,
                 items: renameObjectKey(checklist.items, previousName, nextName),
+                remarks: renameObjectKey(checklist.remarks, previousName, nextName),
                 lastEdited: { by: loggedInUser, at: new Date().toISOString() },
               }
             : checklist
@@ -729,9 +754,7 @@ export default function App() {
       const participants = Object.fromEntries(
         activeMembers.filter((player) => !player.isTrainer).map((player) => [player.name, '⏳'])
       );
-      const ratings = Object.fromEntries(
-        activeMembers.filter((player) => !player.isTrainer).map((player) => [player.name, 0])
-      );
+      const ratings = {};
       const trainerStatus = Object.fromEntries(
         activeMembers.filter((player) => player.isTrainer).map((player) => [player.name, 'Nicht abgemeldet'])
       );
@@ -856,10 +879,17 @@ export default function App() {
     runOnce(async () => {
       const idx = findTrainingIndex(training);
       if (idx === -1) return;
+      const ratings = { ...(training.ratings || {}) };
+      if (statusIcon === '✅') {
+        if (!Object.prototype.hasOwnProperty.call(ratings, name)) ratings[name] = 0;
+      } else {
+        delete ratings[name];
+      }
       const updated = trainings.map((item, itemIndex) =>
         itemIndex === idx
           ? applyTrainingChange(item, `Teilnahmestatus für ${name}: ${iconToText(statusIcon)}`, {
               participants: { ...(item.participants || {}), [name]: statusIcon },
+              ratings,
             })
           : item
       );
@@ -870,6 +900,10 @@ export default function App() {
     runOnce(async () => {
       const idx = findTrainingIndex(training);
       if (idx === -1) return;
+      if (training.participants?.[name] !== '✅') {
+        alert('Eine Sternebewertung ist nur bei Teilnahme möglich.');
+        return false;
+      }
       const rating = normalizeRating(newRating);
       const updated = trainings.map((item, itemIndex) =>
         itemIndex === idx
@@ -1775,7 +1809,11 @@ export default function App() {
                                               currentRating === rating ? 0 : rating
                                             )
                                           }
-                                          disabled={busy || isInactiveForTraining}
+                                          disabled={
+                                            busy ||
+                                            isInactiveForTraining ||
+                                            statusIcon !== '✅'
+                                          }
                                           aria-label={`${rating} ${rating === 1 ? 'Stern' : 'Sterne'}`}
                                           title={ratingLabel(rating)}
                                         >
@@ -1785,8 +1823,10 @@ export default function App() {
                                       <span className="rating-text">
                                         {isInactiveForTraining ? (
                                           'Für dieses Training nicht gewertet'
+                                        ) : statusIcon !== '✅' ? (
+                                          'Sterne erst bei „Teilgenommen“ möglich'
                                         ) : currentRating === null ? (
-                                          'Noch keine Bewertung (Altbestand)'
+                                          'Noch keine Bewertung'
                                         ) : (
                                           <>
                                             {ratingLabel(currentRating)} ({ratingPoints(currentRating)}{' '}
@@ -1899,22 +1939,22 @@ export default function App() {
                 Auswertung anzeigen
               </button>
               {reportData && (
-                <button
-                  style={{
-                    marginLeft: '2em',
-                    background: '#46a8f7',
-                    color: '#fff',
-                    borderRadius: 5,
-                    padding: '0.5em 1.4em',
-                    fontWeight: 600,
-                    border: 0,
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => runOnce(exportPDF)}
-                  disabled={busy}
-                >
-                  Auswertung als PDF exportieren
-                </button>
+                <div className="report-export-buttons">
+                  <button
+                    className="report-export-button"
+                    onClick={() => runOnce(exportPDF)}
+                    disabled={busy}
+                  >
+                    Tabellen-PDF
+                  </button>
+                  <button
+                    className="report-export-button child-export-button"
+                    onClick={() => runOnce(exportChildPDF)}
+                    disabled={busy}
+                  >
+                    Kindgerechtes PDF
+                  </button>
+                </div>
               )}
             </div>
             {reportData && (
@@ -2120,6 +2160,12 @@ export default function App() {
         items: Object.fromEntries(
           Object.entries(cl.items || {}).map(([k, v]) => [k, !!v])
         ),
+        remarks: Object.fromEntries(
+          Object.entries(cl.remarks || {}).map(([name, remark]) => [
+            name,
+            typeof remark === 'string' ? remark : '',
+          ])
+        ),
         createdBy: cl.createdBy || editorName || '',
         createdAt: toIsoDate(cl.createdAt),
         lastEdited:
@@ -2137,27 +2183,38 @@ export default function App() {
       });
       if (!res.ok) throw new Error(`Checklisten: HTTP ${res.status}`);
       const serverList = await res.json();
-      const normalized = Array.isArray(serverList) ? serverList : [];
+      const normalized = Array.isArray(serverList)
+        ? serverList.map((checklist) => ({
+            ...checklist,
+            items: checklist.items || {},
+            remarks: checklist.remarks || {},
+          }))
+        : [];
       setChecklists(normalized);
       return normalized;
     };
     const ensurePlayersPresent = (cl) => {
       const items = { ...(cl.items || {}) };
+      const remarks = { ...(cl.remarks || {}) };
       activePlayersOnly.forEach((p) => {
         if (!(p.name in items)) items[p.name] = false;
+        if (!(p.name in remarks)) remarks[p.name] = '';
       });
-      return { ...cl, items };
+      return { ...cl, items, remarks };
     };
     const createChecklist = () =>
       runOnce(async () => {
         const title = newChecklistTitle.trim() || 'Neue Checkliste';
         const items = {};
+        const remarks = {};
         activePlayersOnly.forEach((p) => {
           items[p.name] = false;
+          remarks[p.name] = '';
         });
         const newCl = {
           title,
           items,
+          remarks,
           createdBy: loggedInUser,
           createdAt: new Date().toISOString(),
           lastEdited: { by: loggedInUser, at: new Date().toISOString() },
@@ -2195,6 +2252,16 @@ export default function App() {
         const updated = [...checklists];
         const cl = { ...ensurePlayersPresent(updated[idx]) };
         cl.items = { ...cl.items, [playerName]: !cl.items[playerName] };
+        cl.lastEdited = { by: loggedInUser, at: new Date().toISOString() };
+        updated[idx] = cl;
+        await saveChecklistList(updated, loggedInUser);
+      });
+    const saveRemark = (idx, playerName, remark) =>
+      runOnce(async () => {
+        const updated = [...checklists];
+        const cl = { ...ensurePlayersPresent(updated[idx]) };
+        const cleanedRemark = typeof remark === 'string' ? remark.trim() : '';
+        cl.remarks = { ...cl.remarks, [playerName]: cleanedRemark };
         cl.lastEdited = { by: loggedInUser, at: new Date().toISOString() };
         updated[idx] = cl;
         await saveChecklistList(updated, loggedInUser);
@@ -2258,6 +2325,7 @@ export default function App() {
                   <div>
                     <div style={{ margin: '0.6rem 0 0.3rem 0' }}>
                       <input
+                        className="checklist-title-input"
                         type="text"
                         value={cl.title}
                         onChange={(e) => {
@@ -2266,17 +2334,9 @@ export default function App() {
                           setChecklists(updated);
                         }}
                         onBlur={(e) => renameChecklist(idx, e.target.value)}
-                        style={{
-                          background: '#232942',
-                          color: '#e9f2ff',
-                          border: '1px solid #2d385b',
-                          borderRadius: '4px',
-                          padding: '0.25rem 0.5rem',
-                          minWidth: '240px',
-                        }}
                       />
                     </div>
-                    <div>
+                    <div className="checklist-actions">
                       <button
                         className="main-func-btn"
                         onClick={() => markAll(idx, true)}
@@ -2287,7 +2347,6 @@ export default function App() {
                       <button
                         className="main-func-btn"
                         onClick={() => markAll(idx, false)}
-                        style={{ marginLeft: '0.6rem' }}
                         disabled={busy}
                       >
                         Alle leeren
@@ -2295,44 +2354,55 @@ export default function App() {
                       <button
                         className="btn-delete-training"
                         onClick={() => deleteChecklist(idx)}
-                        style={{ marginLeft: '0.6rem' }}
                         disabled={busy}
                       >
                         🗑 Löschen
                       </button>
                     </div>
-                    <div className="trainings-list">
-                      <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
-                        <thead>
-                          <tr>
-                            <th style={{ textAlign: 'left', padding: '8px' }}>Spielerin</th>
-                            <th style={{ textAlign: 'center', padding: '8px' }}>Erhalten / erledigt</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {activePlayersOnly.map((p, i) => (
-                            <tr
-                              key={p.name}
-                              style={{
-                                background: rowBg(i),
-                                borderTop: '1px solid #2b3559',
-                                borderBottom: '1px solid #151b2e',
+                    <div className="checklist-items">
+                      <div className="checklist-items-head" aria-hidden="true">
+                        <span>Spielerin</span>
+                        <span>Erledigt</span>
+                        <span>Bemerkung</span>
+                      </div>
+                      {activePlayersOnly.map((p, i) => (
+                        <div
+                          key={p.name}
+                          className="checklist-person-row"
+                          style={{ '--checklist-row-bg': rowBg(i) }}
+                        >
+                          <strong className="checklist-person-name">{p.name}</strong>
+                          <label className="checklist-person-check">
+                            <input
+                              type="checkbox"
+                              checked={!!cl.items[p.name]}
+                              onChange={() => toggleItem(idx, p.name)}
+                              disabled={busy}
+                            />
+                            <span>{cl.items[p.name] ? 'Erledigt' : 'Offen'}</span>
+                          </label>
+                          <label className="checklist-remark-field">
+                            <span className="mobile-field-label">Bemerkung</span>
+                            <input
+                              type="text"
+                              value={cl.remarks[p.name] || ''}
+                              placeholder="Bemerkung zu dieser Spielerin"
+                              onChange={(event) => {
+                                const updated = [...checklists];
+                                const changed = { ...ensurePlayersPresent(updated[idx]) };
+                                changed.remarks = {
+                                  ...changed.remarks,
+                                  [p.name]: event.target.value,
+                                };
+                                updated[idx] = changed;
+                                setChecklists(updated);
                               }}
-                            >
-                              <td style={{ padding: '8px 10px' }}>{p.name}</td>
-                              <td style={{ textAlign: 'center', padding: '8px 10px' }}>
-                                <input
-                                  type="checkbox"
-                                  checked={!!cl.items[p.name]}
-                                  onChange={() => toggleItem(idx, p.name)}
-                                  style={{ transform: 'scale(1.2)' }}
-                                  disabled={busy}
-                                />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                              onBlur={(event) => saveRemark(idx, p.name, event.target.value)}
+                              disabled={busy}
+                            />
+                          </label>
+                        </div>
+                      ))}
                     </div>
                     <div style={{ marginTop: '0.6rem', fontSize: '0.92rem', color: '#8bb2f4' }}>
                       Erstellt von {cl.createdBy || 'Unbekannt'} am{' '}
@@ -2492,5 +2562,149 @@ export default function App() {
     doc.setFontSize(11);
     doc.text(`© ${currentYear} Matthias Kopf. Alle Rechte vorbehalten.`, 14, doc.internal.pageSize.height - 10);
     doc.save(`Trainingsauswertung-Saison-${reportData.season.replace('/', '-')}.pdf`);
+  }
+
+  async function exportChildPDF() {
+    if (!reportData) return;
+    const { jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 12;
+    const gap = 8;
+    const cardWidth = (pageWidth - margin * 2 - gap) / 2;
+    const cardHeight = 70;
+    const cardsPerPage = 4;
+
+    const drawHeader = () => {
+      doc.setFillColor(24, 108, 190);
+      doc.rect(0, 0, pageWidth, 29, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(18);
+      doc.text(`Meine Trainingsauswertung, Saison ${reportData.season}`, margin, 13);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.text(
+        `${formatInputDate(reportData.fromDate)} bis ${formatInputDate(reportData.toDate)} | ${reportData.totalTrainings} Trainings`,
+        margin,
+        22
+      );
+    };
+
+    if (reportData.data.length === 0) {
+      drawHeader();
+      doc.setTextColor(45, 62, 82);
+      doc.setFontSize(14);
+      doc.text('Für diesen Zeitraum sind keine Spielerinnen auswertbar.', margin, 48);
+    }
+
+    reportData.data.forEach((row, index) => {
+      if (index % cardsPerPage === 0) {
+        if (index > 0) doc.addPage();
+        drawHeader();
+      }
+
+      const pageIndex = index % cardsPerPage;
+      const column = pageIndex % 2;
+      const line = Math.floor(pageIndex / 2);
+      const x = margin + column * (cardWidth + gap);
+      const y = 35 + line * (cardHeight + gap);
+      const innerX = x + 8;
+
+      doc.setDrawColor(154, 193, 226);
+      doc.setFillColor(241, 248, 255);
+      doc.roundedRect(x, y, cardWidth, cardHeight, 4, 4, 'FD');
+
+      doc.setTextColor(25, 76, 126);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(15);
+      doc.text(String(row.name || '').slice(0, 32), innerX, y + 11);
+
+      if (row.memberSince) {
+        doc.setTextColor(78, 103, 129);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        const hint = doc.splitTextToSize(`Hinweis: ${row.memberSince}`, cardWidth - 16)[0];
+        doc.text(hint, innerX, y + 17);
+      }
+
+      const attendanceY = y + 24;
+      const barWidth = cardWidth - 50;
+      doc.setTextColor(44, 66, 89);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.text('Teilnahme', innerX, attendanceY);
+      doc.text(`${row.percent}%`, x + cardWidth - 8, attendanceY, { align: 'right' });
+      doc.setFillColor(215, 226, 237);
+      doc.roundedRect(innerX, attendanceY + 3, barWidth, 6, 3, 3, 'F');
+      if (row.percent > 0) {
+        const attendanceColor =
+          row.percent >= 75 ? [52, 181, 108] : row.percent >= 50 ? [244, 178, 45] : [229, 100, 90];
+        doc.setFillColor(...attendanceColor);
+        doc.roundedRect(
+          innerX,
+          attendanceY + 3,
+          Math.max(3, (barWidth * row.percent) / 100),
+          6,
+          3,
+          3,
+          'F'
+        );
+      }
+      doc.setTextColor(75, 92, 109);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.text(
+        `${row.attendCount} von ${row.consideredCount} gewerteten Trainings dabei`,
+        innerX,
+        attendanceY + 14
+      );
+
+      const ratingY = y + 49;
+      doc.setTextColor(44, 66, 89);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.text('Sterne', innerX, ratingY);
+      const filledStars =
+        row.averageRatingValue === null
+          ? 0
+          : Math.max(0, Math.min(3, Math.round(row.averageRatingValue)));
+      RATING_VALUES.forEach((star) => {
+        drawPdfStar(doc, innerX + 31 + (star - 1) * 11, ratingY - 1.3, 4.5, star <= filledStars);
+      });
+      doc.setTextColor(44, 66, 89);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.text(
+        row.averageRatingValue === null ? 'Noch keine Bewertung' : `${row.averageRating} von 3`,
+        x + cardWidth - 8,
+        ratingY,
+        { align: 'right' }
+      );
+
+      doc.setTextColor(83, 99, 116);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.8);
+      doc.text(
+        `Abgemeldet: ${row.excusedCount}   Nicht abgemeldet: ${row.unexcusedCount}   Inaktiv: ${row.inactiveCount}`,
+        innerX,
+        y + 63
+      );
+    });
+
+    const pageCount = doc.getNumberOfPages();
+    for (let page = 1; page <= pageCount; page += 1) {
+      doc.setPage(page);
+      doc.setTextColor(101, 116, 132);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.text(`Fußball-App ${version} | Seite ${page} von ${pageCount}`, margin, pageHeight - 5);
+      doc.text(`© ${currentYear} Matthias Kopf`, pageWidth - margin, pageHeight - 5, {
+        align: 'right',
+      });
+    }
+
+    doc.save(`Kindgerechte-Auswertung-Saison-${reportData.season.replace('/', '-')}.pdf`);
   }
 }

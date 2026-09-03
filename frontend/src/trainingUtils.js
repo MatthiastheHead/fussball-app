@@ -119,7 +119,7 @@ export const summarizePlayerTrainings = (trainings, playerName) => {
     else if (icon === '❌') excusedCount += 1;
     else unexcusedCount += 1;
 
-    const hasRating = Object.prototype.hasOwnProperty.call(
+    const hasRating = icon === '✅' && Object.prototype.hasOwnProperty.call(
       training.ratings || {},
       playerName
     );

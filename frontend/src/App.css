@@ -145,6 +145,8 @@ header h1 {
 .edit-date-input,
 .role-dropdown,
 .trainer-status-dropdown,
+.checklist-title-input,
+.checklist-remark-field input,
 textarea {
   min-height: 42px;
   padding: 0.6rem 0.7rem;
@@ -182,6 +184,83 @@ textarea::placeholder,
   font-weight: 650;
   box-shadow: 0 5px 14px rgba(0, 0, 0, 0.18);
   transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.checklist-title-input {
+  width: min(100%, 460px);
+  min-height: 44px;
+}
+
+.checklist-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 0.8rem 0;
+}
+
+.checklist-actions button {
+  margin: 0;
+  padding: 0.6rem 0.85rem;
+}
+
+.checklist-items {
+  margin-top: 0.9rem;
+  overflow: hidden;
+  border: 1px solid #2e4369;
+  border-radius: 10px;
+}
+
+.checklist-items-head,
+.checklist-person-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(130px, 0.55fr) minmax(220px, 1.4fr);
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.checklist-items-head {
+  padding: 0.65rem 0.8rem;
+  background: #1e3457;
+  color: #c9e7ff;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.checklist-person-row {
+  padding: 0.7rem 0.8rem;
+  border-top: 1px solid #2b3559;
+  background: var(--checklist-row-bg, #1e2744);
+}
+
+.checklist-person-name {
+  color: #eff7ff;
+}
+
+.checklist-person-check {
+  display: inline-flex;
+  gap: 0.55rem;
+  align-items: center;
+  color: #c6dcf5;
+  cursor: pointer;
+}
+
+.checklist-person-check input {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: #36b779;
+}
+
+.checklist-remark-field {
+  display: block;
+}
+
+.checklist-remark-field input {
+  width: 100%;
+}
+
+.mobile-field-label {
+  display: none;
 }
 
 .login-screen button:hover:not(:disabled),
@@ -664,6 +743,26 @@ textarea::placeholder,
   margin-bottom: 1rem;
 }
 
+.report-export-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.report-export-button {
+  padding: 0.6rem 0.95rem;
+  border: 0;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #247ec9, #22589e);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.child-export-button {
+  background: linear-gradient(135deg, #27a96e, #197c51);
+}
+
 .report-legend {
   padding: 0.7rem 0.8rem;
   border-radius: 9px;
@@ -856,18 +955,50 @@ footer a {
 }
 
 @media (max-width: 699px) {
+  body {
+    background: linear-gradient(180deg, #0f1b31, #0b1220 34rem);
+  }
+
   .App {
-    padding: 0.65rem;
+    padding: 0.55rem 0.55rem calc(0.75rem + env(safe-area-inset-bottom));
   }
 
   header {
-    margin-inline: -0.65rem;
+    margin-inline: -0.55rem;
+    margin-bottom: 0.85rem;
+    padding: 0.85rem 0.65rem;
     border-radius: 0 0 14px 14px;
+  }
+
+  header h1 {
+    font-size: clamp(1.2rem, 6vw, 1.55rem);
+  }
+
+  .player-management,
+  .admin-section,
+  .training-settings,
+  .report-section,
+  .add-training-panel,
+  .checklist-create,
+  .checklist-list,
+  .season-toolbar {
+    margin-bottom: 0.8rem;
+    padding: 0.75rem;
+    border-radius: 12px;
+  }
+
+  input,
+  select,
+  textarea {
+    min-width: 0;
+    font-size: 16px;
   }
 
   .controls,
   .mobile-controls {
     flex-direction: column;
+    gap: 0.55rem;
+    margin-bottom: 0.85rem;
   }
 
   .main-func-btn,
@@ -878,6 +1009,42 @@ footer a {
   .training-filter > *,
   .report-form > * {
     width: 100%;
+  }
+
+  .season-toolbar .labeled-field,
+  .checklist-title-input,
+  .report-export-buttons,
+  .report-export-button {
+    width: 100%;
+  }
+
+  .training {
+    margin-bottom: 0.7rem;
+    border-radius: 11px;
+  }
+
+  .training > div {
+    padding: 0.65rem;
+  }
+
+  .training-header {
+    padding: 0.8rem;
+    font-size: 0.98rem;
+    line-height: 1.4;
+  }
+
+  .player-card {
+    margin: 0.55rem 0;
+    padding: 0.7rem;
+  }
+
+  .player-name-line b {
+    font-size: 1.08rem;
+  }
+
+  .player-hint {
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
 
   .training-filter label,
@@ -908,18 +1075,131 @@ footer a {
     flex-direction: column;
   }
 
+  .report-view-switch button,
+  .report-export-button {
+    width: 100%;
+    min-height: 48px;
+  }
+
   .player-list li > div > button,
   .player-list li > div > select {
     flex: 1 1 140px;
   }
 
-  .status-text {
-    width: 100%;
-    margin-top: 0.2rem;
+  .status-btn-row,
+  .star-rating {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.45rem;
   }
 
-  .report-results table,
-  .checklist-list table {
-    min-width: 600px;
+  .status-btn-row button,
+  .star-rating button {
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+  }
+
+  .status-text,
+  .rating-text {
+    grid-column: 1 / -1;
+    width: 100%;
+    margin: 0.15rem 0 0;
+  }
+
+  .training-inactive-control {
+    padding: 0.65rem;
+  }
+
+  .inactive-reason {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .child-report-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .child-report-card {
+    padding: 0.85rem;
+  }
+
+  .checklist-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .checklist-actions .btn-delete-training {
+    grid-column: 1 / -1;
+  }
+
+  .checklist-items-head {
+    display: none;
+  }
+
+  .checklist-person-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.65rem;
+    padding: 0.8rem;
+  }
+
+  .checklist-person-name {
+    overflow-wrap: anywhere;
+    font-size: 1.04rem;
+  }
+
+  .checklist-person-check {
+    justify-self: end;
+  }
+
+  .checklist-person-check input {
+    width: 27px;
+    height: 27px;
+  }
+
+  .checklist-remark-field {
+    grid-column: 1 / -1;
+  }
+
+  .mobile-field-label {
+    display: block;
+    margin-bottom: 0.3rem;
+    color: #a9cbea;
+    font-size: 0.82rem;
+    font-weight: 650;
+  }
+
+  .report-results {
+    margin-inline: -0.25rem;
+    padding: 0 0.25rem 0.55rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .report-results table {
+    min-width: 880px;
+  }
+
+  footer {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 380px) {
+  .child-status-summary,
+  .checklist-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .checklist-actions .btn-delete-training {
+    grid-column: auto;
+  }
+
+  .checklist-person-row {
+    grid-template-columns: 1fr;
+  }
+
+  .checklist-person-check {
+    justify-self: start;
   }
 }

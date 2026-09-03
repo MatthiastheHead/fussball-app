@@ -50,7 +50,7 @@ test('wertet null Sterne als minus einen Punkt', () => {
   assert.equal(ratingLabel(0), 'Keine Sterne, −1 Punkt');
 });
 
-test('fasst Teilnahme, Abmeldungen und Sterne korrekt zusammen', () => {
+test('wertet Sterne ausschließlich bei Teilnahme', () => {
   const result = summarizePlayerTrainings(
     [
       {
@@ -76,16 +76,16 @@ test('fasst Teilnahme, Abmeldungen und Sterne korrekt zusammen', () => {
   assert.equal(result.excusedCount, 1);
   assert.equal(result.unexcusedCount, 1);
   assert.equal(result.consideredCount, 3);
-  assert.equal(result.averageRating, '1,7');
-  assert.equal(Math.round(result.averageRatingValue * 10), 17);
-  assert.equal(result.ratingCount, 3);
-  assert.equal(result.pointsTotal, 4);
+  assert.equal(result.averageRating, '3,0');
+  assert.equal(result.averageRatingValue, 3);
+  assert.equal(result.ratingCount, 1);
+  assert.equal(result.pointsTotal, 3);
   assert.deepEqual(
     result.details.map(({ statusText, rating, points }) => ({ statusText, rating, points })),
     [
       { statusText: 'Teilgenommen', rating: 3, points: 3 },
-      { statusText: 'Abgemeldet', rating: 0, points: -1 },
-      { statusText: 'Nicht abgemeldet', rating: 2, points: 2 },
+      { statusText: 'Abgemeldet', rating: null, points: null },
+      { statusText: 'Nicht abgemeldet', rating: null, points: null },
     ]
   );
 });
