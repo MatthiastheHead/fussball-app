@@ -1,8 +1,8 @@
 export const TEAM_DEFINITIONS = [
-  { name: 'Team Blau', color: '#247dc7' },
-  { name: 'Team Rot', color: '#c94851' },
-  { name: 'Team Grün', color: '#238e5b' },
-  { name: 'Team Orange', color: '#c66d18' },
+  { name: 'Team Orange', color: '#c66d18', secondaryColor: '#e7a13f', theme: 'orange' },
+  { name: 'Team Grau', color: '#596775', secondaryColor: '#87929d', theme: 'gray' },
+  { name: 'Team Bunt', color: '#7651c9', secondaryColor: '#1797a5', theme: 'mixed' },
+  { name: 'Team Bunt 2', color: '#b4458d', secondaryColor: '#287fcc', theme: 'mixed' },
 ];
 
 export function selectGeneratorPlayers(players) {
@@ -27,6 +27,10 @@ export function createBalancedTeams(playerNames, requestedTeamCount, random = Ma
   );
   const teams = Array.from({ length: teamCount }, (_, index) => ({
     ...TEAM_DEFINITIONS[index],
+    name:
+      teamCount === 4 && index === 2
+        ? 'Team Bunt 1'
+        : TEAM_DEFINITIONS[index].name,
     players: [],
   }));
 

@@ -407,6 +407,7 @@ textarea::placeholder,
 
 .player-management,
 .admin-section,
+.settings-category-section,
 .team-generator-controls,
 .team-generator-result,
 .training-settings,
@@ -425,6 +426,7 @@ textarea::placeholder,
 
 .player-management h2,
 .admin-section h2,
+.settings-category-section h2,
 .team-generator-controls h2,
 .team-generator-result h2,
 .training-settings h2,
@@ -489,6 +491,14 @@ textarea::placeholder,
   border-radius: 8px;
   background: #17233b;
   color: #fff;
+}
+
+.generated-team-card.mixed .generated-team-card-heading {
+  background: linear-gradient(
+    135deg,
+    var(--team-color),
+    var(--team-color-secondary)
+  );
 }
 
 .team-count-field {
@@ -775,6 +785,100 @@ textarea::placeholder,
 
 .settings-row {
   align-items: flex-end;
+}
+
+.settings-category-intro p {
+  margin: -0.25rem 0 1rem;
+  color: #b8d7f7;
+}
+
+.settings-category-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.settings-category-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.8rem;
+  align-items: center;
+  min-height: 126px;
+  padding: 0.9rem;
+  border: 1px solid #35517d;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #192d4a, #132139);
+  color: #edf7ff;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.settings-category-card:hover,
+.settings-category-card:focus-visible {
+  border-color: #6fc2ff;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
+  transform: translateY(-2px);
+}
+
+.settings-category-card:focus-visible {
+  outline: 3px solid rgba(111, 194, 255, 0.28);
+  outline-offset: 2px;
+}
+
+.settings-category-card.has-alert {
+  border-color: #cf8a2e;
+}
+
+.settings-category-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 12px;
+  background: #203d62;
+  font-size: 1.45rem;
+}
+
+.settings-category-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+
+.settings-category-copy strong {
+  color: #fff;
+  font-size: 1.06rem;
+}
+
+.settings-category-copy small {
+  color: #b8d2e9;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.settings-category-copy em {
+  width: fit-content;
+  margin-top: 0.18rem;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  background: #173f61;
+  color: #a8dcff;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.settings-category-card.has-alert .settings-category-copy em {
+  background: #5a3b16;
+  color: #ffd9a4;
+}
+
+.settings-category-arrow {
+  color: #7bc9ff;
+  font-size: 2rem;
+  line-height: 1;
 }
 
 .add-player-form button,
@@ -2176,6 +2280,7 @@ footer a {
 
   .player-management,
   .admin-section,
+  .settings-category-section,
   .team-generator-controls,
   .team-generator-result,
   .training-settings,
@@ -2277,6 +2382,14 @@ footer a {
   .team-add-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .settings-category-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-category-card {
+    min-height: 112px;
   }
 
   .team-counts {

@@ -44,3 +44,18 @@ test('verteilt alle Spielerinnen möglichst gleichmäßig auf zwei bis vier Team
     assert.ok(Math.max(...sizes) - Math.min(...sizes) <= 1);
   });
 });
+
+test('benennt die Teams passend zu den vorhandenen Leibchen', () => {
+  assert.deepEqual(
+    createBalancedTeams(['A', 'B'], 2, () => 0).map((team) => team.name),
+    ['Team Orange', 'Team Grau']
+  );
+  assert.deepEqual(
+    createBalancedTeams(['A', 'B', 'C'], 3, () => 0).map((team) => team.name),
+    ['Team Orange', 'Team Grau', 'Team Bunt']
+  );
+  assert.deepEqual(
+    createBalancedTeams(['A', 'B', 'C', 'D'], 4, () => 0).map((team) => team.name),
+    ['Team Orange', 'Team Grau', 'Team Bunt 1', 'Team Bunt 2']
+  );
+});

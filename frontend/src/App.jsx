@@ -1,4 +1,4 @@
-// Version 7.0: ausgewogene Zufallsteams mit Bildexport.
+// Version 7.1: echte Leibchenfarben und kategorisierte Einstellungen.
 
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
@@ -272,7 +272,8 @@ export default function App() {
   const [generatedTeams, setGeneratedTeams] = useState([]);
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
-  const version = '7.0';
+  const [settingsCategory, setSettingsCategory] = useState(null);
+  const version = '7.1';
   const currentYear = new Date().getFullYear();
 
   const createAuditEntry = (action) => ({
@@ -565,6 +566,7 @@ export default function App() {
       setLoginPass('');
       setShowStartMenu(true);
       setShowSettings(false);
+      setSettingsCategory(null);
       setShowTeamGenerator(false);
       const accountStatusPromise = loadRecoveryStatus(session.token);
       if (session.isAdmin) {
@@ -598,6 +600,7 @@ export default function App() {
     setRecoverySetupConfirmed(false);
     setShowStartMenu(true);
     setShowSettings(false);
+    setSettingsCategory(null);
     setShowChecklists(false);
     setShowTeamGenerator(false);
     setGeneratorTeamCount(2);
@@ -1447,7 +1450,14 @@ export default function App() {
       context.restore();
 
       addRoundedCanvasRect(context, x, y, cardWidth, 78, 24);
-      context.fillStyle = team.color;
+      if (team.theme === 'mixed') {
+        const teamGradient = context.createLinearGradient(x, y, x + cardWidth, y + 78);
+        teamGradient.addColorStop(0, team.color);
+        teamGradient.addColorStop(1, team.secondaryColor);
+        context.fillStyle = teamGradient;
+      } else {
+        context.fillStyle = team.color;
+      }
       context.fill();
       context.fillStyle = '#ffffff';
       context.font = '800 34px Inter, Arial, sans-serif';
@@ -1802,6 +1812,7 @@ export default function App() {
           style={{ margin: '0.9em auto 0 auto', fontSize: '1.13rem', minWidth: 260 }}
           onClick={() => {
             setShowSettings(true);
+            setSettingsCategory(null);
             setShowStartMenu(false);
             setShowChecklists(false);
             setShowTeamGenerator(false);
@@ -1983,8 +1994,11 @@ export default function App() {
               {generatedTeams.map((team) => (
                 <article
                   key={team.name}
-                  className="generated-team-card"
-                  style={{ '--team-color': team.color }}
+                  className={`generated-team-card ${team.theme}`}
+                  style={{
+                    '--team-color': team.color,
+                    '--team-color-secondary': team.secondaryColor,
+                  }}
                 >
                   <div className="generated-team-card-heading">
                     <h3>{team.name}</h3>
@@ -2070,6 +2084,100 @@ export default function App() {
         members: filteredTeamMembers.filter((player) => player.isTrainer),
       },
     ].filter((group) => group.members.length > 0);
+
+    const settingsCategories = [
+      {
+        key: 'training',
+        icon: '⚽',
+        title: 'Trainingseinstellungen',
+        description: 'Standardort für neue Trainings festlegen.',
+        meta: defaultTrainingLocation,
+      },
+      {
+        key: 'team',
+        icon: '👥',
+        title: 'Teamverwaltung',
+        description: 'Spielerinnen und Trainer anlegen oder bearbeiten.',
+        meta: `${playersCount} Spielerinnen · ${trainersCount} Trainer`,
+      },
+      {
+        key: 'security',
+        icon: '🔐',
+        title: 'Kontosicherheit',
+        description: 'Authenticator und persönliche Notfallcodes verwalten.',
+        meta: recoveryStatus.enabled ? 'Eingerichtet' : 'Noch nicht eingerichtet',
+      },
+      ...(loggedInUser === 'Matthias'
+        ? [
+            {
+              key: 'access',
+              icon: '🔑',
+              title: 'App-Zugänge',
+              description: 'Benutzer, Passwörter und Login-Übersicht verwalten.',
+              meta:
+                passwordResetRequests.length > 0
+                  ? `${passwordResetRequests.length} offene Passwortanfrage${
+                      passwordResetRequests.length === 1 ? '' : 'n'
+                    }`
+                  : `${users.length} Benutzer`,
+              alert: passwordResetRequests.length > 0,
+            },
+          ]
+        : []),
+    ];
+
+    if (!settingsCategory) {
+      return (
+        <div className="App settings-home">
+          <header>
+            <h1>⚙ Einstellungen</h1>
+          </header>
+          <section className="settings-category-section">
+            <div className="settings-category-intro">
+              <h2>Bereich auswählen</h2>
+              <p>Tippe auf eine Kategorie, um die passenden Einstellungen zu öffnen.</p>
+            </div>
+            <div className="settings-category-grid">
+              {settingsCategories.map((category) => (
+                <button
+                  key={category.key}
+                  type="button"
+                  className={`settings-category-card${category.alert ? ' has-alert' : ''}`}
+                  onClick={() => setSettingsCategory(category.key)}
+                >
+                  <span className="settings-category-icon" aria-hidden="true">
+                    {category.icon}
+                  </span>
+                  <span className="settings-category-copy">
+                    <strong>{category.title}</strong>
+                    <small>{category.description}</small>
+                    <em>{category.meta}</em>
+                  </span>
+                  <span className="settings-category-arrow" aria-hidden="true">›</span>
+                </button>
+              ))}
+            </div>
+          </section>
+          <button
+            className="main-func-btn"
+            style={{ margin: '2em auto 0 auto', width: '260px' }}
+            onClick={() => {
+              setShowSettings(false);
+              setShowStartMenu(true);
+              setSettingsCategory(null);
+            }}
+            disabled={busy}
+          >
+            Zurück zum Startmenü
+          </button>
+          <footer>
+            <div style={{ marginTop: '2.5em', color: '#8bb2f4', fontSize: '0.97rem' }}>
+              © {currentYear} Matthias Kopf
+            </div>
+          </footer>
+        </div>
+      );
+    }
 
     const renderTeamMember = (player) => {
       const isEditing = editPlayerId === player.name;
@@ -2228,8 +2336,11 @@ export default function App() {
     return (
       <div className="App">
         <header>
-          <h1>⚙ Einstellungen</h1>
+          <h1>
+            ⚙ {settingsCategories.find((category) => category.key === settingsCategory)?.title || 'Einstellungen'}
+          </h1>
         </header>
+        {settingsCategory === 'training' && (
         <section className="training-settings">
           <h2>Trainingseinstellungen</h2>
           <p>Dieser Ort ist beim Anlegen eines neuen Trainings vorausgewählt.</p>
@@ -2251,6 +2362,8 @@ export default function App() {
             </button>
           </div>
         </section>
+        )}
+        {settingsCategory === 'team' && (
         <section className="player-management">
           <div className="team-management-heading">
             <div>
@@ -2367,6 +2480,8 @@ export default function App() {
             )}
           </div>
         </section>
+        )}
+        {settingsCategory === 'security' && (
         <section className="admin-section account-security-section">
           <h2>Kontosicherheit</h2>
           <p className="admin-section-intro">
@@ -2516,7 +2631,8 @@ export default function App() {
               {recoveryAdminError && <p className="login-error">{recoveryAdminError}</p>}
           </div>
         </section>
-        {loggedInUser === 'Matthias' && (
+        )}
+        {settingsCategory === 'access' && loggedInUser === 'Matthias' && (
           <section className="admin-section">
             <h2>App-Zugänge</h2>
             <p className="admin-section-intro">
@@ -2679,12 +2795,11 @@ export default function App() {
           className="main-func-btn"
           style={{ margin: '2em auto 0 auto', width: '260px' }}
           onClick={() => {
-            setShowSettings(false);
-            setShowStartMenu(true);
+            setSettingsCategory(null);
           }}
           disabled={busy}
         >
-          Zurück zum Startmenü
+          Zurück zu den Einstellungen
         </button>
         <footer>
           <div style={{ marginTop: '2.5em', color: '#8bb2f4', fontSize: '0.97rem' }}>
