@@ -1,5 +1,5 @@
-// Version 6.4: übersichtliche Teamverwaltung und eine sichere
-// Authenticator-Wiederherstellung für Matthias.
+// Version 6.5: persönliche Authenticator-Wiederherstellung für alle
+// Benutzerkonten und Passwortanfragen an den Administrator.
 
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
@@ -160,16 +160,19 @@ export default function App() {
   const [loginError, setLoginError] = useState('');
   const [loginNotice, setLoginNotice] = useState('');
   const [showPasswordRecovery, setShowPasswordRecovery] = useState(false);
+  const [recoveryUsername, setRecoveryUsername] = useState('');
   const [recoveryCredential, setRecoveryCredential] = useState('');
   const [recoveryNewPassword, setRecoveryNewPassword] = useState('');
   const [recoveryNewPasswordRepeat, setRecoveryNewPasswordRepeat] = useState('');
   const [passwordRecoveryError, setPasswordRecoveryError] = useState('');
+  const [passwordResetRequestNotice, setPasswordResetRequestNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [initializing, setInitializing] = useState(true);
   const [loadError, setLoadError] = useState('');
 
   const [users, setUsers] = useState([]);
   const [loginHistory, setLoginHistory] = useState([]);
+  const [passwordResetRequests, setPasswordResetRequests] = useState([]);
   const [adminLoadError, setAdminLoadError] = useState('');
   const [recoveryAdminError, setRecoveryAdminError] = useState('');
   const [recoveryStatus, setRecoveryStatus] = useState({
@@ -219,7 +222,7 @@ export default function App() {
   const [expandedChecklist, setExpandedChecklist] = useState(null);
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
-  const version = '6.4';
+  const version = '6.5';
   const currentYear = new Date().getFullYear();
 
   const createAuditEntry = (action) => ({
@@ -371,41 +374,67 @@ export default function App() {
   async function loadAdminData(token = authToken) {
     if (!token) return false;
     setAdminLoadError('');
-    setRecoveryAdminError('');
-    const [usersResponse, historyResponse, recoveryResponse] = await Promise.all([
+    const [usersResponse, historyResponse, resetRequestsResponse] = await Promise.all([
       authenticatedRequest('admin/users', {}, token),
       authenticatedRequest('admin/login-events?limit=200', {}, token),
-      authenticatedRequest('admin/recovery/status', {}, token),
+      authenticatedRequest('admin/password-reset-requests', {}, token),
     ]);
-    if (!usersResponse.ok || !historyResponse.ok) {
-      if (usersResponse.status === 401 || historyResponse.status === 401) {
+    if (!usersResponse.ok || !historyResponse.ok || !resetRequestsResponse.ok) {
+      if (
+        usersResponse.status === 401 ||
+        historyResponse.status === 401 ||
+        resetRequestsResponse.status === 401
+      ) {
         setAdminLoadError('Die Admin-Sitzung ist abgelaufen. Bitte erneut einloggen.');
       } else {
         setAdminLoadError('Die Admin-Daten konnten nicht geladen werden.');
       }
       return false;
     }
-    const [adminUsers, events] = await Promise.all([
+    const [adminUsers, events, resetRequests] = await Promise.all([
       usersResponse.json(),
       historyResponse.json(),
+      resetRequestsResponse.json(),
     ]);
     setUsers(Array.isArray(adminUsers) ? adminUsers : []);
     setLoginHistory(Array.isArray(events) ? events : []);
-    if (recoveryResponse.ok) {
-      const status = await recoveryResponse.json();
+    setPasswordResetRequests(Array.isArray(resetRequests) ? resetRequests : []);
+    return true;
+  }
+
+  async function loadRecoveryStatus(token = authToken) {
+    if (!token) return false;
+    setRecoveryAdminError('');
+    const response = await authenticatedRequest('account/recovery/status', {}, token);
+    if (response.ok) {
+      const status = await response.json();
       setRecoveryStatus({
         enabled: !!status.enabled,
         enabledAt: status.enabledAt || null,
         remainingRecoveryCodes: Number(status.remainingRecoveryCodes) || 0,
       });
+      return true;
     } else {
       setRecoveryAdminError(
-        recoveryResponse.status === 404
+        response.status === 404
           ? 'Die Authenticator-Funktion wird gerade bereitgestellt.'
           : 'Der Authenticator-Status konnte nicht geladen werden.'
       );
+      return false;
     }
-    return true;
+  }
+
+  async function refreshPasswordResetRequests(token = authToken) {
+    if (!token) return false;
+    try {
+      const response = await authenticatedRequest('admin/password-reset-requests', {}, token);
+      if (!response.ok) return false;
+      const resetRequests = await response.json();
+      setPasswordResetRequests(Array.isArray(resetRequests) ? resetRequests : []);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async function loadInitialData() {
@@ -444,6 +473,15 @@ export default function App() {
     );
   }, [players, initializing]);
 
+  useEffect(() => {
+    if (loggedInUser !== 'Matthias' || !authToken) return undefined;
+    const intervalId = window.setInterval(
+      () => refreshPasswordResetRequests(authToken),
+      30_000
+    );
+    return () => window.clearInterval(intervalId);
+  }, [loggedInUser, authToken]);
+
   const handleLogin = () =>
     runOnce(async () => {
       if (initializing) return false;
@@ -471,11 +509,14 @@ export default function App() {
       setLoginPass('');
       setShowStartMenu(true);
       setShowSettings(false);
+      const accountStatusPromise = loadRecoveryStatus(session.token);
       if (session.isAdmin) {
-        await loadAdminData(session.token);
+        await Promise.all([accountStatusPromise, loadAdminData(session.token)]);
       } else {
+        await accountStatusPromise;
         setUsers([]);
         setLoginHistory([]);
+        setPasswordResetRequests([]);
         setAdminLoadError('');
       }
       return true;
@@ -489,6 +530,7 @@ export default function App() {
     setAuthToken('');
     setUsers([]);
     setLoginHistory([]);
+    setPasswordResetRequests([]);
     setAdminLoadError('');
     setRecoveryAdminError('');
     setRecoveryStatus({ enabled: false, enabledAt: null, remainingRecoveryCodes: 0 });
@@ -501,11 +543,18 @@ export default function App() {
     setShowSettings(false);
     setShowChecklists(false);
     setLoginError('');
+    setRecoveryUsername('');
+    setPasswordResetRequestNotice('');
   };
 
   const handlePasswordRecovery = () =>
     runOnce(async () => {
       setPasswordRecoveryError('');
+      const username = recoveryUsername.trim();
+      if (!username) {
+        setPasswordRecoveryError('Gib deinen Benutzernamen ein.');
+        return false;
+      }
       if (!recoveryCredential.trim()) {
         setPasswordRecoveryError('Gib den Code aus deiner App oder einen Notfallcode ein.');
         return false;
@@ -519,10 +568,11 @@ export default function App() {
         return false;
       }
 
-      const response = await apiRequest('auth/recover-matthias', {
+      const response = await apiRequest('auth/recover-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          username,
           credential: recoveryCredential.trim(),
           newPassword: recoveryNewPassword,
         }),
@@ -539,9 +589,37 @@ export default function App() {
       setRecoveryNewPassword('');
       setRecoveryNewPasswordRepeat('');
       setShowPasswordRecovery(false);
-      setLoginName('Matthias');
+      setLoginName(username);
+      setRecoveryUsername('');
       setLoginPass('');
       setLoginNotice('Dein Passwort wurde geändert. Du kannst dich jetzt neu einloggen.');
+      return true;
+    });
+
+  const requestPasswordResetFromAdmin = () =>
+    runOnce(async () => {
+      setPasswordRecoveryError('');
+      setPasswordResetRequestNotice('');
+      const username = recoveryUsername.trim();
+      if (!username) {
+        setPasswordRecoveryError('Gib zuerst deinen Benutzernamen ein.');
+        return false;
+      }
+      const response = await apiRequest('auth/password-reset-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        setPasswordRecoveryError(
+          errorData.error || 'Die Anfrage konnte nicht an den Administrator gesendet werden.'
+        );
+        return false;
+      }
+      setPasswordResetRequestNotice(
+        'Anfrage übermittelt. Bei einem gültigen Benutzerkonto sieht der Administrator die Mitteilung im Adminbereich.'
+      );
       return true;
     });
 
@@ -552,7 +630,7 @@ export default function App() {
         setRecoveryAdminError('Gib zuerst dein aktuelles Passwort ein.');
         return false;
       }
-      const response = await authenticatedRequest('admin/recovery/setup', {
+      const response = await authenticatedRequest('account/recovery/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ currentPassword: recoverySetupPassword }),
@@ -592,7 +670,7 @@ export default function App() {
         setRecoveryAdminError('Gib den 6-stelligen Code aus deiner Authenticator-App ein.');
         return false;
       }
-      const response = await authenticatedRequest('admin/recovery/confirm', {
+      const response = await authenticatedRequest('account/recovery/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: recoverySetupCode.trim() }),
@@ -634,12 +712,27 @@ export default function App() {
     setRecoveryAdminError('');
   };
 
+  const resolvePasswordResetRequest = (requestId) =>
+    runOnce(async () => {
+      const response = await authenticatedRequest(
+        `admin/password-reset-requests/${requestId}/resolve`,
+        { method: 'PATCH' }
+      );
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        alert(errorData.error || 'Die Passwortanfrage konnte nicht erledigt werden.');
+        return false;
+      }
+      await loadAdminData();
+      return true;
+    });
+
   // Neue Benutzerverwaltung
   const addNewUser = () =>
     runOnce(async () => {
       const name = newUserName.trim();
-      if (!name || !newUserPass) {
-        alert('Bitte Benutzername und Passwort eingeben.');
+      if (!name || newUserPass.length < 8) {
+        alert('Bitte Benutzername und ein Passwort mit mindestens 8 Zeichen eingeben.');
         return;
       }
       if (users.some((u) => u.name === name)) {
@@ -664,8 +757,8 @@ export default function App() {
 
   const updateUserPassword = (index, newPass) =>
     runOnce(async () => {
-      if (!newPass) {
-        alert('Bitte ein neues Passwort eingeben.');
+      if (newPass.length < 8) {
+        alert('Das neue Passwort muss mindestens 8 Zeichen lang sein.');
         return;
       }
       if (!users[index]) return;
@@ -680,10 +773,16 @@ export default function App() {
         alert(errorData.error || 'Fehler beim Aktualisieren des Passworts.');
         return;
       }
-      await loadAdminData();
-      const draftKey = users[index]._id || users[index].name;
+      const draftKey = user._id || user.name;
       setPasswordDrafts((drafts) => ({ ...drafts, [draftKey]: '' }));
+      if (user.name === loggedInUser) {
+        alert('Dein Passwort wurde geändert. Bitte melde dich neu an.');
+        handleLogout();
+        return true;
+      }
+      await loadAdminData();
       alert(`Passwort für ${user.name} geändert.`);
+      return true;
     });
 
   const deleteUser = (index) =>
@@ -1269,11 +1368,26 @@ export default function App() {
           <div className="login-version">Version {version}</div>
           {showPasswordRecovery ? (
             <div className="password-recovery-form">
-              <h2>Passwort für Matthias zurücksetzen</h2>
+              <h2>Passwort zurücksetzen</h2>
               <p>
                 Nutze einen aktuellen 6-stelligen Code aus deiner Authenticator-App oder einen
-                einmaligen Notfallcode.
+                einmaligen Notfallcode. Wenn du keinen Code mehr hast, kannst du dem Administrator
+                eine Anfrage schicken.
               </p>
+              <label className="login-field">
+                <span>Benutzername</span>
+                <input
+                  type="text"
+                  placeholder="Benutzername"
+                  value={recoveryUsername}
+                  onChange={(event) => {
+                    setRecoveryUsername(event.target.value);
+                    setPasswordResetRequestNotice('');
+                  }}
+                  autoComplete="username"
+                  disabled={busy || initializing}
+                />
+              </label>
               <label className="login-field">
                 <span>Authenticator- oder Notfallcode</span>
                 <input
@@ -1316,15 +1430,24 @@ export default function App() {
               </label>
               <button
                 onClick={handlePasswordRecovery}
-                disabled={busy || initializing || !!loadError}
+                disabled={busy || initializing || !!loadError || !recoveryUsername.trim()}
               >
-                {busy ? 'Passwort wird geändert…' : 'Neues Passwort speichern'}
+                Neues Passwort speichern
+              </button>
+              <button
+                className="login-admin-request-button"
+                onClick={requestPasswordResetFromAdmin}
+                disabled={busy || initializing || !!loadError || !recoveryUsername.trim()}
+              >
+                Passwortanfrage an Admin senden
               </button>
               <button
                 className="login-secondary-button"
                 onClick={() => {
                   setShowPasswordRecovery(false);
                   setPasswordRecoveryError('');
+                  setPasswordResetRequestNotice('');
+                  setRecoveryUsername('');
                   setRecoveryCredential('');
                   setRecoveryNewPassword('');
                   setRecoveryNewPasswordRepeat('');
@@ -1335,6 +1458,9 @@ export default function App() {
               </button>
               {passwordRecoveryError && (
                 <p className="login-error">{passwordRecoveryError}</p>
+              )}
+              {passwordResetRequestNotice && (
+                <p className="login-notice">{passwordResetRequestNotice}</p>
               )}
             </div>
           ) : (
@@ -1369,13 +1495,15 @@ export default function App() {
                 className="login-secondary-button"
                 onClick={() => {
                   setShowPasswordRecovery(true);
+                  setRecoveryUsername(loginName.trim());
                   setLoginError('');
                   setLoginNotice('');
                   setPasswordRecoveryError('');
+                  setPasswordResetRequestNotice('');
                 }}
                 disabled={busy || initializing || !!loadError}
               >
-                Passwort vergessen, Matthias?
+                Passwort vergessen?
               </button>
               {loadError && (
                 <button className="retry-button" onClick={loadInitialData} disabled={initializing}>
@@ -1396,7 +1524,7 @@ export default function App() {
       <div className="start-menu modern-dark-blue">
         <h2 style={{ color: '#7dc4ff', marginTop: '1.3em' }}>Willkommen, {loggedInUser}!</h2>
         <button
-          className="main-func-btn"
+          className="main-func-btn settings-menu-button"
           style={{ margin: '2.2em auto 0 auto', fontSize: '1.3rem', minWidth: 260 }}
           onClick={() => {
             setShowStartMenu(false);
@@ -1429,7 +1557,26 @@ export default function App() {
           disabled={busy}
         >
           ⚙ Einstellungen
+          {loggedInUser === 'Matthias' && passwordResetRequests.length > 0 && (
+            <span
+              className="settings-notification"
+              aria-label={`${passwordResetRequests.length} offene Passwortanfrage${
+                passwordResetRequests.length === 1 ? '' : 'n'
+              }`}
+            >
+              {passwordResetRequests.length}
+            </span>
+          )}
         </button>
+        {!recoveryStatus.enabled && (
+          <div className="account-security-reminder" role="status">
+            <strong>Passwort-Wiederherstellung noch nicht eingerichtet</strong>
+            <span>
+              Öffne die Einstellungen und verbinde deinen Authenticator. Dort erhältst du auch
+              deine persönlichen Notfallcodes.
+            </span>
+          </div>
+        )}
         <div style={{ marginTop: '3.5em', textAlign: 'center', color: '#8bb2f4', fontSize: '1.04rem' }}>
           © {currentYear} Matthias Kopf
         </div>
@@ -1793,19 +1940,18 @@ export default function App() {
             )}
           </div>
         </section>
-        {loggedInUser === 'Matthias' && (
-          <section className="admin-section">
-            <h2>App-Zugänge</h2>
-            <p className="admin-section-intro">
-              Hier verwaltest du die Anmeldedaten. Teammitglieder werden oben angelegt.
-            </p>
-            <div className="recovery-admin-card">
+        <section className="admin-section account-security-section">
+          <h2>Kontosicherheit</h2>
+          <p className="admin-section-intro">
+            Verwalte die Passwort-Wiederherstellung für dein Konto {loggedInUser}.
+          </p>
+          <div className="recovery-admin-card">
               <div className="recovery-admin-heading">
                 <div>
-                  <h3>Passwort-Wiederherstellung für Matthias</h3>
+                  <h3>Authenticator und Notfallcodes</h3>
                   <p>
                     Damit kannst du dein Passwort mit einer Authenticator-App oder einem
-                    Notfallcode neu setzen.
+                    deiner persönlichen Notfallcodes selbst neu setzen.
                   </p>
                 </div>
                 <span className={recoveryStatus.enabled ? 'recovery-badge active' : 'recovery-badge'}>
@@ -1920,7 +2066,7 @@ export default function App() {
               ) : (
                 <div className="recovery-start-row">
                   <label className="labeled-field">
-                    <span>Aktuelles Passwort von Matthias</span>
+                    <span>Aktuelles Passwort</span>
                     <input
                       type="password"
                       value={recoverySetupPassword}
@@ -1941,6 +2087,54 @@ export default function App() {
                 </div>
               )}
               {recoveryAdminError && <p className="login-error">{recoveryAdminError}</p>}
+          </div>
+        </section>
+        {loggedInUser === 'Matthias' && (
+          <section className="admin-section">
+            <h2>App-Zugänge</h2>
+            <p className="admin-section-intro">
+              Hier verwaltest du die Anmeldedaten. Teammitglieder werden oben angelegt.
+            </p>
+            <div className="password-request-panel">
+              <div className="password-request-heading">
+                <div>
+                  <h3>Offene Passwortanfragen</h3>
+                  <p>
+                    Vergib beim passenden Benutzer unten ein neues Passwort. Dadurch wird die
+                    Anfrage automatisch erledigt.
+                  </p>
+                </div>
+                <span className={passwordResetRequests.length > 0 ? 'active' : ''}>
+                  {passwordResetRequests.length} offen
+                </span>
+              </div>
+              {passwordResetRequests.length > 0 ? (
+                <div className="password-request-list">
+                  {passwordResetRequests.map((request) => (
+                    <article key={request._id} className="password-request-card">
+                      <div>
+                        <strong>{request.username}</strong>
+                        <span>
+                          Angefragt: {formatAuditTime(request.lastRequestedAt)}
+                        </span>
+                        {request.requestCount > 1 && (
+                          <small>{request.requestCount} Anfragen insgesamt</small>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-edit"
+                        onClick={() => resolvePasswordResetRequest(request._id)}
+                        disabled={busy}
+                      >
+                        Als erledigt markieren
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="password-request-empty">Zurzeit gibt es keine offene Anfrage.</p>
+              )}
             </div>
             <div className="add-player-form">
               <input
@@ -1951,10 +2145,11 @@ export default function App() {
               />
               <input
                 type="password"
-                placeholder="Passwort"
+                placeholder="Passwort, mindestens 8 Zeichen"
                 value={newUserPass}
                 onChange={(e) => setNewUserPass(e.target.value)}
                 autoComplete="new-password"
+                minLength={8}
               />
               <button onClick={addNewUser} disabled={busy}>
                 {busy ? '…' : '➕ Erstellen'}
@@ -1962,7 +2157,14 @@ export default function App() {
             </div>
             <ul className="player-list">
               {users.map((u, idx) => (
-                <li key={u.name}>
+                <li
+                  key={u.name}
+                  className={
+                    passwordResetRequests.some((request) => request.username === u.name)
+                      ? 'password-request-user'
+                      : ''
+                  }
+                >
                   <span style={{ color: '#e0e0e0' }}>{u.name}</span>
                   <input
                     type="password"
@@ -1975,6 +2177,7 @@ export default function App() {
                       }))
                     }
                     autoComplete="new-password"
+                    minLength={8}
                     style={{
                       marginLeft: '0.5rem',
                       backgroundColor: '#232942',

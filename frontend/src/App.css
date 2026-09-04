@@ -300,6 +300,13 @@ textarea::placeholder,
   box-shadow: none;
 }
 
+.login-screen .login-admin-request-button {
+  border: 1px solid #8b6a2d;
+  background: #3d3019;
+  color: #ffe2a1;
+  box-shadow: none;
+}
+
 .password-recovery-form {
   text-align: left;
 }
@@ -340,6 +347,48 @@ textarea::placeholder,
   display: block;
   width: min(100%, 360px);
   min-height: 54px;
+}
+
+.settings-menu-button {
+  position: relative;
+}
+
+.settings-notification {
+  position: absolute;
+  top: -0.55rem;
+  right: -0.55rem;
+  display: grid;
+  min-width: 1.8rem;
+  height: 1.8rem;
+  padding: 0 0.35rem;
+  place-items: center;
+  border: 2px solid #111a2f;
+  border-radius: 999px;
+  background: #ef5350;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.account-security-reminder {
+  display: flex;
+  width: min(100%, 360px);
+  margin: 1rem auto 0;
+  padding: 0.75rem;
+  flex-direction: column;
+  gap: 0.25rem;
+  border: 1px solid #79612f;
+  border-radius: 10px;
+  background: #2d281b;
+  color: #dbcda9;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.account-security-reminder strong {
+  color: #ffe2a2;
 }
 
 .controls,
@@ -1679,6 +1728,95 @@ textarea::placeholder,
   align-self: flex-start;
 }
 
+.password-request-panel {
+  margin: 1rem 0;
+  padding: 0.9rem;
+  border: 1px solid #7d6332;
+  border-radius: 12px;
+  background: #2b2519;
+}
+
+.password-request-heading {
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.password-request-heading h3 {
+  margin: 0;
+  color: #ffe0a0;
+}
+
+.password-request-heading p {
+  margin: 0.3rem 0 0;
+  color: #d2c29d;
+  line-height: 1.4;
+}
+
+.password-request-heading > span {
+  flex: 0 0 auto;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  background: #3b3b38;
+  color: #c9c9c5;
+  font-size: 0.82rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.password-request-heading > span.active {
+  background: #7a351f;
+  color: #ffd0bd;
+}
+
+.password-request-list {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.8rem;
+}
+
+.password-request-card {
+  display: flex;
+  gap: 0.7rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.7rem;
+  border: 1px solid #765f37;
+  border-radius: 9px;
+  background: #1d2230;
+}
+
+.password-request-card > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.password-request-card strong {
+  color: #ffe1a6;
+  font-size: 1.05rem;
+}
+
+.password-request-card span {
+  color: #d4e4f3;
+}
+
+.password-request-card small {
+  color: #aaafbb;
+}
+
+.password-request-empty {
+  margin: 0.75rem 0 0;
+  color: #c6b995;
+}
+
+.player-list li.password-request-user {
+  border-color: #b88835;
+  box-shadow: inset 4px 0 #d5a240;
+}
+
 .login-overview-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -1922,6 +2060,22 @@ footer a {
   .team-member-actions button {
     width: 100%;
     min-height: 44px;
+  }
+
+  .recovery-admin-heading,
+  .password-request-heading,
+  .password-request-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .recovery-badge,
+  .password-request-heading > span {
+    align-self: flex-start;
+  }
+
+  .password-request-card button {
+    width: 100%;
   }
 
   .team-member-details {
