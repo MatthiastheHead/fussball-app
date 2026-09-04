@@ -407,6 +407,8 @@ textarea::placeholder,
 
 .player-management,
 .admin-section,
+.team-generator-controls,
+.team-generator-result,
 .training-settings,
 .report-section,
 .add-training-panel,
@@ -423,6 +425,8 @@ textarea::placeholder,
 
 .player-management h2,
 .admin-section h2,
+.team-generator-controls h2,
+.team-generator-result h2,
 .training-settings h2,
 .report-section h2,
 .add-training-panel h2,
@@ -434,6 +438,268 @@ textarea::placeholder,
 .admin-section-intro {
   margin-top: -0.35rem;
   color: #b8d7f7;
+}
+
+.team-generator-heading,
+.team-generator-result-heading,
+.generator-player-selection-heading,
+.generated-team-card-heading {
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.team-generator-heading h2,
+.team-generator-result-heading h2,
+.generator-player-selection-heading h3,
+.generated-team-card-heading h3 {
+  margin: 0;
+}
+
+.team-generator-heading p,
+.team-generator-result-heading p {
+  margin: 0.3rem 0 0;
+  color: #b8d7f7;
+  line-height: 1.4;
+}
+
+.team-generator-heading > span {
+  flex: 0 0 auto;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: #174a72;
+  color: #c9eaff;
+  font-size: 0.85rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.team-generator-settings {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) minmax(220px, 1fr);
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.team-generator-settings input {
+  min-height: 46px;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #35517d;
+  border-radius: 8px;
+  background: #17233b;
+  color: #fff;
+}
+
+.team-count-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  color: #c6e4ff;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.team-count-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.team-count-options button,
+.generator-player-selection-heading button {
+  min-height: 46px;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #385b86;
+  border-radius: 8px;
+  background: #192c49;
+  color: #d7eaff;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.team-count-options button.active {
+  border-color: #78c6ff;
+  background: #176fb2;
+  color: #fff;
+  box-shadow: 0 0 0 2px rgba(120, 198, 255, 0.15);
+}
+
+.generator-player-selection {
+  margin-top: 1rem;
+  padding: 0.85rem;
+  border: 1px solid #304a72;
+  border-radius: 11px;
+  background: #111f35;
+}
+
+.generator-player-selection-heading {
+  align-items: center;
+}
+
+.generator-player-selection-heading h3 {
+  color: #a8d9ff;
+}
+
+.generator-player-selection-heading > div {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.generator-player-selection-heading button {
+  min-height: 40px;
+  padding: 0.4rem 0.75rem;
+}
+
+.generator-player-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.8rem;
+}
+
+.generator-player-options label {
+  display: flex;
+  min-width: 0;
+  min-height: 46px;
+  gap: 0.55rem;
+  align-items: center;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #324c70;
+  border-radius: 9px;
+  background: #182a44;
+  color: #d7e9f9;
+  cursor: pointer;
+}
+
+.generator-player-options label.selected {
+  border-color: #49a6e8;
+  background: #173f61;
+  color: #fff;
+}
+
+.generator-player-options input {
+  width: 21px;
+  height: 21px;
+  flex: 0 0 auto;
+  margin: 0;
+  accent-color: #36aaf4;
+}
+
+.generator-player-options span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.generate-teams-button,
+.remix-teams-button,
+.team-image-actions button {
+  min-height: 48px;
+  padding: 0.7rem 1rem;
+  border: 0;
+  border-radius: 9px;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.generate-teams-button {
+  width: 100%;
+  margin-top: 1rem;
+  background: linear-gradient(135deg, #2b9bed, #1768b4);
+  font-size: 1.05rem;
+}
+
+.generator-warning {
+  margin: 0.65rem 0 0;
+  color: #ffd59c;
+  text-align: center;
+}
+
+.team-generator-result-heading {
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.remix-teams-button {
+  flex: 0 0 auto;
+  background: #3d5b80;
+}
+
+.generated-team-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.generated-team-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 2px solid var(--team-color);
+  border-radius: 13px;
+  background: #111f35;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.2);
+}
+
+.generated-team-card-heading {
+  align-items: center;
+  padding: 0.75rem 0.85rem;
+  background: var(--team-color);
+  color: #fff;
+}
+
+.generated-team-card-heading span {
+  display: grid;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.35rem;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.22);
+  font-weight: 800;
+}
+
+.generated-team-card ol {
+  margin: 0;
+  padding: 0.55rem 0.75rem 0.7rem 2.5rem;
+}
+
+.generated-team-card li {
+  padding: 0.55rem 0.35rem;
+  border-bottom: 1px solid #2b405e;
+  color: #ecf6ff;
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+
+.generated-team-card li:last-child {
+  border-bottom: 0;
+}
+
+.team-image-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.team-image-actions button:first-child {
+  background: linear-gradient(135deg, #27a96e, #197c51);
+}
+
+.team-image-actions button:last-child {
+  background: linear-gradient(135deg, #247ec9, #22589e);
+}
+
+.team-share-hint {
+  margin: 0.65rem 0 0;
+  color: #9dbbd7;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.team-generator-back {
+  margin-top: 1.2rem;
 }
 
 .add-player-form,
@@ -1910,6 +2176,8 @@ footer a {
 
   .player-management,
   .admin-section,
+  .team-generator-controls,
+  .team-generator-result,
   .training-settings,
   .report-section,
   .add-training-panel,
@@ -2060,6 +2328,38 @@ footer a {
   .team-member-actions button {
     width: 100%;
     min-height: 44px;
+  }
+
+  .team-generator-heading,
+  .team-generator-result-heading,
+  .generator-player-selection-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .team-generator-heading > span {
+    align-self: flex-start;
+  }
+
+  .team-generator-settings,
+  .generated-team-grid,
+  .team-image-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .generator-player-selection-heading > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .generator-player-selection-heading button,
+  .remix-teams-button,
+  .team-image-actions button {
+    width: 100%;
+  }
+
+  .generator-player-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .recovery-admin-heading,

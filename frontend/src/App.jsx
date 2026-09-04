@@ -1,5 +1,4 @@
-// Version 6.5: persönliche Authenticator-Wiederherstellung für alle
-// Benutzerkonten und Passwortanfragen an den Administrator.
+// Version 7.0: ausgewogene Zufallsteams mit Bildexport.
 
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
@@ -19,6 +18,7 @@ import {
   selectReportPlayers,
   summarizePlayerTrainings,
 } from './trainingUtils.js';
+import { createBalancedTeams, selectGeneratorPlayers } from './teamGeneratorUtils.js';
 
 // API-Basis: zuerst ENV, ansonsten abhängig vom Hostname. Ein abschließender
 // Schrägstrich wird entfernt, damit konfigurierte URLs zuverlässig funktionieren.
@@ -128,6 +128,51 @@ const drawPdfStar = (doc, centerX, centerY, radius, filled) => {
   doc.lines(segments, points[0].x, points[0].y, [1, 1], 'FD', true);
 };
 
+const addRoundedCanvasRect = (context, x, y, width, height, radius) => {
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + safeRadius, y);
+  context.lineTo(x + width - safeRadius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
+  context.lineTo(x + width, y + height - safeRadius);
+  context.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
+  context.lineTo(x + safeRadius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
+  context.lineTo(x, y + safeRadius);
+  context.quadraticCurveTo(x, y, x + safeRadius, y);
+  context.closePath();
+};
+
+const drawFittedCanvasText = (context, text, x, y, maxWidth, initialSize = 34) => {
+  let fontSize = initialSize;
+  context.font = `700 ${fontSize}px Inter, Arial, sans-serif`;
+  while (fontSize > 22 && context.measureText(text).width > maxWidth) {
+    fontSize -= 1;
+    context.font = `700 ${fontSize}px Inter, Arial, sans-serif`;
+  }
+  context.fillText(text, x, y);
+};
+
+const canvasToPngBlob = (canvas) =>
+  new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('Bild konnte nicht erzeugt werden.'))),
+      'image/png',
+      1
+    );
+  });
+
+const downloadBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
 async function healthcheck() {
   // Während eines gestaffelten Deployments kann das Backend noch den älteren
   // Diagnosepfad verwenden. Beide Varianten halten die App funktionsfähig.
@@ -220,9 +265,14 @@ export default function App() {
   const [showChecklists, setShowChecklists] = useState(false);
   const [newChecklistTitle, setNewChecklistTitle] = useState('');
   const [expandedChecklist, setExpandedChecklist] = useState(null);
+  const [showTeamGenerator, setShowTeamGenerator] = useState(false);
+  const [generatorTeamCount, setGeneratorTeamCount] = useState(2);
+  const [generatorDate, setGeneratorDate] = useState(() => getLocalDateInputValue());
+  const [selectedGeneratorPlayers, setSelectedGeneratorPlayers] = useState(null);
+  const [generatedTeams, setGeneratedTeams] = useState([]);
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
-  const version = '6.5';
+  const version = '7.0';
   const currentYear = new Date().getFullYear();
 
   const createAuditEntry = (action) => ({
@@ -471,6 +521,12 @@ export default function App() {
         ? eligibleNames
         : selected.filter((name) => eligibleSet.has(name))
     );
+    setSelectedGeneratorPlayers((selected) =>
+      selected === null
+        ? eligibleNames
+        : selected.filter((name) => eligibleSet.has(name))
+    );
+    setGeneratedTeams([]);
   }, [players, initializing]);
 
   useEffect(() => {
@@ -509,6 +565,7 @@ export default function App() {
       setLoginPass('');
       setShowStartMenu(true);
       setShowSettings(false);
+      setShowTeamGenerator(false);
       const accountStatusPromise = loadRecoveryStatus(session.token);
       if (session.isAdmin) {
         await Promise.all([accountStatusPromise, loadAdminData(session.token)]);
@@ -542,6 +599,11 @@ export default function App() {
     setShowStartMenu(true);
     setShowSettings(false);
     setShowChecklists(false);
+    setShowTeamGenerator(false);
+    setGeneratorTeamCount(2);
+    setGeneratorDate(getLocalDateInputValue());
+    setSelectedGeneratorPlayers(null);
+    setGeneratedTeams([]);
     setLoginError('');
     setRecoveryUsername('');
     setPasswordResetRequestNotice('');
@@ -1289,6 +1351,175 @@ export default function App() {
     changeReportPlayerSelection(nextSelection);
   };
 
+  const generatorPlayers = selectGeneratorPlayers(players);
+  const generatorPlayerNames = generatorPlayers.map((player) => player.name);
+  const selectedGeneratorPlayerNames =
+    selectedGeneratorPlayers === null
+      ? generatorPlayerNames
+      : selectedGeneratorPlayers.filter((name) => generatorPlayerNames.includes(name));
+  const selectedGeneratorPlayerSet = new Set(selectedGeneratorPlayerNames);
+
+  const changeGeneratorSelection = (nextSelection) => {
+    setSelectedGeneratorPlayers(nextSelection);
+    setGeneratedTeams([]);
+  };
+
+  const toggleGeneratorPlayer = (playerName) => {
+    const nextSelection = selectedGeneratorPlayerSet.has(playerName)
+      ? selectedGeneratorPlayerNames.filter((name) => name !== playerName)
+      : [...selectedGeneratorPlayerNames, playerName];
+    changeGeneratorSelection(nextSelection);
+  };
+
+  const generateTeams = () => {
+    if (selectedGeneratorPlayerNames.length < generatorTeamCount) {
+      alert(`Wähle mindestens ${generatorTeamCount} Spielerinnen für ${generatorTeamCount} Teams aus.`);
+      return false;
+    }
+    setGeneratedTeams(
+      createBalancedTeams(selectedGeneratorPlayerNames, generatorTeamCount)
+    );
+    return true;
+  };
+
+  const createTeamGeneratorImage = async () => {
+    if (generatedTeams.length === 0) {
+      throw new Error('Erzeuge zuerst die Teams.');
+    }
+
+    const canvas = document.createElement('canvas');
+    const width = 1080;
+    const outerMargin = 54;
+    const columnGap = 30;
+    const rowGap = 30;
+    const headerHeight = 190;
+    const footerHeight = 76;
+    const columns = 2;
+    const rows = Math.ceil(generatedTeams.length / columns);
+    const maxPlayersPerTeam = Math.max(
+      1,
+      ...generatedTeams.map((team) => team.players.length)
+    );
+    const cardHeight = 110 + maxPlayersPerTeam * 58;
+    const contentHeight = rows * cardHeight + Math.max(0, rows - 1) * rowGap;
+    canvas.width = width;
+    canvas.height = Math.max(720, headerHeight + contentHeight + footerHeight + outerMargin);
+
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Bildexport wird von diesem Gerät nicht unterstützt.');
+
+    const background = context.createLinearGradient(0, 0, width, canvas.height);
+    background.addColorStop(0, '#0c1a31');
+    background.addColorStop(0.52, '#152a4a');
+    background.addColorStop(1, '#0a1324');
+    context.fillStyle = background;
+    context.fillRect(0, 0, width, canvas.height);
+
+    context.fillStyle = '#79c8ff';
+    context.font = '800 54px Inter, Arial, sans-serif';
+    context.fillText(
+      `Teamgenerator - ${formatInputDate(generatorDate) || generatorDate}`,
+      outerMargin,
+      82
+    );
+    context.fillStyle = '#c7ddf2';
+    context.font = '500 28px Inter, Arial, sans-serif';
+    context.fillText(
+      `${selectedGeneratorPlayerNames.length} Spielerinnen | ${generatedTeams.length} Teams`,
+      outerMargin,
+      128
+    );
+
+    const cardWidth = (width - outerMargin * 2 - columnGap) / columns;
+    generatedTeams.forEach((team, teamIndex) => {
+      const column = teamIndex % columns;
+      const row = Math.floor(teamIndex / columns);
+      const x = outerMargin + column * (cardWidth + columnGap);
+      const y = headerHeight + row * (cardHeight + rowGap);
+
+      context.save();
+      context.shadowColor = 'rgba(0, 0, 0, 0.32)';
+      context.shadowBlur = 22;
+      context.shadowOffsetY = 8;
+      addRoundedCanvasRect(context, x, y, cardWidth, cardHeight, 24);
+      context.fillStyle = '#f4f8fc';
+      context.fill();
+      context.restore();
+
+      addRoundedCanvasRect(context, x, y, cardWidth, 78, 24);
+      context.fillStyle = team.color;
+      context.fill();
+      context.fillStyle = '#ffffff';
+      context.font = '800 34px Inter, Arial, sans-serif';
+      context.fillText(team.name, x + 28, y + 51);
+      context.font = '700 24px Inter, Arial, sans-serif';
+      context.textAlign = 'right';
+      context.fillText(`${team.players.length}`, x + cardWidth - 28, y + 49);
+      context.textAlign = 'left';
+
+      team.players.forEach((name, playerIndex) => {
+        const lineY = y + 120 + playerIndex * 58;
+        if (playerIndex % 2 === 0) {
+          context.fillStyle = '#e9f0f7';
+          context.fillRect(x + 18, lineY - 38, cardWidth - 36, 51);
+        }
+        context.fillStyle = team.color;
+        context.font = '800 25px Inter, Arial, sans-serif';
+        context.fillText(`${playerIndex + 1}.`, x + 32, lineY);
+        context.fillStyle = '#172b43';
+        drawFittedCanvasText(context, name, x + 82, lineY, cardWidth - 118, 34);
+      });
+    });
+
+    context.fillStyle = '#8eafd4';
+    context.font = '500 22px Inter, Arial, sans-serif';
+    context.fillText(`Fußball-App Version ${version}`, outerMargin, canvas.height - 32);
+    context.textAlign = 'right';
+    context.fillText(`Erstellt von ${loggedInUser}`, width - outerMargin, canvas.height - 32);
+    context.textAlign = 'left';
+
+    return canvasToPngBlob(canvas);
+  };
+
+  const downloadTeamGeneratorImage = () =>
+    runOnce(async () => {
+      const blob = await createTeamGeneratorImage();
+      downloadBlob(blob, `Teamgenerator-${generatorDate}.png`);
+      return true;
+    });
+
+  const shareTeamGeneratorImage = () =>
+    runOnce(async () => {
+      const blob = await createTeamGeneratorImage();
+      const filename = `Teamgenerator-${generatorDate}.png`;
+      if (typeof navigator.share === 'function' && typeof File === 'function') {
+        const file = new File([blob], filename, { type: 'image/png' });
+        const shareData = {
+          title: `Teamgenerator - ${formatInputDate(generatorDate)}`,
+          text: `Teams für den ${formatInputDate(generatorDate)}`,
+          files: [file],
+        };
+        let canShareFiles = !navigator.canShare;
+        try {
+          canShareFiles = canShareFiles || navigator.canShare({ files: [file] });
+        } catch {
+          canShareFiles = false;
+        }
+        if (canShareFiles) {
+          try {
+            await navigator.share(shareData);
+            return true;
+          } catch (error) {
+            if (error?.name === 'AbortError') return false;
+            console.error('Teilen nicht möglich:', error);
+          }
+        }
+      }
+      downloadBlob(blob, filename);
+      alert('Das Bild wurde heruntergeladen. Du kannst es jetzt in WhatsApp auswählen.');
+      return true;
+    });
+
   const teamMembersForTraining = (training) => {
     const currentMembers = new Map(players.map((player) => [player.name, player]));
     const trainerNames = Object.keys(training.trainerStatus || {}).sort((a, b) =>
@@ -1524,12 +1755,13 @@ export default function App() {
       <div className="start-menu modern-dark-blue">
         <h2 style={{ color: '#7dc4ff', marginTop: '1.3em' }}>Willkommen, {loggedInUser}!</h2>
         <button
-          className="main-func-btn settings-menu-button"
+          className="main-func-btn"
           style={{ margin: '2.2em auto 0 auto', fontSize: '1.3rem', minWidth: 260 }}
           onClick={() => {
             setShowStartMenu(false);
             setShowSettings(false);
             setShowChecklists(false);
+            setShowTeamGenerator(false);
           }}
           disabled={busy}
         >
@@ -1542,6 +1774,7 @@ export default function App() {
             setShowChecklists(true);
             setShowStartMenu(false);
             setShowSettings(false);
+            setShowTeamGenerator(false);
           }}
           disabled={busy}
         >
@@ -1551,8 +1784,27 @@ export default function App() {
           className="main-func-btn"
           style={{ margin: '0.9em auto 0 auto', fontSize: '1.13rem', minWidth: 260 }}
           onClick={() => {
+            setGeneratorDate(getLocalDateInputValue());
+            setGeneratorTeamCount(2);
+            setSelectedGeneratorPlayers(generatorPlayerNames);
+            setGeneratedTeams([]);
+            setShowTeamGenerator(true);
+            setShowStartMenu(false);
+            setShowSettings(false);
+            setShowChecklists(false);
+          }}
+          disabled={busy}
+        >
+          🎲 Teamgenerator
+        </button>
+        <button
+          className="main-func-btn settings-menu-button"
+          style={{ margin: '0.9em auto 0 auto', fontSize: '1.13rem', minWidth: 260 }}
+          onClick={() => {
             setShowSettings(true);
             setShowStartMenu(false);
+            setShowChecklists(false);
+            setShowTeamGenerator(false);
           }}
           disabled={busy}
         >
@@ -1598,6 +1850,181 @@ export default function App() {
         >
           Logout
         </button>
+      </div>
+    );
+  }
+
+  if (showTeamGenerator) {
+    const formattedGeneratorDate = formatInputDate(generatorDate) || generatorDate;
+    return (
+      <div className="App team-generator-page">
+        <header>
+          <h1>
+            🎲 Teamgenerator <span className="blue-version">{version}</span>
+          </h1>
+        </header>
+
+        <section className="team-generator-controls">
+          <div className="team-generator-heading">
+            <div>
+              <h2>Teams zufällig zusammenstellen</h2>
+              <p>
+                Alle aktiven Spielerinnen aus der Mannschaftsliste sind vorausgewählt.
+              </p>
+            </div>
+            <span>{selectedGeneratorPlayerNames.length} ausgewählt</span>
+          </div>
+
+          <div className="team-generator-settings">
+            <label className="labeled-field">
+              <span>Datum</span>
+              <input
+                type="date"
+                value={generatorDate}
+                onChange={(event) => setGeneratorDate(event.target.value)}
+                disabled={busy}
+              />
+            </label>
+            <div className="team-count-field">
+              <span>Anzahl Teams</span>
+              <div className="team-count-options" role="group" aria-label="Anzahl der Teams">
+                {[2, 3, 4].map((count) => (
+                  <button
+                    key={count}
+                    type="button"
+                    className={generatorTeamCount === count ? 'active' : ''}
+                    aria-pressed={generatorTeamCount === count}
+                    onClick={() => {
+                      setGeneratorTeamCount(count);
+                      setGeneratedTeams([]);
+                    }}
+                    disabled={busy}
+                  >
+                    {count}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="generator-player-selection">
+            <div className="generator-player-selection-heading">
+              <h3>Spielerinnen auswählen</h3>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => changeGeneratorSelection(generatorPlayerNames)}
+                  disabled={busy || selectedGeneratorPlayerNames.length === generatorPlayerNames.length}
+                >
+                  Alle
+                </button>
+                <button
+                  type="button"
+                  onClick={() => changeGeneratorSelection([])}
+                  disabled={busy || selectedGeneratorPlayerNames.length === 0}
+                >
+                  Keine
+                </button>
+              </div>
+            </div>
+            <div className="generator-player-options">
+              {generatorPlayers.map((player) => (
+                <label
+                  key={player.name}
+                  className={selectedGeneratorPlayerSet.has(player.name) ? 'selected' : ''}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedGeneratorPlayerSet.has(player.name)}
+                    onChange={() => toggleGeneratorPlayer(player.name)}
+                    disabled={busy}
+                  />
+                  <span>{player.name}</span>
+                </label>
+              ))}
+              {generatorPlayers.length === 0 && (
+                <p className="no-trainings">Keine aktiven Spielerinnen vorhanden.</p>
+              )}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="generate-teams-button"
+            onClick={generateTeams}
+            disabled={
+              busy ||
+              !generatorDate ||
+              selectedGeneratorPlayerNames.length < generatorTeamCount
+            }
+          >
+            Teams auslosen
+          </button>
+          {selectedGeneratorPlayerNames.length < generatorTeamCount && (
+            <p className="generator-warning">
+              Für {generatorTeamCount} Teams brauchst du mindestens {generatorTeamCount} Spielerinnen.
+            </p>
+          )}
+        </section>
+
+        {generatedTeams.length > 0 && (
+          <section className="team-generator-result">
+            <div className="team-generator-result-heading">
+              <div>
+                <h2>Teamgenerator - {formattedGeneratorDate}</h2>
+                <p>Die Teamgrößen unterscheiden sich höchstens um eine Spielerin.</p>
+              </div>
+              <button type="button" className="remix-teams-button" onClick={generateTeams} disabled={busy}>
+                Neu mischen
+              </button>
+            </div>
+
+            <div className="generated-team-grid">
+              {generatedTeams.map((team) => (
+                <article
+                  key={team.name}
+                  className="generated-team-card"
+                  style={{ '--team-color': team.color }}
+                >
+                  <div className="generated-team-card-heading">
+                    <h3>{team.name}</h3>
+                    <span>{team.players.length}</span>
+                  </div>
+                  <ol>
+                    {team.players.map((name) => (
+                      <li key={name}>{name}</li>
+                    ))}
+                  </ol>
+                </article>
+              ))}
+            </div>
+
+            <div className="team-image-actions">
+              <button type="button" onClick={shareTeamGeneratorImage} disabled={busy || !generatorDate}>
+                Bild teilen
+              </button>
+              <button type="button" onClick={downloadTeamGeneratorImage} disabled={busy || !generatorDate}>
+                PNG herunterladen
+              </button>
+            </div>
+            <p className="team-share-hint">
+              Auf dem Handy kannst du nach „Bild teilen“ direkt WhatsApp auswählen.
+            </p>
+          </section>
+        )}
+
+        <div className="controls mobile-controls team-generator-back">
+          <button
+            className="main-func-btn"
+            onClick={() => {
+              setShowTeamGenerator(false);
+              setShowStartMenu(true);
+            }}
+            disabled={busy}
+          >
+            Zurück zum Startmenü
+          </button>
+        </div>
       </div>
     );
   }
@@ -2268,7 +2695,7 @@ export default function App() {
     );
   }
 
-  if (!showStartMenu && !showSettings && !showChecklists) {
+  if (!showStartMenu && !showSettings && !showChecklists && !showTeamGenerator) {
     return (
       <div className="App">
         <header>
@@ -3401,10 +3828,10 @@ export default function App() {
     ]);
     const doc = new jsPDF({ orientation: 'landscape' });
     doc.setFontSize(18);
-    doc.text(`Trainingsauswertung Saison ${reportData.season}`, 14, 18);
+    doc.text('Auswertung', 14, 18);
     doc.setFontSize(11);
     doc.text(
-      `Zeitraum: ${formatInputDate(reportData.fromDate)} bis ${formatInputDate(reportData.toDate)} | ${reportData.totalTrainings} Trainings`,
+      `Saison ${reportData.season} | Zeitraum: ${formatInputDate(reportData.fromDate)} bis ${formatInputDate(reportData.toDate)} | ${reportData.totalTrainings} Trainings`,
       14,
       27
     );
@@ -3465,11 +3892,11 @@ export default function App() {
       doc.setTextColor(255, 255, 255);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(18);
-      doc.text(`Meine Trainingsauswertung, Saison ${reportData.season}`, margin, 13);
+      doc.text('Auswertung', margin, 13);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
       doc.text(
-        `${formatInputDate(reportData.fromDate)} bis ${formatInputDate(reportData.toDate)} | ${reportData.totalTrainings} Trainings`,
+        `Saison ${reportData.season} | ${formatInputDate(reportData.fromDate)} bis ${formatInputDate(reportData.toDate)} | ${reportData.totalTrainings} Trainings`,
         margin,
         22
       );
