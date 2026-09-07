@@ -15,6 +15,7 @@ const AppSettings = require('./models/AppSettings');
 const AdminRecovery = require('./models/AdminRecovery');
 const LoginEvent = require('./models/LoginEvent');
 const PasswordResetRequest = require('./models/PasswordResetRequest');
+const TeamCash = require('./models/TeamCash');
 const { hashPassword, isPasswordHash, verifyPassword } = require('./authUtils');
 const {
   createOtpAuthUrl,
@@ -1057,6 +1058,117 @@ app.post('/checklists', async (req, res) => {
   } catch (e) {
     console.error('Fehler POST /checklists:', e);
     res.status(500).json({ error: 'Datenbankfehler beim Speichern der Checklisten' });
+  }
+});
+
+// ---- 5.6 Mannschaftskasse ----
+const cleanTeamCash = document => {
+  const cash = document?.toObject ? document.toObject() : document || {};
+  const transactions = Array.isArray(cash.transactions)
+    ? [...cash.transactions].sort(
+        (a, b) =>
+          String(b.date || '').localeCompare(String(a.date || '')) ||
+          new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+      )
+    : [];
+  const spentCents = transactions.reduce(
+    (sum, transaction) => sum + (Number(transaction.amountCents) || 0),
+    0
+  );
+  const openingBalanceCents = Number(cash.openingBalanceCents) || 0;
+  return {
+    openingBalanceCents,
+    openingBalanceUpdatedBy: cash.openingBalanceUpdatedBy || '',
+    openingBalanceUpdatedAt: cash.openingBalanceUpdatedAt || null,
+    spentCents,
+    balanceCents: openingBalanceCents - spentCents,
+    transactions,
+  };
+};
+
+const validCashDate = value => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+};
+
+app.get('/team-cash', requireSession, async (_req, res) => {
+  try {
+    const cash = await TeamCash.findOne({ key: 'team-cash' }).lean();
+    res.json(cleanTeamCash(cash));
+  } catch (err) {
+    console.error('Fehler GET /team-cash:', err);
+    res.status(500).json({ error: 'Die Mannschaftskasse konnte nicht geladen werden.' });
+  }
+});
+
+app.post('/team-cash/opening-balance', requireSession, async (req, res) => {
+  const amountCents = Number(req.body?.amountCents);
+  if (!Number.isSafeInteger(amountCents) || amountCents < 0 || amountCents > 100_000_000) {
+    return res.status(400).json({ error: 'Bitte einen gültigen Kassenbestand eingeben.' });
+  }
+
+  try {
+    const cash = await TeamCash.findOneAndUpdate(
+      { key: 'team-cash' },
+      {
+        $set: {
+          openingBalanceCents: amountCents,
+          openingBalanceUpdatedBy: req.auth.username,
+          openingBalanceUpdatedAt: new Date(),
+        },
+        $setOnInsert: { key: 'team-cash', transactions: [] },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    res.json(cleanTeamCash(cash));
+  } catch (err) {
+    console.error('Fehler POST /team-cash/opening-balance:', err);
+    res.status(500).json({ error: 'Der Kassenbestand konnte nicht gespeichert werden.' });
+  }
+});
+
+app.post('/team-cash/transactions', requireSession, async (req, res) => {
+  const date = String(req.body?.date || '').trim();
+  const person = String(req.body?.person || '').trim();
+  const purpose = String(req.body?.purpose || '').trim();
+  const amountCents = Number(req.body?.amountCents);
+
+  if (!validCashDate(date)) {
+    return res.status(400).json({ error: 'Bitte ein gültiges Datum auswählen.' });
+  }
+  if (!person || person.length > 80) {
+    return res.status(400).json({ error: 'Bitte eine Person mit höchstens 80 Zeichen eintragen.' });
+  }
+  if (!purpose || purpose.length > 200) {
+    return res.status(400).json({ error: 'Bitte einen Verwendungszweck mit höchstens 200 Zeichen eintragen.' });
+  }
+  if (!Number.isSafeInteger(amountCents) || amountCents < 1 || amountCents > 100_000_000) {
+    return res.status(400).json({ error: 'Bitte einen gültigen Ausgabebetrag eingeben.' });
+  }
+
+  try {
+    const cash = await TeamCash.findOneAndUpdate(
+      { key: 'team-cash' },
+      {
+        $setOnInsert: { key: 'team-cash', openingBalanceCents: 0 },
+        $push: {
+          transactions: {
+            date,
+            person,
+            amountCents,
+            purpose,
+            createdBy: req.auth.username,
+            createdAt: new Date(),
+          },
+        },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    res.status(201).json(cleanTeamCash(cash));
+  } catch (err) {
+    console.error('Fehler POST /team-cash/transactions:', err);
+    res.status(500).json({ error: 'Die Ausgabe konnte nicht gespeichert werden.' });
   }
 });
 

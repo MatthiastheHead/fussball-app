@@ -1,4 +1,4 @@
-// Version 7.1: echte Leibchenfarben und kategorisierte Einstellungen.
+// Version 7.2: Mannschaftskasse mit nachvollziehbaren Ausgaben.
 
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
@@ -19,6 +19,11 @@ import {
   summarizePlayerTrainings,
 } from './trainingUtils.js';
 import { createBalancedTeams, selectGeneratorPlayers } from './teamGeneratorUtils.js';
+import {
+  calculateTeamCashBalance,
+  formatEuro,
+  parseEuroToCents,
+} from './teamCashUtils.js';
 
 // API-Basis: zuerst ENV, ansonsten abhängig vom Hostname. Ein abschließender
 // Schrägstrich wird entfernt, damit konfigurierte URLs zuverlässig funktionieren.
@@ -265,6 +270,21 @@ export default function App() {
   const [showChecklists, setShowChecklists] = useState(false);
   const [newChecklistTitle, setNewChecklistTitle] = useState('');
   const [expandedChecklist, setExpandedChecklist] = useState(null);
+  const [teamCash, setTeamCash] = useState({
+    openingBalanceCents: 0,
+    openingBalanceUpdatedBy: '',
+    openingBalanceUpdatedAt: null,
+    transactions: [],
+  });
+  const [showTeamCash, setShowTeamCash] = useState(false);
+  const [cashOpeningBalance, setCashOpeningBalance] = useState('0,00');
+  const [cashEntry, setCashEntry] = useState({
+    date: getLocalDateInputValue(),
+    person: '',
+    amount: '',
+    purpose: '',
+  });
+  const [cashError, setCashError] = useState('');
   const [showTeamGenerator, setShowTeamGenerator] = useState(false);
   const [generatorTeamCount, setGeneratorTeamCount] = useState(2);
   const [generatorDate, setGeneratorDate] = useState(() => getLocalDateInputValue());
@@ -273,7 +293,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '7.1';
+  const version = '7.2';
   const currentYear = new Date().getFullYear();
 
   const createAuditEntry = (action) => ({
@@ -422,6 +442,97 @@ export default function App() {
       },
     });
 
+  const applyTeamCashResponse = (data) => {
+    const normalized = {
+      openingBalanceCents: Number(data?.openingBalanceCents) || 0,
+      openingBalanceUpdatedBy: data?.openingBalanceUpdatedBy || '',
+      openingBalanceUpdatedAt: data?.openingBalanceUpdatedAt || null,
+      transactions: Array.isArray(data?.transactions) ? data.transactions : [],
+    };
+    setTeamCash(normalized);
+    setCashOpeningBalance((normalized.openingBalanceCents / 100).toFixed(2).replace('.', ','));
+    return normalized;
+  };
+
+  async function loadTeamCash(token = authToken) {
+    if (!token) return false;
+    const response = await authenticatedRequest('team-cash', { cache: 'no-store' }, token);
+    if (!response.ok) {
+      setCashError(
+        response.status === 401
+          ? 'Deine Sitzung ist abgelaufen. Bitte erneut einloggen.'
+          : 'Die Mannschaftskasse konnte nicht geladen werden.'
+      );
+      return false;
+    }
+    applyTeamCashResponse(await response.json());
+    setCashError('');
+    return true;
+  }
+
+  const saveCashOpeningBalance = () =>
+    runOnce(async () => {
+      setCashError('');
+      const amountCents = parseEuroToCents(cashOpeningBalance);
+      if (amountCents === null) {
+        setCashError('Bitte einen gültigen Kassenbestand eingeben, zum Beispiel 250,50.');
+        return false;
+      }
+      if (
+        teamCash.transactions.length > 0 &&
+        amountCents !== teamCash.openingBalanceCents &&
+        !window.confirm(
+          'Du änderst den Startbestand. Alle bereits eingetragenen Ausgaben bleiben erhalten. Fortfahren?'
+        )
+      ) {
+        return false;
+      }
+      const response = await authenticatedRequest('team-cash/opening-balance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amountCents }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setCashError(data.error || 'Der Kassenbestand konnte nicht gespeichert werden.');
+        return false;
+      }
+      applyTeamCashResponse(data);
+      return true;
+    });
+
+  const addCashExpense = () =>
+    runOnce(async () => {
+      setCashError('');
+      const amountCents = parseEuroToCents(cashEntry.amount);
+      if (!cashEntry.date || !cashEntry.person.trim() || !cashEntry.purpose.trim()) {
+        setCashError('Bitte Datum, Person und Verwendungszweck vollständig eintragen.');
+        return false;
+      }
+      if (amountCents === null || amountCents < 1) {
+        setCashError('Bitte einen gültigen Ausgabebetrag größer als 0 € eingeben.');
+        return false;
+      }
+      const response = await authenticatedRequest('team-cash/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: cashEntry.date,
+          person: cashEntry.person.trim(),
+          amountCents,
+          purpose: cashEntry.purpose.trim(),
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setCashError(data.error || 'Die Ausgabe konnte nicht gespeichert werden.');
+        return false;
+      }
+      applyTeamCashResponse(data);
+      setCashEntry((entry) => ({ ...entry, amount: '', purpose: '' }));
+      return true;
+    });
+
   async function loadAdminData(token = authToken) {
     if (!token) return false;
     setAdminLoadError('');
@@ -568,11 +679,18 @@ export default function App() {
       setShowSettings(false);
       setSettingsCategory(null);
       setShowTeamGenerator(false);
+      setShowTeamCash(false);
+      setCashEntry((entry) => ({ ...entry, person: session.name }));
       const accountStatusPromise = loadRecoveryStatus(session.token);
+      const teamCashPromise = loadTeamCash(session.token);
       if (session.isAdmin) {
-        await Promise.all([accountStatusPromise, loadAdminData(session.token)]);
+        await Promise.all([
+          accountStatusPromise,
+          teamCashPromise,
+          loadAdminData(session.token),
+        ]);
       } else {
-        await accountStatusPromise;
+        await Promise.all([accountStatusPromise, teamCashPromise]);
         setUsers([]);
         setLoginHistory([]);
         setPasswordResetRequests([]);
@@ -603,6 +721,21 @@ export default function App() {
     setSettingsCategory(null);
     setShowChecklists(false);
     setShowTeamGenerator(false);
+    setShowTeamCash(false);
+    setTeamCash({
+      openingBalanceCents: 0,
+      openingBalanceUpdatedBy: '',
+      openingBalanceUpdatedAt: null,
+      transactions: [],
+    });
+    setCashOpeningBalance('0,00');
+    setCashEntry({
+      date: getLocalDateInputValue(),
+      person: '',
+      amount: '',
+      purpose: '',
+    });
+    setCashError('');
     setGeneratorTeamCount(2);
     setGeneratorDate(getLocalDateInputValue());
     setSelectedGeneratorPlayers(null);
@@ -1772,6 +1905,7 @@ export default function App() {
             setShowSettings(false);
             setShowChecklists(false);
             setShowTeamGenerator(false);
+            setShowTeamCash(false);
           }}
           disabled={busy}
         >
@@ -1785,6 +1919,7 @@ export default function App() {
             setShowStartMenu(false);
             setShowSettings(false);
             setShowTeamGenerator(false);
+            setShowTeamCash(false);
           }}
           disabled={busy}
         >
@@ -1802,10 +1937,27 @@ export default function App() {
             setShowStartMenu(false);
             setShowSettings(false);
             setShowChecklists(false);
+            setShowTeamCash(false);
           }}
           disabled={busy}
         >
           🎲 Teamgenerator
+        </button>
+        <button
+          className="main-func-btn team-cash-menu-button"
+          style={{ margin: '0.9em auto 0 auto', fontSize: '1.13rem', minWidth: 260 }}
+          onClick={() => {
+            setShowTeamCash(true);
+            setShowStartMenu(false);
+            setShowSettings(false);
+            setShowChecklists(false);
+            setShowTeamGenerator(false);
+            setCashError('');
+            loadTeamCash();
+          }}
+          disabled={busy}
+        >
+          Mannschaftskasse
         </button>
         <button
           className="main-func-btn settings-menu-button"
@@ -1816,6 +1968,7 @@ export default function App() {
             setShowStartMenu(false);
             setShowChecklists(false);
             setShowTeamGenerator(false);
+            setShowTeamCash(false);
           }}
           disabled={busy}
         >
@@ -1860,6 +2013,178 @@ export default function App() {
           disabled={busy}
         >
           Logout
+        </button>
+      </div>
+    );
+  }
+
+  if (showTeamCash) {
+    const balanceCents = calculateTeamCashBalance(teamCash);
+    const spentCents = (teamCash.transactions || []).reduce(
+      (sum, transaction) => sum + (Number(transaction.amountCents) || 0),
+      0
+    );
+    return (
+      <div className="App team-cash-page">
+        <header>
+          <h1>
+            Mannschaftskasse <span className="blue-version">{version}</span>
+          </h1>
+        </header>
+
+        <section className={`cash-balance-card${balanceCents < 0 ? ' negative' : ''}`}>
+          <span>Aktueller Kassenstand</span>
+          <strong>{formatEuro(balanceCents)}</strong>
+          <div className="cash-balance-details">
+            <span>Startbestand: {formatEuro(teamCash.openingBalanceCents)}</span>
+            <span>Ausgaben: {formatEuro(spentCents)}</span>
+          </div>
+        </section>
+
+        <section className="cash-opening-section">
+          <div>
+            <h2>Vorhandenen Bestand eintragen</h2>
+            <p>Trage hier den Betrag ein, der aktuell vor den erfassten Ausgaben vorhanden ist.</p>
+          </div>
+          <div className="cash-opening-row">
+            <label className="labeled-field">
+              <span>Startbestand in Euro</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={cashOpeningBalance}
+                onChange={(event) => setCashOpeningBalance(event.target.value)}
+                placeholder="250,00"
+                disabled={busy}
+              />
+            </label>
+            <button type="button" className="btn-save-players" onClick={saveCashOpeningBalance} disabled={busy}>
+              Bestand speichern
+            </button>
+          </div>
+          {teamCash.openingBalanceUpdatedAt && (
+            <small className="cash-audit-line">
+              Zuletzt gespeichert von {teamCash.openingBalanceUpdatedBy || 'Unbekannt'} am{' '}
+              {formatAuditTime(teamCash.openingBalanceUpdatedAt)}
+            </small>
+          )}
+        </section>
+
+        <section className="cash-entry-section">
+          <div>
+            <h2>Ausgabe eintragen</h2>
+            <p>Jede Ausgabe wird mit allen Angaben und dem eingeloggten Benutzer gespeichert.</p>
+          </div>
+          <form
+            className="cash-entry-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              addCashExpense();
+            }}
+          >
+            <label className="labeled-field">
+              <span>Datum</span>
+              <input
+                type="date"
+                value={cashEntry.date}
+                onChange={(event) =>
+                  setCashEntry((entry) => ({ ...entry, date: event.target.value }))
+                }
+                disabled={busy}
+              />
+            </label>
+            <label className="labeled-field">
+              <span>Wer?</span>
+              <input
+                type="text"
+                value={cashEntry.person}
+                onChange={(event) =>
+                  setCashEntry((entry) => ({ ...entry, person: event.target.value }))
+                }
+                placeholder="Name der Person"
+                maxLength={80}
+                disabled={busy}
+              />
+            </label>
+            <label className="labeled-field">
+              <span>Wie viel?</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={cashEntry.amount}
+                onChange={(event) =>
+                  setCashEntry((entry) => ({ ...entry, amount: event.target.value }))
+                }
+                placeholder="25,50"
+                disabled={busy}
+              />
+            </label>
+            <label className="labeled-field cash-purpose-field">
+              <span>Wofür?</span>
+              <input
+                type="text"
+                value={cashEntry.purpose}
+                onChange={(event) =>
+                  setCashEntry((entry) => ({ ...entry, purpose: event.target.value }))
+                }
+                placeholder="Zum Beispiel Getränke oder Startgebühr"
+                maxLength={200}
+                disabled={busy}
+              />
+            </label>
+            <button type="submit" className="cash-submit-button" disabled={busy}>
+              {busy ? 'Wird gespeichert…' : 'Ausgabe abtragen'}
+            </button>
+          </form>
+          {cashError && <p className="login-error cash-error">{cashError}</p>}
+        </section>
+
+        <section className="cash-history-section">
+          <div className="cash-history-heading">
+            <div>
+              <h2>Ausgabenverlauf</h2>
+              <p>
+                {teamCash.transactions.length}{' '}
+                {teamCash.transactions.length === 1 ? 'Buchung' : 'Buchungen'}
+              </p>
+            </div>
+            <button type="button" className="btn-edit" onClick={() => runOnce(() => loadTeamCash())} disabled={busy}>
+              Aktualisieren
+            </button>
+          </div>
+          {teamCash.transactions.length === 0 ? (
+            <p className="cash-empty-state">Noch keine Ausgaben eingetragen.</p>
+          ) : (
+            <div className="cash-history-list">
+              {teamCash.transactions.map((transaction) => (
+                <article key={transaction._id || `${transaction.date}-${transaction.createdAt}`} className="cash-history-card">
+                  <div className="cash-history-date">
+                    <strong>{formatInputDate(transaction.date)}</strong>
+                    <span>{transaction.person}</span>
+                  </div>
+                  <div className="cash-history-purpose">
+                    <strong>{transaction.purpose}</strong>
+                    <span>
+                      Eingetragen von {transaction.createdBy || 'Unbekannt'} am{' '}
+                      {formatAuditTime(transaction.createdAt)}
+                    </span>
+                  </div>
+                  <strong className="cash-history-amount">− {formatEuro(transaction.amountCents)}</strong>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <button
+          className="main-func-btn team-cash-back"
+          onClick={() => {
+            setShowTeamCash(false);
+            setShowStartMenu(true);
+          }}
+          disabled={busy}
+        >
+          Zurück zum Startmenü
         </button>
       </div>
     );
@@ -2810,7 +3135,13 @@ export default function App() {
     );
   }
 
-  if (!showStartMenu && !showSettings && !showChecklists && !showTeamGenerator) {
+  if (
+    !showStartMenu &&
+    !showSettings &&
+    !showChecklists &&
+    !showTeamGenerator &&
+    !showTeamCash
+  ) {
     return (
       <div className="App">
         <header>

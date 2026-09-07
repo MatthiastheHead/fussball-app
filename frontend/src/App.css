@@ -408,6 +408,9 @@ textarea::placeholder,
 .player-management,
 .admin-section,
 .settings-category-section,
+.cash-opening-section,
+.cash-entry-section,
+.cash-history-section,
 .team-generator-controls,
 .team-generator-result,
 .training-settings,
@@ -427,6 +430,9 @@ textarea::placeholder,
 .player-management h2,
 .admin-section h2,
 .settings-category-section h2,
+.cash-opening-section h2,
+.cash-entry-section h2,
+.cash-history-section h2,
 .team-generator-controls h2,
 .team-generator-result h2,
 .training-settings h2,
@@ -879,6 +885,185 @@ textarea::placeholder,
   color: #7bc9ff;
   font-size: 2rem;
   line-height: 1;
+}
+
+.team-cash-menu-button {
+  background: linear-gradient(135deg, #16805b, #0f5944);
+}
+
+.cash-balance-card {
+  margin-bottom: 1.25rem;
+  padding: 1.2rem;
+  border: 1px solid #2d8f6a;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #123d34, #152d3e);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.24);
+  text-align: center;
+}
+
+.cash-balance-card > span {
+  color: #b9e9d6;
+  font-weight: 700;
+}
+
+.cash-balance-card > strong {
+  display: block;
+  margin: 0.25rem 0 0.7rem;
+  color: #83edba;
+  font-size: clamp(2.1rem, 8vw, 3.2rem);
+  line-height: 1.1;
+}
+
+.cash-balance-card.negative {
+  border-color: #b85b63;
+  background: linear-gradient(135deg, #4a222a, #28273c);
+}
+
+.cash-balance-card.negative > strong {
+  color: #ff9da5;
+}
+
+.cash-balance-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.1rem;
+  justify-content: center;
+  color: #c4d8e8;
+}
+
+.cash-opening-section > div:first-child p,
+.cash-entry-section > div:first-child p,
+.cash-history-heading p {
+  margin: -0.25rem 0 0.9rem;
+  color: #b8d7f7;
+}
+
+.cash-opening-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  align-items: flex-end;
+}
+
+.cash-opening-row input,
+.cash-entry-form input {
+  width: 100%;
+  min-height: 46px;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #35517d;
+  border-radius: 8px;
+  background: #17233b;
+  color: #fff;
+}
+
+.cash-opening-row button {
+  min-height: 46px;
+  padding: 0.65rem 1rem;
+}
+
+.cash-audit-line {
+  display: block;
+  margin-top: 0.7rem;
+  color: #9dbbd7;
+  font-size: 0.84rem;
+}
+
+.cash-entry-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.cash-purpose-field {
+  grid-column: 1 / -1;
+}
+
+.cash-submit-button {
+  grid-column: 1 / -1;
+  min-height: 48px;
+  border: 0;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #25a86b, #19724d);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.cash-error {
+  margin-bottom: 0;
+}
+
+.cash-history-heading {
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.cash-history-heading h2 {
+  margin-bottom: 0.4rem;
+}
+
+.cash-history-heading button {
+  flex: 0 0 auto;
+}
+
+.cash-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.cash-history-card {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(0, 2fr) auto;
+  gap: 0.8rem;
+  align-items: center;
+  padding: 0.8rem;
+  border: 1px solid #2d456d;
+  border-radius: 11px;
+  background: #172640;
+}
+
+.cash-history-date,
+.cash-history-purpose {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.cash-history-date strong,
+.cash-history-purpose strong {
+  color: #e7f3ff;
+  overflow-wrap: anywhere;
+}
+
+.cash-history-date span,
+.cash-history-purpose span {
+  color: #9eb9d2;
+  font-size: 0.84rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.cash-history-amount {
+  color: #ff9fa6;
+  font-size: 1.08rem;
+  white-space: nowrap;
+}
+
+.cash-empty-state {
+  padding: 1rem;
+  border: 1px dashed #426288;
+  border-radius: 10px;
+  color: #bdd5ec;
+  text-align: center;
+}
+
+.team-cash-back {
+  width: min(100%, 280px);
+  margin: 1.2rem auto 0;
 }
 
 .add-player-form button,
@@ -2281,6 +2466,9 @@ footer a {
   .player-management,
   .admin-section,
   .settings-category-section,
+  .cash-opening-section,
+  .cash-entry-section,
+  .cash-history-section,
   .team-generator-controls,
   .team-generator-result,
   .training-settings,
@@ -2390,6 +2578,29 @@ footer a {
 
   .settings-category-card {
     min-height: 112px;
+  }
+
+  .cash-opening-row > *,
+  .cash-entry-form > * {
+    width: 100%;
+  }
+
+  .cash-entry-form,
+  .cash-history-card {
+    grid-template-columns: 1fr;
+  }
+
+  .cash-purpose-field,
+  .cash-submit-button {
+    grid-column: auto;
+  }
+
+  .cash-history-card {
+    gap: 0.55rem;
+  }
+
+  .cash-history-amount {
+    font-size: 1.2rem;
   }
 
   .team-counts {
