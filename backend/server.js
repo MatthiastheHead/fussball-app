@@ -16,6 +16,7 @@ const AdminRecovery = require('./models/AdminRecovery');
 const LoginEvent = require('./models/LoginEvent');
 const PasswordResetRequest = require('./models/PasswordResetRequest');
 const TeamCash = require('./models/TeamCash');
+const { ACCESS_KEYS, permissionsFor, isAdminUser } = require('./accessUtils');
 const { hashPassword, isPasswordHash, verifyPassword } = require('./authUtils');
 const {
   createOtpAuthUrl,
@@ -65,13 +66,36 @@ const requireSession = (req, res, next) => {
 
 const requireAdmin = (req, res, next) =>
   requireSession(req, res, () => {
+    if (!req.auth.isAdmin) {
+      return res.status(403).json({ error: 'Nur Admins dürfen diesen Bereich öffnen.' });
+    }
+    next();
+  });
+
+const requireMainAdmin = (req, res, next) =>
+  requireSession(req, res, () => {
     if (req.auth.username !== ADMIN_USERNAME) {
       return res.status(403).json({ error: 'Nur Matthias darf diesen Bereich öffnen.' });
     }
     next();
   });
 
-const safeUser = user => ({ _id: user._id, name: user.name });
+const requireAccess = accessKey => (req, res, next) =>
+  requireSession(req, res, () => {
+    if (!req.auth.isAdmin && req.auth.permissions?.[accessKey] === false) {
+      return res.status(403).json({ error: 'Für diesen Bereich fehlt dir die Berechtigung.' });
+    }
+    next();
+  });
+
+const userPermissions = permissionsFor;
+const safeUser = user => ({
+  _id: user._id,
+  name: user.name,
+  isAdmin: isAdminUser(user, ADMIN_USERNAME),
+  isMainAdmin: user.name === ADMIN_USERNAME,
+  permissions: userPermissions(user),
+});
 
 const loginAttemptKey = (req, username = '') =>
   `${req.ip || req.socket?.remoteAddress || 'unknown'}|${String(username).toLowerCase()}`;
@@ -205,6 +229,13 @@ mongoose
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, unique: true },
   password: { type: String, required: true },
+  isAdmin: { type: Boolean, default: false },
+  permissions: {
+    training: { type: Boolean, default: true },
+    checklists: { type: Boolean, default: true },
+    teamGenerator: { type: Boolean, default: true },
+    teamCash: { type: Boolean, default: true },
+  },
 });
 const User = mongoose.model('User', userSchema);
 
@@ -289,12 +320,16 @@ app.post('/auth/login', async (req, res) => {
     const token = randomBytes(32).toString('hex');
     sessions.set(token, {
       username: user.name,
+      isAdmin: isAdminUser(user, ADMIN_USERNAME),
+      permissions: userPermissions(user),
       expiresAt: Date.now() + SESSION_TTL_MS,
     });
     await LoginEvent.create({ username: user.name, loggedInAt: new Date() });
     res.json({
       name: user.name,
-      isAdmin: user.name === ADMIN_USERNAME,
+      isAdmin: isAdminUser(user, ADMIN_USERNAME),
+      isMainAdmin: user.name === ADMIN_USERNAME,
+      permissions: userPermissions(user),
       token,
       expiresInMs: SESSION_TTL_MS,
     });
@@ -709,6 +744,34 @@ app.post('/admin/users', requireAdmin, async (req, res) => {
   }
 });
 
+app.patch('/admin/users/:id/access', requireAdmin, async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(400).json({ error: 'Ungültiger Benutzer.' });
+  }
+  const permissions = Object.fromEntries(
+    ACCESS_KEYS.map(key => [key, req.body?.permissions?.[key] !== false])
+  );
+  const isAdmin = req.body?.isAdmin === true;
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'Benutzer nicht gefunden.' });
+    if (user.name === ADMIN_USERNAME && req.auth.username !== ADMIN_USERNAME) {
+      return res.status(403).json({ error: 'Nur Matthias darf das Hauptadmin-Konto ändern.' });
+    }
+    if (user.name === ADMIN_USERNAME && !isAdmin) {
+      return res.status(400).json({ error: 'Matthias bleibt geschützter Hauptadmin.' });
+    }
+    user.isAdmin = user.name === ADMIN_USERNAME || isAdmin;
+    user.permissions = permissions;
+    await user.save();
+    invalidateSessionsForUsername(user.name);
+    res.json(safeUser(user));
+  } catch (err) {
+    console.error('Fehler PATCH /admin/users/:id/access:', err);
+    res.status(500).json({ error: 'Berechtigungen konnten nicht gespeichert werden.' });
+  }
+});
+
 app.patch('/admin/users/:id/password', requireAdmin, async (req, res) => {
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
   if (
@@ -719,6 +782,11 @@ app.patch('/admin/users/:id/password', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Ungültiger Benutzer oder ungültiges Passwort.' });
   }
   try {
+    const target = await User.findById(req.params.id).select('name');
+    if (!target) return res.status(404).json({ error: 'Benutzer nicht gefunden.' });
+    if (target.name === ADMIN_USERNAME && req.auth.username !== ADMIN_USERNAME) {
+      return res.status(403).json({ error: 'Nur Matthias darf das Hauptadmin-Konto ändern.' });
+    }
     const user = await User.findByIdAndUpdate(
       req.params.id,
       { $set: { password: await hashPassword(password) } },
@@ -750,6 +818,9 @@ app.delete('/admin/users/:id', requireAdmin, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ error: 'Benutzer nicht gefunden.' });
+    if (user.name === ADMIN_USERNAME && req.auth.username !== ADMIN_USERNAME) {
+      return res.status(403).json({ error: 'Nur Matthias darf das Hauptadmin-Konto ändern.' });
+    }
     if (user.name === ADMIN_USERNAME) {
       return res.status(400).json({ error: 'Der Administrator kann nicht gelöscht werden.' });
     }
@@ -766,7 +837,7 @@ app.delete('/admin/users/:id', requireAdmin, async (req, res) => {
   }
 });
 
-app.get('/admin/login-events', requireAdmin, async (req, res) => {
+app.get('/admin/login-events', requireMainAdmin, async (req, res) => {
   const requestedLimit = Number(req.query.limit);
   const limit = Number.isFinite(requestedLimit)
     ? Math.min(500, Math.max(1, Math.trunc(requestedLimit)))
@@ -802,7 +873,7 @@ app.post('/users', requireAdmin, (_req, res) => {
 });
 
 // ---- 5.2 Players ----
-app.get('/players', async (req, res) => {
+app.get('/players', requireSession, async (req, res) => {
   try {
     const allPlayers = await Player.find().lean();
     res.json(allPlayers);
@@ -812,7 +883,11 @@ app.get('/players', async (req, res) => {
   }
 });
 
-app.post('/players', async (req, res) => {
+app.get('/team-generator/access', requireAccess('teamGenerator'), (_req, res) => {
+  res.json({ ok: true });
+});
+
+app.post('/players', requireAdmin, async (req, res) => {
   const { reset, list } = req.body || {};
   if (!reset || !Array.isArray(list)) {
     return res.status(400).json({ error: 'Ungültige Anfrage: { reset: true, list: [...] } erwartet.' });
@@ -844,7 +919,7 @@ app.post('/players', async (req, res) => {
 });
 
 // ---- 5.3 Trainings ----
-app.get('/trainings', async (req, res) => {
+app.get('/trainings', requireAccess('training'), async (req, res) => {
   try {
     const allTrainings = await Training.find().lean();
     res.json(allTrainings);
@@ -854,7 +929,7 @@ app.get('/trainings', async (req, res) => {
   }
 });
 
-app.post('/trainings', async (req, res) => {
+app.post('/trainings', requireAccess('training'), async (req, res) => {
   const { reset, list } = req.body || {};
   if (!reset || !Array.isArray(list)) {
     return res.status(400).json({ error: 'Ungültige Anfrage: { reset: true, list: [...] } erwartet.' });
@@ -979,7 +1054,7 @@ app.post('/trainings', async (req, res) => {
 });
 
 // ---- 5.4 App-Einstellungen ----
-app.get('/settings', async (_req, res) => {
+app.get('/settings', requireSession, async (_req, res) => {
   try {
     const settings = await AppSettings.findOne({ key: 'app' }).lean();
     res.json({
@@ -991,7 +1066,7 @@ app.get('/settings', async (_req, res) => {
   }
 });
 
-app.post('/settings', async (req, res) => {
+app.post('/settings', requireAdmin, async (req, res) => {
   const defaultTrainingLocation = req.body?.defaultTrainingLocation;
   if (!TRAINING_LOCATIONS.includes(defaultTrainingLocation)) {
     return res.status(400).json({ error: 'Ungültiger Standard-Trainingsort.' });
@@ -1012,7 +1087,7 @@ app.post('/settings', async (req, res) => {
 // ---- 5.5 Checklists ----
 console.log('🧩 Registriere Checklisten-Endpunkte...');
 
-app.get('/checklists', async (_req, res) => {
+app.get('/checklists', requireAccess('checklists'), async (_req, res) => {
   try {
     const list = await Checklist.find({}).sort({ createdAt: -1 }).lean();
     res.json(list);
@@ -1022,7 +1097,7 @@ app.get('/checklists', async (_req, res) => {
   }
 });
 
-app.post('/checklists', async (req, res) => {
+app.post('/checklists', requireAccess('checklists'), async (req, res) => {
   const { reset, list } = req.body || {};
   if (!reset || !Array.isArray(list)) {
     return res.status(400).json({ error: 'Ungültige Anfrage: { reset: true, list: [...] } erwartet.' });
@@ -1092,7 +1167,7 @@ const validCashDate = value => {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 };
 
-app.get('/team-cash', requireSession, async (_req, res) => {
+app.get('/team-cash', requireAccess('teamCash'), async (_req, res) => {
   try {
     const cash = await TeamCash.findOne({ key: 'team-cash' }).lean();
     res.json(cleanTeamCash(cash));
@@ -1102,7 +1177,7 @@ app.get('/team-cash', requireSession, async (_req, res) => {
   }
 });
 
-app.post('/team-cash/opening-balance', requireSession, async (req, res) => {
+app.post('/team-cash/opening-balance', requireAdmin, async (req, res) => {
   const amountCents = Number(req.body?.amountCents);
   if (!Number.isSafeInteger(amountCents) || amountCents < 0 || amountCents > 100_000_000) {
     return res.status(400).json({ error: 'Bitte einen gültigen Kassenbestand eingeben.' });
@@ -1128,17 +1203,14 @@ app.post('/team-cash/opening-balance', requireSession, async (req, res) => {
   }
 });
 
-app.post('/team-cash/transactions', requireSession, async (req, res) => {
+app.post('/team-cash/transactions', requireAccess('teamCash'), async (req, res) => {
   const date = String(req.body?.date || '').trim();
-  const person = String(req.body?.person || '').trim();
+  const person = req.auth.username;
   const purpose = String(req.body?.purpose || '').trim();
   const amountCents = Number(req.body?.amountCents);
 
   if (!validCashDate(date)) {
     return res.status(400).json({ error: 'Bitte ein gültiges Datum auswählen.' });
-  }
-  if (!person || person.length > 80) {
-    return res.status(400).json({ error: 'Bitte eine Person mit höchstens 80 Zeichen eintragen.' });
   }
   if (!purpose || purpose.length > 200) {
     return res.status(400).json({ error: 'Bitte einen Verwendungszweck mit höchstens 200 Zeichen eintragen.' });

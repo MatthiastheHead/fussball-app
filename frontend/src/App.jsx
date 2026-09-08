@@ -1,4 +1,4 @@
-// Version 7.2: Mannschaftskasse mit nachvollziehbaren Ausgaben.
+// Version 7.3: Rollen und serverseitig erzwungene Bereichsberechtigungen.
 
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
@@ -204,6 +204,7 @@ async function ensureBackendAwake() {
 export default function App() {
   // State-Definitionen
   const [loggedInUser, setLoggedInUser] = useState(null);
+  const [sessionUser, setSessionUser] = useState(null);
   const [authToken, setAuthToken] = useState('');
   const [loginName, setLoginName] = useState('');
   const [loginPass, setLoginPass] = useState('');
@@ -293,7 +294,10 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '7.2';
+  const version = '7.3';
+  const isAdmin = !!sessionUser?.isAdmin;
+  const isMainAdmin = !!sessionUser?.isMainAdmin;
+  const canAccess = (key) => isAdmin || sessionUser?.permissions?.[key] !== false;
   const currentYear = new Date().getFullYear();
 
   const createAuditEntry = (action) => ({
@@ -313,7 +317,7 @@ export default function App() {
   };
 
   const saveTrainingList = async (list) => {
-    const res = await apiRequest('trainings', {
+    const res = await authenticatedRequest('trainings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset: true, list }),
@@ -360,12 +364,17 @@ export default function App() {
     }
   }
 
-  async function refetchAll() {
+  async function refetchAll(token = authToken, access = sessionUser) {
+    const request = (path) => authenticatedRequest(path, { cache: 'no-store' }, token).then(response => {
+      if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
+      return response.json();
+    });
+    const allowed = (key) => access?.isAdmin || access?.permissions?.[key] !== false;
     const [p, t, c, s] = await Promise.all([
-      fetchJson('players'),
-      fetchJson('trainings'),
-      fetchJson('checklists'),
-      fetchJson('settings'),
+      request('players'),
+      allowed('training') ? request('trainings') : [],
+      allowed('checklists') ? request('checklists') : [],
+      request('settings'),
     ]);
       setPlayers(
         Array.isArray(p)
@@ -418,7 +427,7 @@ export default function App() {
 
   const saveDefaultLocation = () =>
     runOnce(async () => {
-      const res = await apiRequest('settings', {
+      const res = await authenticatedRequest('settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ defaultTrainingLocation }),
@@ -505,8 +514,8 @@ export default function App() {
     runOnce(async () => {
       setCashError('');
       const amountCents = parseEuroToCents(cashEntry.amount);
-      if (!cashEntry.date || !cashEntry.person.trim() || !cashEntry.purpose.trim()) {
-        setCashError('Bitte Datum, Person und Verwendungszweck vollständig eintragen.');
+      if (!cashEntry.date || !cashEntry.purpose.trim()) {
+        setCashError('Bitte Datum und Verwendungszweck vollständig eintragen.');
         return false;
       }
       if (amountCents === null || amountCents < 1) {
@@ -518,7 +527,6 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           date: cashEntry.date,
-          person: cashEntry.person.trim(),
           amountCents,
           purpose: cashEntry.purpose.trim(),
         }),
@@ -533,18 +541,20 @@ export default function App() {
       return true;
     });
 
-  async function loadAdminData(token = authToken) {
+  async function loadAdminData(token = authToken, mainAdmin = isMainAdmin) {
     if (!token) return false;
     setAdminLoadError('');
     const [usersResponse, historyResponse, resetRequestsResponse] = await Promise.all([
       authenticatedRequest('admin/users', {}, token),
-      authenticatedRequest('admin/login-events?limit=200', {}, token),
+      mainAdmin
+        ? authenticatedRequest('admin/login-events?limit=200', {}, token)
+        : Promise.resolve(null),
       authenticatedRequest('admin/password-reset-requests', {}, token),
     ]);
-    if (!usersResponse.ok || !historyResponse.ok || !resetRequestsResponse.ok) {
+    if (!usersResponse.ok || (historyResponse && !historyResponse.ok) || !resetRequestsResponse.ok) {
       if (
         usersResponse.status === 401 ||
-        historyResponse.status === 401 ||
+        historyResponse?.status === 401 ||
         resetRequestsResponse.status === 401
       ) {
         setAdminLoadError('Die Admin-Sitzung ist abgelaufen. Bitte erneut einloggen.');
@@ -555,7 +565,7 @@ export default function App() {
     }
     const [adminUsers, events, resetRequests] = await Promise.all([
       usersResponse.json(),
-      historyResponse.json(),
+      historyResponse ? historyResponse.json() : [],
       resetRequestsResponse.json(),
     ]);
     setUsers(Array.isArray(adminUsers) ? adminUsers : []);
@@ -609,7 +619,7 @@ export default function App() {
       return;
     }
     try {
-      await refetchAll();
+      // Fachdaten werden erst nach erfolgreicher Anmeldung mit der Sitzung geladen.
     } catch (error) {
       console.error(error);
       setLoadError('Die Daten konnten nicht geladen werden.');
@@ -670,6 +680,7 @@ export default function App() {
       }
       const session = await response.json();
       setLoggedInUser(session.name);
+      setSessionUser(session);
       setAuthToken(session.token);
       setLoginError('');
       setLoginNotice('');
@@ -682,12 +693,15 @@ export default function App() {
       setShowTeamCash(false);
       setCashEntry((entry) => ({ ...entry, person: session.name }));
       const accountStatusPromise = loadRecoveryStatus(session.token);
-      const teamCashPromise = loadTeamCash(session.token);
+      const teamCashPromise = (session.isAdmin || session.permissions?.teamCash !== false)
+        ? loadTeamCash(session.token)
+        : Promise.resolve(false);
+      await refetchAll(session.token, session);
       if (session.isAdmin) {
         await Promise.all([
           accountStatusPromise,
           teamCashPromise,
-          loadAdminData(session.token),
+          loadAdminData(session.token, session.isMainAdmin),
         ]);
       } else {
         await Promise.all([accountStatusPromise, teamCashPromise]);
@@ -704,6 +718,7 @@ export default function App() {
       authenticatedRequest('auth/logout', { method: 'POST' }).catch(() => {});
     }
     setLoggedInUser(null);
+    setSessionUser(null);
     setAuthToken('');
     setUsers([]);
     setLoginHistory([]);
@@ -1003,6 +1018,25 @@ export default function App() {
       alert('Benutzer gelöscht.');
     });
 
+  const updateUserAccess = (user, changes) =>
+    runOnce(async () => {
+      const response = await authenticatedRequest(`admin/users/${user._id}/access`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          isAdmin: changes.isAdmin ?? user.isAdmin,
+          permissions: { ...user.permissions, ...changes.permissions },
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        alert(data.error || 'Berechtigungen konnten nicht gespeichert werden.');
+        return false;
+      }
+      setUsers(current => current.map(item => item._id === user._id ? data : item));
+      return true;
+    });
+
   // Spieler bearbeiten
   const startEditPlayer = (player) => {
     setEditPlayerId(player.name);
@@ -1042,7 +1076,7 @@ export default function App() {
         playerIndex === idx ? updatedPlayer : player
       );
       const requests = [
-        apiRequest('players', {
+        authenticatedRequest('players', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ reset: true, list: updated }),
@@ -1085,12 +1119,12 @@ export default function App() {
             : checklist
         );
         requests.push(
-          apiRequest('trainings', {
+          authenticatedRequest('trainings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ reset: true, list: updatedTrainings }),
           }),
-          apiRequest('checklists', {
+          authenticatedRequest('checklists', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ reset: true, list: updatedChecklists }),
@@ -1143,7 +1177,7 @@ export default function App() {
           inactive: false,
         },
       ];
-      const res = await apiRequest('players', {
+      const res = await authenticatedRequest('players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
@@ -1167,7 +1201,7 @@ export default function App() {
       if (idx === -1) return;
       const updated = [...players];
       updated.splice(idx, 1);
-      const res = await apiRequest('players', {
+      const res = await authenticatedRequest('players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
@@ -1188,7 +1222,7 @@ export default function App() {
       const updated = players.map((item, itemIndex) =>
         itemIndex === idx ? { ...item, inactive: !item.inactive } : item
       );
-      const res = await apiRequest('players', {
+      const res = await authenticatedRequest('players', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: updated }),
@@ -1897,7 +1931,7 @@ export default function App() {
     return (
       <div className="start-menu modern-dark-blue">
         <h2 style={{ color: '#7dc4ff', marginTop: '1.3em' }}>Willkommen, {loggedInUser}!</h2>
-        <button
+        {canAccess('training') && <button
           className="main-func-btn"
           style={{ margin: '2.2em auto 0 auto', fontSize: '1.3rem', minWidth: 260 }}
           onClick={() => {
@@ -1910,8 +1944,8 @@ export default function App() {
           disabled={busy}
         >
           {busy ? 'Bitte warten…' : '⚽ Trainingsteilnahme'}
-        </button>
-        <button
+        </button>}
+        {canAccess('checklists') && <button
           className="main-func-btn"
           style={{ margin: '0.9em auto 0 auto', fontSize: '1.13rem', minWidth: 260 }}
           onClick={() => {
@@ -1924,11 +1958,16 @@ export default function App() {
           disabled={busy}
         >
           ✔ Checklisten
-        </button>
-        <button
+        </button>}
+        {canAccess('teamGenerator') && <button
           className="main-func-btn"
           style={{ margin: '0.9em auto 0 auto', fontSize: '1.13rem', minWidth: 260 }}
-          onClick={() => {
+          onClick={async () => {
+            const accessResponse = await authenticatedRequest('team-generator/access');
+            if (!accessResponse.ok) {
+              alert('Für den Teamgenerator fehlt dir die Berechtigung.');
+              return;
+            }
             setGeneratorDate(getLocalDateInputValue());
             setGeneratorTeamCount(2);
             setSelectedGeneratorPlayers(generatorPlayerNames);
@@ -1942,8 +1981,8 @@ export default function App() {
           disabled={busy}
         >
           🎲 Teamgenerator
-        </button>
-        <button
+        </button>}
+        {canAccess('teamCash') && <button
           className="main-func-btn team-cash-menu-button"
           style={{ margin: '0.9em auto 0 auto', fontSize: '1.13rem', minWidth: 260 }}
           onClick={() => {
@@ -1957,8 +1996,8 @@ export default function App() {
           }}
           disabled={busy}
         >
-          Mannschaftskasse
-        </button>
+          💰 Mannschaftskasse
+        </button>}
         <button
           className="main-func-btn settings-menu-button"
           style={{ margin: '0.9em auto 0 auto', fontSize: '1.13rem', minWidth: 260 }}
@@ -2041,35 +2080,6 @@ export default function App() {
           </div>
         </section>
 
-        <section className="cash-opening-section">
-          <div>
-            <h2>Vorhandenen Bestand eintragen</h2>
-            <p>Trage hier den Betrag ein, der aktuell vor den erfassten Ausgaben vorhanden ist.</p>
-          </div>
-          <div className="cash-opening-row">
-            <label className="labeled-field">
-              <span>Startbestand in Euro</span>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={cashOpeningBalance}
-                onChange={(event) => setCashOpeningBalance(event.target.value)}
-                placeholder="250,00"
-                disabled={busy}
-              />
-            </label>
-            <button type="button" className="btn-save-players" onClick={saveCashOpeningBalance} disabled={busy}>
-              Bestand speichern
-            </button>
-          </div>
-          {teamCash.openingBalanceUpdatedAt && (
-            <small className="cash-audit-line">
-              Zuletzt gespeichert von {teamCash.openingBalanceUpdatedBy || 'Unbekannt'} am{' '}
-              {formatAuditTime(teamCash.openingBalanceUpdatedAt)}
-            </small>
-          )}
-        </section>
-
         <section className="cash-entry-section">
           <div>
             <h2>Ausgabe eintragen</h2>
@@ -2097,13 +2107,9 @@ export default function App() {
               <span>Wer?</span>
               <input
                 type="text"
-                value={cashEntry.person}
-                onChange={(event) =>
-                  setCashEntry((entry) => ({ ...entry, person: event.target.value }))
-                }
-                placeholder="Name der Person"
-                maxLength={80}
-                disabled={busy}
+                value={loggedInUser || ''}
+                readOnly
+                aria-readonly="true"
               />
             </label>
             <label className="labeled-field">
@@ -2432,13 +2438,22 @@ export default function App() {
         description: 'Authenticator und persönliche Notfallcodes verwalten.',
         meta: recoveryStatus.enabled ? 'Eingerichtet' : 'Noch nicht eingerichtet',
       },
-      ...(loggedInUser === 'Matthias'
+      ...(isAdmin
         ? [
+            {
+              key: 'cash-admin',
+              icon: '💰',
+              title: 'Mannschaftskasse',
+              description: 'Startkassenstand im Adminbereich bearbeiten.',
+              meta: formatEuro(teamCash.openingBalanceCents),
+            },
             {
               key: 'access',
               icon: '🔑',
               title: 'App-Zugänge',
-              description: 'Benutzer, Passwörter und Login-Übersicht verwalten.',
+              description: isMainAdmin
+                ? 'Benutzer, Rechte, Passwörter und Login-Übersicht verwalten.'
+                : 'Benutzer, Rechte und Passwörter verwalten.',
               meta:
                 passwordResetRequests.length > 0
                   ? `${passwordResetRequests.length} offene Passwortanfrage${
@@ -2957,7 +2972,29 @@ export default function App() {
           </div>
         </section>
         )}
-        {settingsCategory === 'access' && loggedInUser === 'Matthias' && (
+        {settingsCategory === 'cash-admin' && isAdmin && (
+          <section className="cash-opening-section">
+            <div>
+              <h2>Startkassenstand</h2>
+              <p>Nur Admins können den Bestand vor den erfassten Ausgaben ändern.</p>
+            </div>
+            <div className="cash-opening-row">
+              <label className="labeled-field">
+                <span>Startbestand in Euro</span>
+                <input type="text" inputMode="decimal" value={cashOpeningBalance}
+                  onChange={(event) => setCashOpeningBalance(event.target.value)} disabled={busy} />
+              </label>
+              <button type="button" className="btn-save-players" onClick={saveCashOpeningBalance} disabled={busy}>
+                Bestand speichern
+              </button>
+            </div>
+            {teamCash.openingBalanceUpdatedAt && <small className="cash-audit-line">
+              Zuletzt gespeichert von {teamCash.openingBalanceUpdatedBy || 'Unbekannt'} am{' '}
+              {formatAuditTime(teamCash.openingBalanceUpdatedAt)}
+            </small>}
+          </section>
+        )}
+        {settingsCategory === 'access' && isAdmin && (
           <section className="admin-section">
             <h2>App-Zugänge</h2>
             <p className="admin-section-intro">
@@ -3034,6 +3071,28 @@ export default function App() {
                   }
                 >
                   <span style={{ color: '#e0e0e0' }}>{u.name}</span>
+                  <div className="user-access-controls">
+                    <label>
+                      <input type="checkbox" checked={!!u.isAdmin} disabled={busy || u.isMainAdmin}
+                        onChange={(event) => updateUserAccess(u, { isAdmin: event.target.checked })} />
+                      Admin{u.isMainAdmin ? ' (Hauptadmin)' : ''}
+                    </label>
+                    {[
+                      ['training', 'Trainingsteilnahme'],
+                      ['checklists', 'Checklisten'],
+                      ['teamGenerator', 'Teamgenerator'],
+                      ['teamCash', 'Mannschaftskasse'],
+                    ].map(([key, label]) => (
+                      <label key={key}>
+                        <input type="checkbox" checked={u.isAdmin || u.permissions?.[key] !== false}
+                          disabled={busy || u.isAdmin}
+                          onChange={(event) => updateUserAccess(u, {
+                            permissions: { [key]: event.target.checked },
+                          })} />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
                   <input
                     type="password"
                     placeholder="Neues Passwort"
@@ -3070,7 +3129,7 @@ export default function App() {
                 </li>
               ))}
             </ul>
-            <div className="login-history-block">
+            {isMainAdmin && <div className="login-history-block">
               <div className="login-history-heading">
                 <div>
                   <h3>Login-Übersicht</h3>
@@ -3113,7 +3172,7 @@ export default function App() {
                   {loginHistory.length === 0 && <p>Noch keine Anmeldung protokolliert.</p>}
                 </div>
               </details>
-            </div>
+            </div>}
           </section>
         )}
         <button
@@ -3928,7 +3987,7 @@ export default function App() {
       }));
     const saveChecklistList = async (rawList, editorName = loggedInUser) => {
       const cleaned = sanitizeList(rawList, editorName);
-      const res = await apiRequest('checklists', {
+      const res = await authenticatedRequest('checklists', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reset: true, list: cleaned }),
