@@ -55,7 +55,8 @@ function cashHarness() {
   const routes = {};
   const writes = [];
   const context = {
-    app: { get() {}, post(path, access, handler) { routes[path] = { access, handler }; } },
+    app: { get() {}, post(path, access, handler) { routes[path] = { access, handler }; }, delete(path, access, handler) { routes[path] = { access, handler }; } },
+    mongoose: require('mongoose'),
     requireAccess: key => key,
     requireAdmin: 'admin',
     TeamCash: { async findOneAndUpdate(query, update) { writes.push(update); return { openingBalanceCents: 1000, transactions: [update.$push.transactions] }; } },
@@ -86,4 +87,55 @@ test('ungültige Buchungsarten und Beträge erzeugen keine Buchung', async () =>
     assert.equal(res.code, 400);
   }
   assert.equal(writes.length, 0);
+});
+
+test('Löschen ist nur für Admins registriert und erhält einen internen Nachweis', async () => {
+  const { routes, context } = cashHarness();
+  const route = routes['/team-cash/transactions/:id'];
+  assert.equal(route.access, 'admin');
+  const id = '507f1f77bcf86cd799439011';
+  context.TeamCash.findOneAndUpdate = async (query, update, options) => {
+    assert.equal(query.transactions.$elemMatch._id, id);
+    assert.equal(query.transactions.$elemMatch.deletedAt, null);
+    assert.equal(update.$set['transactions.$.deletedBy'], 'Matthias');
+    assert.ok(update.$set['transactions.$.deletedAt']);
+    assert.equal(options.new, true);
+    assert.equal(update.$pull, undefined);
+    return { openingBalanceCents: 1000, transactions: [
+      { type: 'deposit', amountCents: 500, deletedAt: new Date() },
+      { amountCents: 100 },
+    ] };
+  };
+  let result;
+  await route.handler({ params: { id }, auth: { username: 'Matthias' } }, { json(data) { result = data; } });
+  assert.equal(result.balanceCents, 900);
+  assert.equal(result.transactions.length, 1);
+});
+
+test('ungültige und bereits gelöschte Buchungen werden abgewiesen', async () => {
+  const { routes, context } = cashHarness();
+  let called = false;
+  context.TeamCash.findOneAndUpdate = async () => { called = true; return null; };
+  const res = { status(code) { this.code = code; return this; }, json() {} };
+  const handler = routes['/team-cash/transactions/:id'].handler;
+  await handler({ params: { id: 'invalid' }, auth: { username: 'Matthias' } }, res);
+  assert.equal(res.code, 400);
+  assert.equal(called, false);
+  await handler({ params: { id: '507f1f77bcf86cd799439011' }, auth: { username: 'Matthias' } }, res);
+  assert.equal(res.code, 404);
+});
+
+test('Admin-Middleware sperrt normale und unangemeldete Benutzer', () => {
+  const context = { sessions: new Map() };
+  vm.createContext(context);
+  vm.runInContext(server.slice(server.indexOf('const pruneSessions ='), server.indexOf('const requireMainAdmin =')), context);
+  for (const [token, session, expected] of [
+    ['', null, 401], ['trainer', { isAdmin: false }, 403], ['admin', { isAdmin: true }, 200],
+  ]) {
+    if (session) context.sessions.set(token, { ...session, expiresAt: Date.now() + 60000 });
+    context.req = { get: () => `Bearer ${token}` };
+    context.res = { status(code) { this.code = code; return this; }, json() {} };
+    vm.runInContext('requireAdmin(req, res, () => { res.code = 200; })', context);
+    assert.equal(context.res.code, expected);
+  }
 });

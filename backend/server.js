@@ -1140,7 +1140,7 @@ app.post('/checklists', requireAccess('checklists'), async (req, res) => {
 const cleanTeamCash = document => {
   const cash = document?.toObject ? document.toObject() : document || {};
   const transactions = Array.isArray(cash.transactions)
-    ? [...cash.transactions].sort(
+    ? cash.transactions.filter(transaction => !transaction.deletedAt).sort(
         (a, b) =>
           String(b.date || '').localeCompare(String(a.date || '')) ||
           new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
@@ -1250,6 +1250,29 @@ app.post('/team-cash/transactions', requireAccess('teamCash'), async (req, res) 
   } catch (err) {
     console.error('Fehler POST /team-cash/transactions:', err);
     res.status(500).json({ error: 'Die Buchung konnte nicht gespeichert werden.' });
+  }
+});
+
+app.delete('/team-cash/transactions/:id', requireAdmin, async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(400).json({ error: 'Ungültige Buchung.' });
+  }
+  try {
+    const cash = await TeamCash.findOneAndUpdate(
+      { key: 'team-cash', transactions: { $elemMatch: { _id: req.params.id, deletedAt: null } } },
+      { $set: {
+        'transactions.$.deletedAt': new Date(),
+        'transactions.$.deletedBy': req.auth.username,
+      } },
+      { new: true, runValidators: true }
+    );
+    if (!cash) {
+      return res.status(404).json({ error: 'Die Buchung wurde nicht gefunden oder bereits gelöscht.' });
+    }
+    res.json(cleanTeamCash(cash));
+  } catch (err) {
+    console.error('Fehler DELETE /team-cash/transactions:', err);
+    res.status(500).json({ error: 'Die Buchung konnte nicht gelöscht werden.' });
   }
 });
 

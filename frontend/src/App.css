@@ -1065,10 +1065,15 @@ textarea::placeholder,
 }
 
 .cash-history-amount {
-  color: #ff9fa6;
   font-size: 1.08rem;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
+
+.cash-deposit { color: #71e5a1; }
+.cash-expense { color: #ff9fa6; }
+.cash-history-actions { display: flex; flex-direction: column; gap: 0.6rem; align-items: flex-start; }
+.cash-delete-button { border: 1px solid #ff9fa6; color: #ffb4b9; background: #392433; border-radius: 8px; padding: 0.5rem 0.7rem; min-height: 44px; cursor: pointer; }
+.cash-delete-button:disabled { opacity: 0.55; cursor: default; }
 
 .cash-empty-state {
   padding: 1rem;

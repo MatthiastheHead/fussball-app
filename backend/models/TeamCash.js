@@ -8,6 +8,8 @@ const TeamCashTransactionSchema = new mongoose.Schema({
   purpose: { type: String, required: true, trim: true },
   createdBy: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
+  deletedAt: { type: Date, default: null },
+  deletedBy: { type: String, default: '' },
 });
 
 const TeamCashSchema = new mongoose.Schema({
