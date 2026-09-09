@@ -26,7 +26,7 @@ export function formatEuro(cents) {
 export function calculateTeamCashBalance(teamCash) {
   const openingBalanceCents = Number(teamCash?.openingBalanceCents) || 0;
   const spentCents = (teamCash?.transactions || []).reduce(
-    (sum, transaction) => sum + (Number(transaction?.amountCents) || 0),
+    (sum, transaction) => sum + (transaction?.type === 'deposit' ? -1 : 1) * (Number(transaction?.amountCents) || 0),
     0
   );
   return openingBalanceCents - spentCents;

@@ -28,3 +28,15 @@ test('berechnet den Kassenstand ohne Fließkommafehler', () => {
   );
   assert.equal(formatEuro(7851), '78,51 €');
 });
+
+test('addiert Einzahlungen und zieht neue sowie bestehende Ausgaben ab', () => {
+  assert.equal(calculateTeamCashBalance({
+    openingBalanceCents: 10000,
+    transactions: [
+      { type: 'deposit', amountCents: 2505 },
+      { type: 'expense', amountCents: 1500 },
+      { amountCents: 999 },
+    ],
+  }), 10006);
+  assert.equal(calculateTeamCashBalance({ transactions: [{ type: 'deposit', amountCents: 501 }] }), 501);
+});

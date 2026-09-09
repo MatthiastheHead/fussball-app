@@ -962,7 +962,8 @@ textarea::placeholder,
 }
 
 .cash-opening-row input,
-.cash-entry-form input {
+.cash-entry-form input,
+.cash-entry-form select {
   width: 100%;
   min-height: 46px;
   padding: 0.6rem 0.7rem;
