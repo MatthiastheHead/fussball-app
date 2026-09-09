@@ -1,4 +1,4 @@
-// Version 7.3: Rollen und serverseitig erzwungene Bereichsberechtigungen.
+// Version 7.4: Einzahlungen und Ausgaben in der Mannschaftskasse.
 
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
@@ -280,6 +280,7 @@ export default function App() {
   const [showTeamCash, setShowTeamCash] = useState(false);
   const [cashOpeningBalance, setCashOpeningBalance] = useState('0,00');
   const [cashEntry, setCashEntry] = useState({
+    type: 'expense',
     date: getLocalDateInputValue(),
     person: '',
     amount: '',
@@ -294,7 +295,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '7.3';
+  const version = '7.4';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canAccess = (key) => isAdmin || sessionUser?.permissions?.[key] !== false;
@@ -491,7 +492,7 @@ export default function App() {
         teamCash.transactions.length > 0 &&
         amountCents !== teamCash.openingBalanceCents &&
         !window.confirm(
-          'Du änderst den Startbestand. Alle bereits eingetragenen Ausgaben bleiben erhalten. Fortfahren?'
+          'Du änderst den Startbestand. Alle bereits eingetragenen Buchungen bleiben erhalten. Fortfahren?'
         )
       ) {
         return false;
@@ -510,7 +511,7 @@ export default function App() {
       return true;
     });
 
-  const addCashExpense = () =>
+  const addCashTransaction = () =>
     runOnce(async () => {
       setCashError('');
       const amountCents = parseEuroToCents(cashEntry.amount);
@@ -519,13 +520,14 @@ export default function App() {
         return false;
       }
       if (amountCents === null || amountCents < 1) {
-        setCashError('Bitte einen gültigen Ausgabebetrag größer als 0 € eingeben.');
+        setCashError('Bitte einen gültigen Buchungsbetrag größer als 0 € eingeben.');
         return false;
       }
       const response = await authenticatedRequest('team-cash/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          type: cashEntry.type,
           date: cashEntry.date,
           amountCents,
           purpose: cashEntry.purpose.trim(),
@@ -533,7 +535,7 @@ export default function App() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setCashError(data.error || 'Die Ausgabe konnte nicht gespeichert werden.');
+        setCashError(data.error || 'Die Buchung konnte nicht gespeichert werden.');
         return false;
       }
       applyTeamCashResponse(data);
@@ -745,6 +747,7 @@ export default function App() {
     });
     setCashOpeningBalance('0,00');
     setCashEntry({
+      type: 'expense',
       date: getLocalDateInputValue(),
       person: '',
       amount: '',
@@ -2059,7 +2062,7 @@ export default function App() {
 
   if (showTeamCash) {
     const balanceCents = calculateTeamCashBalance(teamCash);
-    const spentCents = (teamCash.transactions || []).reduce(
+    const spentCents = (teamCash.transactions || []).filter(transaction => transaction.type !== 'deposit').reduce(
       (sum, transaction) => sum + (Number(transaction.amountCents) || 0),
       0
     );
@@ -2076,22 +2079,31 @@ export default function App() {
           <strong>{formatEuro(balanceCents)}</strong>
           <div className="cash-balance-details">
             <span>Startbestand: {formatEuro(teamCash.openingBalanceCents)}</span>
+            <span>Einzahlungen: {formatEuro(balanceCents - teamCash.openingBalanceCents + spentCents)}</span>
             <span>Ausgaben: {formatEuro(spentCents)}</span>
           </div>
         </section>
 
         <section className="cash-entry-section">
           <div>
-            <h2>Ausgabe eintragen</h2>
-            <p>Jede Ausgabe wird mit allen Angaben und dem eingeloggten Benutzer gespeichert.</p>
+            <h2>Buchung eintragen</h2>
+            <p>Jede Einzahlung und Ausgabe wird mit allen Angaben und dem eingeloggten Benutzer gespeichert.</p>
           </div>
           <form
             className="cash-entry-form"
             onSubmit={(event) => {
               event.preventDefault();
-              addCashExpense();
+              addCashTransaction();
             }}
           >
+            <label className="labeled-field">
+              <span>Buchungsart</span>
+              <select value={cashEntry.type} disabled={busy}
+                onChange={(event) => setCashEntry((entry) => ({ ...entry, type: event.target.value }))}>
+                <option value="deposit">Einzahlung</option>
+                <option value="expense">Ausgabe</option>
+              </select>
+            </label>
             <label className="labeled-field">
               <span>Datum</span>
               <input
@@ -2133,13 +2145,13 @@ export default function App() {
                 onChange={(event) =>
                   setCashEntry((entry) => ({ ...entry, purpose: event.target.value }))
                 }
-                placeholder="Zum Beispiel Getränke oder Startgebühr"
+                placeholder={cashEntry.type === 'deposit' ? 'Zum Beispiel Mannschaftsbeitrag oder Verkaufserlös' : 'Zum Beispiel Getränke oder Startgebühr'}
                 maxLength={200}
                 disabled={busy}
               />
             </label>
             <button type="submit" className="cash-submit-button" disabled={busy}>
-              {busy ? 'Wird gespeichert…' : 'Ausgabe abtragen'}
+              {busy ? 'Wird gespeichert…' : cashEntry.type === 'deposit' ? 'Einzahlung buchen' : 'Ausgabe buchen'}
             </button>
           </form>
           {cashError && <p className="login-error cash-error">{cashError}</p>}
@@ -2148,7 +2160,7 @@ export default function App() {
         <section className="cash-history-section">
           <div className="cash-history-heading">
             <div>
-              <h2>Ausgabenverlauf</h2>
+              <h2>Buchungsverlauf</h2>
               <p>
                 {teamCash.transactions.length}{' '}
                 {teamCash.transactions.length === 1 ? 'Buchung' : 'Buchungen'}
@@ -2159,7 +2171,7 @@ export default function App() {
             </button>
           </div>
           {teamCash.transactions.length === 0 ? (
-            <p className="cash-empty-state">Noch keine Ausgaben eingetragen.</p>
+            <p className="cash-empty-state">Noch keine Buchungen eingetragen.</p>
           ) : (
             <div className="cash-history-list">
               {teamCash.transactions.map((transaction) => (
@@ -2175,7 +2187,9 @@ export default function App() {
                       {formatAuditTime(transaction.createdAt)}
                     </span>
                   </div>
-                  <strong className="cash-history-amount">− {formatEuro(transaction.amountCents)}</strong>
+                  <strong className="cash-history-amount">
+                    {transaction.type === 'deposit' ? 'Einzahlung +' : 'Ausgabe −'} {formatEuro(transaction.amountCents)}
+                  </strong>
                 </article>
               ))}
             </div>
@@ -2976,7 +2990,7 @@ export default function App() {
           <section className="cash-opening-section">
             <div>
               <h2>Startkassenstand</h2>
-              <p>Nur Admins können den Bestand vor den erfassten Ausgaben ändern.</p>
+              <p>Nur Admins können den Bestand vor den erfassten Einzahlungen und Ausgaben ändern.</p>
             </div>
             <div className="cash-opening-row">
               <label className="labeled-field">

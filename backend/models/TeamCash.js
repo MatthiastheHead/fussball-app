@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const TeamCashTransactionSchema = new mongoose.Schema({
+  type: { type: String, enum: ['expense', 'deposit'], default: 'expense' },
   date: { type: String, required: true },
   person: { type: String, required: true, trim: true },
   amountCents: { type: Number, required: true, min: 1 },

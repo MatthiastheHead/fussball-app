@@ -1146,9 +1146,12 @@ const cleanTeamCash = document => {
           new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
       )
     : [];
-  const spentCents = transactions.reduce(
+  const spentCents = transactions.filter(transaction => transaction.type !== 'deposit').reduce(
     (sum, transaction) => sum + (Number(transaction.amountCents) || 0),
     0
+  );
+  const depositedCents = transactions.filter(transaction => transaction.type === 'deposit').reduce(
+    (sum, transaction) => sum + (Number(transaction.amountCents) || 0), 0
   );
   const openingBalanceCents = Number(cash.openingBalanceCents) || 0;
   return {
@@ -1156,7 +1159,8 @@ const cleanTeamCash = document => {
     openingBalanceUpdatedBy: cash.openingBalanceUpdatedBy || '',
     openingBalanceUpdatedAt: cash.openingBalanceUpdatedAt || null,
     spentCents,
-    balanceCents: openingBalanceCents - spentCents,
+    depositedCents,
+    balanceCents: openingBalanceCents + depositedCents - spentCents,
     transactions,
   };
 };
@@ -1204,6 +1208,10 @@ app.post('/team-cash/opening-balance', requireAdmin, async (req, res) => {
 });
 
 app.post('/team-cash/transactions', requireAccess('teamCash'), async (req, res) => {
+  const type = req.body?.type === undefined ? 'expense' : req.body.type;
+  if (!['expense', 'deposit'].includes(type)) {
+    return res.status(400).json({ error: 'Bitte Einzahlung oder Ausgabe auswählen.' });
+  }
   const date = String(req.body?.date || '').trim();
   const person = req.auth.username;
   const purpose = String(req.body?.purpose || '').trim();
@@ -1216,7 +1224,7 @@ app.post('/team-cash/transactions', requireAccess('teamCash'), async (req, res) 
     return res.status(400).json({ error: 'Bitte einen Verwendungszweck mit höchstens 200 Zeichen eintragen.' });
   }
   if (!Number.isSafeInteger(amountCents) || amountCents < 1 || amountCents > 100_000_000) {
-    return res.status(400).json({ error: 'Bitte einen gültigen Ausgabebetrag eingeben.' });
+    return res.status(400).json({ error: 'Bitte einen gültigen Buchungsbetrag eingeben.' });
   }
 
   try {
@@ -1226,6 +1234,7 @@ app.post('/team-cash/transactions', requireAccess('teamCash'), async (req, res) 
         $setOnInsert: { key: 'team-cash', openingBalanceCents: 0 },
         $push: {
           transactions: {
+            type,
             date,
             person,
             amountCents,
@@ -1240,7 +1249,7 @@ app.post('/team-cash/transactions', requireAccess('teamCash'), async (req, res) 
     res.status(201).json(cleanTeamCash(cash));
   } catch (err) {
     console.error('Fehler POST /team-cash/transactions:', err);
-    res.status(500).json({ error: 'Die Ausgabe konnte nicht gespeichert werden.' });
+    res.status(500).json({ error: 'Die Buchung konnte nicht gespeichert werden.' });
   }
 });
 
