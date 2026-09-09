@@ -1,4 +1,4 @@
-// Version 7.4: Einzahlungen und Ausgaben in der Mannschaftskasse.
+// Version 7.5: Kassenfarben, Admin-Löschung und PDF-Export.
 
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
@@ -15,12 +15,14 @@ import {
   ratingPoints,
   seasonDateRange,
   seasonForTrainingDate,
+  seasonForInputDate,
   selectReportPlayers,
   summarizePlayerTrainings,
 } from './trainingUtils.js';
 import { createBalancedTeams, selectGeneratorPlayers } from './teamGeneratorUtils.js';
 import {
   calculateTeamCashBalance,
+  createTeamCashReport,
   formatEuro,
   parseEuroToCents,
 } from './teamCashUtils.js';
@@ -287,6 +289,10 @@ export default function App() {
     purpose: '',
   });
   const [cashError, setCashError] = useState('');
+  const [cashExport, setCashExport] = useState({
+    season: INITIAL_SEASON, team: '', from: INITIAL_SEASON_RANGE.from, to: INITIAL_SEASON_RANGE.to,
+  });
+  const [cashExportError, setCashExportError] = useState('');
   const [showTeamGenerator, setShowTeamGenerator] = useState(false);
   const [generatorTeamCount, setGeneratorTeamCount] = useState(2);
   const [generatorDate, setGeneratorDate] = useState(() => getLocalDateInputValue());
@@ -295,7 +301,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '7.4';
+  const version = '7.5';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canAccess = (key) => isAdmin || sessionUser?.permissions?.[key] !== false;
@@ -543,6 +549,40 @@ export default function App() {
       return true;
     });
 
+  const deleteCashTransaction = (transaction) => runOnce(async () => {
+    if (!isAdmin || !transaction._id) return false;
+    if (!window.confirm(
+      `${transaction.type === 'deposit' ? 'Einzahlung' : 'Ausgabe'} vom ${formatInputDate(transaction.date)} über ${formatEuro(transaction.amountCents)} für „${transaction.purpose}“ löschen? Der Kassenstand wird neu berechnet. Der Löschvorgang bleibt intern protokolliert.`
+    )) return false;
+    setCashError('');
+    const response = await authenticatedRequest(`team-cash/transactions/${transaction._id}`, { method: 'DELETE' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setCashError(data.error || 'Die Buchung konnte nicht gelöscht werden.');
+      return false;
+    }
+    applyTeamCashResponse(data);
+    return true;
+  });
+
+  const exportTeamCash = () => runOnce(async () => {
+    setCashExportError('');
+    try {
+      // Validate the requested report before loading fresh, authorized cash data.
+      createTeamCashReport(teamCash, cashExport);
+      const response = await authenticatedRequest('team-cash', { cache: 'no-store' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Die aktuellen Kassendaten konnten nicht geladen werden.');
+      const report = createTeamCashReport(applyTeamCashResponse(data), cashExport);
+      const { createTeamCashPdf, teamCashPdfFilename } = await import('./teamCashPdf.js');
+      createTeamCashPdf(report).save(teamCashPdfFilename(report));
+      return true;
+    } catch (error) {
+      setCashExportError(error.message || 'Der PDF-Export ist fehlgeschlagen.');
+      return false;
+    }
+  });
+
   async function loadAdminData(token = authToken, mainAdmin = isMainAdmin) {
     if (!token) return false;
     setAdminLoadError('');
@@ -746,6 +786,8 @@ export default function App() {
       transactions: [],
     });
     setCashOpeningBalance('0,00');
+    setCashExport({ season: INITIAL_SEASON, team: '', from: INITIAL_SEASON_RANGE.from, to: INITIAL_SEASON_RANGE.to });
+    setCashExportError('');
     setCashEntry({
       type: 'expense',
       date: getLocalDateInputValue(),
@@ -2079,8 +2121,8 @@ export default function App() {
           <strong>{formatEuro(balanceCents)}</strong>
           <div className="cash-balance-details">
             <span>Startbestand: {formatEuro(teamCash.openingBalanceCents)}</span>
-            <span>Einzahlungen: {formatEuro(balanceCents - teamCash.openingBalanceCents + spentCents)}</span>
-            <span>Ausgaben: {formatEuro(spentCents)}</span>
+            <span className="cash-deposit">Einzahlungen: {formatEuro(balanceCents - teamCash.openingBalanceCents + spentCents)}</span>
+            <span className="cash-expense">Ausgaben: {formatEuro(spentCents)}</span>
           </div>
         </section>
 
@@ -2157,6 +2199,44 @@ export default function App() {
           {cashError && <p className="login-error cash-error">{cashError}</p>}
         </section>
 
+        <section className="cash-entry-section">
+          <h2>Als PDF exportieren</h2>
+          <p>Zeitraum innerhalb der Saison wählen. Der Mannschaftsname ist die Überschrift für diese Kasse, kein Filter für getrennte Mannschaftskassen.</p>
+          <form className="cash-entry-form" onSubmit={event => { event.preventDefault(); exportTeamCash(); }}>
+            <label className="labeled-field">
+              <span>Saison für den Export</span>
+              <select value={cashExport.season} disabled={busy} onChange={event => {
+                const season = event.target.value;
+                const range = seasonDateRange(season);
+                setCashExport(value => ({ ...value, season, from: range.from, to: range.to }));
+              }}>
+                {[...new Set([...seasonOptions, ...teamCash.transactions.map(t => seasonForInputDate(t.date)).filter(Boolean)])]
+                  .sort().reverse().map(season => <option key={season} value={season}>{season}</option>)}
+              </select>
+            </label>
+            <label className="labeled-field cash-purpose-field">
+              <span>Mannschaft</span>
+              <input value={cashExport.team} maxLength={100} required disabled={busy}
+                placeholder="Zum Beispiel VfB Werther D-Juniorinnen"
+                onChange={event => setCashExport(value => ({ ...value, team: event.target.value }))} />
+            </label>
+            <label className="labeled-field">
+              <span>Von</span>
+              <input type="date" value={cashExport.from} required disabled={busy}
+                min={seasonDateRange(cashExport.season).from} max={seasonDateRange(cashExport.season).to}
+                onChange={event => setCashExport(value => ({ ...value, from: event.target.value }))} />
+            </label>
+            <label className="labeled-field">
+              <span>Bis</span>
+              <input type="date" value={cashExport.to} required disabled={busy}
+                min={cashExport.from || seasonDateRange(cashExport.season).from} max={seasonDateRange(cashExport.season).to}
+                onChange={event => setCashExport(value => ({ ...value, to: event.target.value }))} />
+            </label>
+            <button type="submit" className="cash-submit-button" disabled={busy}>PDF herunterladen</button>
+          </form>
+          {cashExportError && <p className="login-error" role="alert">{cashExportError}</p>}
+        </section>
+
         <section className="cash-history-section">
           <div className="cash-history-heading">
             <div>
@@ -2187,9 +2267,14 @@ export default function App() {
                       {formatAuditTime(transaction.createdAt)}
                     </span>
                   </div>
-                  <strong className="cash-history-amount">
-                    {transaction.type === 'deposit' ? 'Einzahlung +' : 'Ausgabe −'} {formatEuro(transaction.amountCents)}
-                  </strong>
+                  <div className="cash-history-actions">
+                    <strong className={`cash-history-amount ${transaction.type === 'deposit' ? 'cash-deposit' : 'cash-expense'}`}>
+                      {transaction.type === 'deposit' ? 'Einzahlung +' : 'Ausgabe −'} {formatEuro(transaction.amountCents)}
+                    </strong>
+                    {isAdmin && transaction._id && <button type="button" className="cash-delete-button" disabled={busy}
+                      aria-label={`Buchung ${transaction.purpose} vom ${formatInputDate(transaction.date)} löschen`}
+                      onClick={() => deleteCashTransaction(transaction)}>Buchung löschen</button>}
+                  </div>
                 </article>
               ))}
             </div>

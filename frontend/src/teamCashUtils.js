@@ -1,3 +1,5 @@
+import { formatTrainingDate, seasonDateRange } from './trainingUtils.js';
+
 const euroFormatter = new Intl.NumberFormat('de-DE', {
   style: 'currency',
   currency: 'EUR',
@@ -25,9 +27,35 @@ export function formatEuro(cents) {
 
 export function calculateTeamCashBalance(teamCash) {
   const openingBalanceCents = Number(teamCash?.openingBalanceCents) || 0;
-  const spentCents = (teamCash?.transactions || []).reduce(
+  const spentCents = (teamCash?.transactions || []).filter(transaction => !transaction.deletedAt).reduce(
     (sum, transaction) => sum + (transaction?.type === 'deposit' ? -1 : 1) * (Number(transaction?.amountCents) || 0),
     0
   );
   return openingBalanceCents - spentCents;
+}
+
+export function createTeamCashReport(teamCash, { season, team, from, to }) {
+  const range = seasonDateRange(season);
+  if (!range.from) throw new Error('Bitte eine gültige Saison auswählen.');
+  const teamName = String(team || '').trim();
+  if (!teamName || teamName.length > 100) throw new Error('Bitte einen Mannschaftsnamen mit höchstens 100 Zeichen eintragen.');
+  if (!formatTrainingDate(from) || !formatTrainingDate(to) || from > to) {
+    throw new Error('Bitte einen gültigen Zeitraum von/bis auswählen.');
+  }
+  if (from < range.from || to > range.to) {
+    throw new Error('Der Zeitraum muss innerhalb der ausgewählten Saison liegen.');
+  }
+  const active = (teamCash?.transactions || []).filter(transaction => !transaction.deletedAt);
+  const transactions = active.filter(transaction => transaction.date >= from && transaction.date <= to)
+    .sort((a, b) => a.date.localeCompare(b.date) || String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+  const openingCents = calculateTeamCashBalance({
+    openingBalanceCents: teamCash?.openingBalanceCents,
+    transactions: active.filter(transaction => transaction.date < from),
+  });
+  const depositedCents = transactions.filter(t => t.type === 'deposit').reduce((sum, t) => sum + t.amountCents, 0);
+  const spentCents = transactions.filter(t => t.type !== 'deposit').reduce((sum, t) => sum + t.amountCents, 0);
+  return {
+    season, team: teamName, from, to, transactions, openingCents, depositedCents, spentCents,
+    closingCents: openingCents + depositedCents - spentCents,
+  };
 }
