@@ -6,6 +6,14 @@ const dateLabel = value => value.split('-').reverse().join('.');
 const money = value => formatEuro(value).replace(/\u00a0/g, ' ');
 
 export function createTeamCashPdf(report) {
+  const generatedAt = new Date(report.generatedAt);
+  if (Number.isNaN(generatedAt.getTime()) || !report.generatedBy) {
+    throw new Error('Exportdatum oder Benutzer fehlen. Bitte die App neu laden und erneut exportieren.');
+  }
+  const stamp = new Intl.DateTimeFormat('de-DE', {
+    timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).format(generatedAt);
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const margin = 14;
   doc.setFont('helvetica', 'bold');
@@ -38,7 +46,7 @@ export function createTeamCashPdf(report) {
   });
   autoTable(doc, {
     startY: doc.lastAutoTable.finalY + 7,
-    margin: { top: 19, bottom: 24, left: margin, right: margin },
+    margin: { top: 19, bottom: 30, left: margin, right: margin },
     head: [['Datum', 'Benutzer', 'Verwendungszweck', 'Buchung', 'Betrag']],
     body: report.transactions.length ? report.transactions.map(t => [
       dateLabel(t.date), t.person || t.createdBy || '', t.purpose,
@@ -63,8 +71,8 @@ export function createTeamCashPdf(report) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     if (page > 1) doc.text(`Mannschaftskasse | Saison ${report.season} | ${dateLabel(report.from)} bis ${dateLabel(report.to)}`, margin, 11);
-    doc.text('Stand der aktuell gespeicherten Kasse. Gelöschte Buchungen sind nicht enthalten.', margin, 281);
-    doc.text('Anfangsbestand: Startbestand zuzüglich aller früheren Einzahlungen abzüglich Ausgaben.', margin, 285);
+    doc.text('Stand der aktuell gespeicherten Kasse.', margin, 275);
+    doc.text(doc.splitTextToSize(`${stamp} Uhr (Berlin) | Benutzer: ${report.generatedBy}`, 182), margin, 280);
     doc.text(`Seite ${page} von ${pages}`, 196, 291, { align: 'right' });
   }
   return doc;

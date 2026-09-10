@@ -1,4 +1,4 @@
-// Version 7.5: Kassenfarben, Admin-Löschung und PDF-Export.
+// Version 7.6: Getrennte Kassenrechte und nachvollziehbarer Exportstand.
 
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
@@ -293,6 +293,9 @@ export default function App() {
     season: INITIAL_SEASON, team: '', from: INITIAL_SEASON_RANGE.from, to: INITIAL_SEASON_RANGE.to,
   });
   const [cashExportError, setCashExportError] = useState('');
+  const [deletedCashTransactions, setDeletedCashTransactions] = useState([]);
+  const [showDeletedCash, setShowDeletedCash] = useState(false);
+  const [deletedCashError, setDeletedCashError] = useState('');
   const [showTeamGenerator, setShowTeamGenerator] = useState(false);
   const [generatorTeamCount, setGeneratorTeamCount] = useState(2);
   const [generatorDate, setGeneratorDate] = useState(() => getLocalDateInputValue());
@@ -301,9 +304,11 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '7.5';
+  const version = '7.6';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
+  const canDeleteCash = sessionUser?.cashPermissions?.canDelete === true;
+  const canViewDeletedCash = sessionUser?.cashPermissions?.canViewDeleted === true;
   const canAccess = (key) => isAdmin || sessionUser?.permissions?.[key] !== false;
   const currentYear = new Date().getFullYear();
 
@@ -549,8 +554,21 @@ export default function App() {
       return true;
     });
 
+  const loadDeletedCash = async () => {
+    setDeletedCashError('');
+    setDeletedCashTransactions([]);
+    const response = await authenticatedRequest('team-cash/deleted', { cache: 'no-store' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setDeletedCashError(data.error || 'Gelöschte Buchungen konnten nicht geladen werden.');
+      return false;
+    }
+    setDeletedCashTransactions(Array.isArray(data) ? data : []);
+    return true;
+  };
+
   const deleteCashTransaction = (transaction) => runOnce(async () => {
-    if (!isAdmin || !transaction._id) return false;
+    if (!canDeleteCash || !transaction._id) return false;
     if (!window.confirm(
       `${transaction.type === 'deposit' ? 'Einzahlung' : 'Ausgabe'} vom ${formatInputDate(transaction.date)} über ${formatEuro(transaction.amountCents)} für „${transaction.purpose}“ löschen? Der Kassenstand wird neu berechnet. Der Löschvorgang bleibt intern protokolliert.`
     )) return false;
@@ -562,6 +580,7 @@ export default function App() {
       return false;
     }
     applyTeamCashResponse(data);
+    if (canViewDeletedCash && showDeletedCash) await loadDeletedCash();
     return true;
   });
 
@@ -573,7 +592,9 @@ export default function App() {
       const response = await authenticatedRequest('team-cash', { cache: 'no-store' });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Die aktuellen Kassendaten konnten nicht geladen werden.');
-      const report = createTeamCashReport(applyTeamCashResponse(data), cashExport);
+      const report = createTeamCashReport(applyTeamCashResponse(data), {
+        ...cashExport, generatedAt: data.generatedAt, generatedBy: data.generatedBy,
+      });
       const { createTeamCashPdf, teamCashPdfFilename } = await import('./teamCashPdf.js');
       createTeamCashPdf(report).save(teamCashPdfFilename(report));
       return true;
@@ -788,6 +809,9 @@ export default function App() {
     setCashOpeningBalance('0,00');
     setCashExport({ season: INITIAL_SEASON, team: '', from: INITIAL_SEASON_RANGE.from, to: INITIAL_SEASON_RANGE.to });
     setCashExportError('');
+    setDeletedCashTransactions([]);
+    setShowDeletedCash(false);
+    setDeletedCashError('');
     setCashEntry({
       type: 'expense',
       date: getLocalDateInputValue(),
@@ -1071,6 +1095,7 @@ export default function App() {
         body: JSON.stringify({
           isAdmin: changes.isAdmin ?? user.isAdmin,
           permissions: { ...user.permissions, ...changes.permissions },
+          ...(changes.cashPermissions ? { cashPermissions: { ...user.cashPermissions, ...changes.cashPermissions } } : {}),
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -2271,7 +2296,7 @@ export default function App() {
                     <strong className={`cash-history-amount ${transaction.type === 'deposit' ? 'cash-deposit' : 'cash-expense'}`}>
                       {transaction.type === 'deposit' ? 'Einzahlung +' : 'Ausgabe −'} {formatEuro(transaction.amountCents)}
                     </strong>
-                    {isAdmin && transaction._id && <button type="button" className="cash-delete-button" disabled={busy}
+                    {canDeleteCash && transaction._id && <button type="button" className="cash-delete-button" disabled={busy}
                       aria-label={`Buchung ${transaction.purpose} vom ${formatInputDate(transaction.date)} löschen`}
                       onClick={() => deleteCashTransaction(transaction)}>Buchung löschen</button>}
                   </div>
@@ -2280,6 +2305,28 @@ export default function App() {
             </div>
           )}
         </section>
+
+        {canViewDeletedCash && <section className="cash-history-section">
+          <h2>Gelöschte Buchungen</h2>
+          <p>Nur mit besonderer Kassenberechtigung sichtbar. Diese Einträge zählen nicht zum Kassenstand.</p>
+          <button type="button" className="btn-edit" disabled={busy} onClick={() => runOnce(async () => {
+            setShowDeletedCash(true);
+            return loadDeletedCash();
+          })}>{showDeletedCash ? 'Gelöschte Buchungen aktualisieren' : 'Gelöschte Buchungen anzeigen'}</button>
+          {deletedCashError && <p className="login-error" role="alert">{deletedCashError}</p>}
+          {showDeletedCash && !deletedCashError && <div className="cash-history-list">
+            {deletedCashTransactions.length === 0 && <p>Keine gelöschten Buchungen vorhanden.</p>}
+            {deletedCashTransactions.map(transaction => <article key={transaction._id} className="cash-history-card">
+              <div className="cash-history-date"><strong>{formatInputDate(transaction.date)}</strong><span>{transaction.person}</span></div>
+              <div className="cash-history-purpose"><strong>{transaction.purpose}</strong>
+                <span>Gelöscht von {transaction.deletedBy || 'Unbekannt'} am {formatAuditTime(transaction.deletedAt)}</span>
+              </div>
+              <strong className={`cash-history-amount ${transaction.type === 'deposit' ? 'cash-deposit' : 'cash-expense'}`}>
+                {transaction.type === 'deposit' ? 'Einzahlung +' : 'Ausgabe −'} {formatEuro(transaction.amountCents)}
+              </strong>
+            </article>)}
+          </div>}
+        </section>}
 
         <button
           className="main-func-btn team-cash-back"
@@ -3098,6 +3145,7 @@ export default function App() {
             <h2>App-Zugänge</h2>
             <p className="admin-section-intro">
               Hier verwaltest du die Anmeldedaten. Teammitglieder werden oben angelegt.
+              Besondere Kassenrechte vergibt nur der Hauptadmin. Ein Kassenadmin erhält keine allgemeine Benutzerverwaltung.
             </p>
             <div className="password-request-panel">
               <div className="password-request-heading">
@@ -3191,6 +3239,21 @@ export default function App() {
                         {label}
                       </label>
                     ))}
+                    <label>
+                      <input type="checkbox" checked={!!u.cashPermissions?.canDelete}
+                        disabled={busy || !isMainAdmin || u.isAdmin || u.permissions?.teamCash === false}
+                        onChange={event => updateUserAccess(u, { cashPermissions: {
+                          canDelete: event.target.checked,
+                          ...(!event.target.checked ? { canViewDeleted: false } : {}),
+                        } })} />
+                      Kassenadmin: Buchungen löschen
+                    </label>
+                    <label>
+                      <input type="checkbox" checked={!!u.cashPermissions?.canViewDeleted}
+                        disabled={busy || !isMainAdmin || u.isMainAdmin || !u.cashPermissions?.canDelete}
+                        onChange={event => updateUserAccess(u, { cashPermissions: { canViewDeleted: event.target.checked } })} />
+                      Gelöschte Kassenbuchungen sehen
+                    </label>
                   </div>
                   <input
                     type="password"
