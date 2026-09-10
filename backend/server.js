@@ -16,7 +16,8 @@ const AdminRecovery = require('./models/AdminRecovery');
 const LoginEvent = require('./models/LoginEvent');
 const PasswordResetRequest = require('./models/PasswordResetRequest');
 const TeamCash = require('./models/TeamCash');
-const { ACCESS_KEYS, permissionsFor, isAdminUser, cashPermissionsFor } = require('./accessUtils');
+const { ACCESS_KEYS, permissionsFor, isAdminUser, cashPermissionsFor, backupPermissionsFor } = require('./accessUtils');
+const registerBackupRoutes = require('./backupRoutes');
 const { hashPassword, isPasswordHash, verifyPassword } = require('./authUtils');
 const {
   createOtpAuthUrl,
@@ -103,6 +104,7 @@ const safeUser = user => ({
   isMainAdmin: user.name === ADMIN_USERNAME,
   permissions: userPermissions(user),
   cashPermissions: cashPermissionsFor(user, ADMIN_USERNAME),
+  backupPermissions: backupPermissionsFor(user),
 });
 
 const loginAttemptKey = (req, username = '') =>
@@ -234,22 +236,7 @@ mongoose
   });
 
 // === 3) Users-Schema ===
-const userSchema = new mongoose.Schema({
-  name: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  isAdmin: { type: Boolean, default: false },
-  cashPermissions: {
-    canDelete: { type: Boolean, default: false },
-    canViewDeleted: { type: Boolean, default: false },
-  },
-  permissions: {
-    training: { type: Boolean, default: true },
-    checklists: { type: Boolean, default: true },
-    teamGenerator: { type: Boolean, default: true },
-    teamCash: { type: Boolean, default: true },
-  },
-});
-const User = mongoose.model('User', userSchema);
+const User = require('./models/User');
 
 // === 4) Express-App konfigurieren ===
 const app = express();
@@ -259,8 +246,8 @@ app.set('trust proxy', 1);
 app.use(cors());
 
 // ⚙️ Body-Limit deutlich erhöht (Fix für HTTP 413)
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use(express.json({ limit: '16mb' }));
+app.use(express.urlencoded({ limit: '16mb', extended: true }));
 
 // ---- Diagnose-/Health-Routen ----
 const sendHealth = (_req, res) => {
@@ -335,6 +322,7 @@ app.post('/auth/login', async (req, res) => {
       isAdmin: isAdminUser(user, ADMIN_USERNAME),
       permissions: userPermissions(user),
       cashPermissions: cashPermissionsFor(user, ADMIN_USERNAME),
+      backupPermissions: backupPermissionsFor(user),
       expiresAt: Date.now() + SESSION_TTL_MS,
     });
     await LoginEvent.create({ username: user.name, loggedInAt: new Date() });
@@ -342,6 +330,7 @@ app.post('/auth/login', async (req, res) => {
       name: user.name,
       isAdmin: isAdminUser(user, ADMIN_USERNAME),
       isMainAdmin: user.name === ADMIN_USERNAME,
+      backupPermissions: backupPermissionsFor(user),
       cashPermissions: cashPermissionsFor(user, ADMIN_USERNAME),
       permissions: userPermissions(user),
       token,
@@ -772,7 +761,7 @@ app.patch('/admin/users/:id/access', requireAdmin, async (req, res) => {
     if (req.body?.cashPermissions !== undefined && req.auth.username !== ADMIN_USERNAME) {
       return res.status(403).json({ error: 'Nur der Hauptadmin darf besondere Kassenrechte vergeben.' });
     }
-    if (user.cashPermissions?.canViewDeleted && req.auth.username !== ADMIN_USERNAME) {
+    if ((user.cashPermissions?.canViewDeleted || user.backupPermissions?.canFullBackup) && req.auth.username !== ADMIN_USERNAME) {
       return res.status(403).json({ error: 'Nur der Hauptadmin darf Konten mit Zugriff auf gelöschte Buchungen ändern.' });
     }
     if (user.name === ADMIN_USERNAME && req.auth.username !== ADMIN_USERNAME) {
@@ -783,6 +772,16 @@ app.patch('/admin/users/:id/access', requireAdmin, async (req, res) => {
     }
     user.isAdmin = user.name === ADMIN_USERNAME || isAdmin;
     user.permissions = permissions;
+    if (req.body?.backupPermissions?.canFullBackup === true && req.auth.username !== ADMIN_USERNAME) {
+      return res.status(403).json({ error: 'Nur der Hauptadmin darf vollständige Sicherungen freigeben.' });
+    }
+    if (req.body?.backupPermissions !== undefined) {
+      user.backupPermissions = {
+        canFullBackup: req.body.backupPermissions?.canFullBackup === true,
+        canExport: req.body.backupPermissions?.canExport === true,
+        canImport: req.body.backupPermissions?.canImport === true,
+      };
+    }
     if (req.body?.cashPermissions !== undefined) {
       user.cashPermissions = {
         canDelete: req.body.cashPermissions?.canDelete === true,
@@ -808,9 +807,9 @@ app.patch('/admin/users/:id/password', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Ungültiger Benutzer oder ungültiges Passwort.' });
   }
   try {
-    const target = await User.findById(req.params.id).select('name cashPermissions');
+    const target = await User.findById(req.params.id).select('name cashPermissions backupPermissions');
     if (!target) return res.status(404).json({ error: 'Benutzer nicht gefunden.' });
-    if ((target.name === ADMIN_USERNAME || target.cashPermissions?.canViewDeleted) && req.auth.username !== ADMIN_USERNAME) {
+    if ((target.name === ADMIN_USERNAME || target.cashPermissions?.canViewDeleted || target.backupPermissions?.canFullBackup) && req.auth.username !== ADMIN_USERNAME) {
       return res.status(403).json({ error: 'Nur der Hauptadmin darf dieses geschützte Konto ändern.' });
     }
     const user = await User.findByIdAndUpdate(
@@ -844,7 +843,7 @@ app.delete('/admin/users/:id', requireAdmin, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ error: 'Benutzer nicht gefunden.' });
-    if (user.cashPermissions?.canViewDeleted && req.auth.username !== ADMIN_USERNAME) {
+    if ((user.cashPermissions?.canViewDeleted || user.backupPermissions?.canFullBackup) && req.auth.username !== ADMIN_USERNAME) {
       return res.status(403).json({ error: 'Nur der Hauptadmin darf dieses Konto löschen.' });
     }
     if (user.name === ADMIN_USERNAME && req.auth.username !== ADMIN_USERNAME) {
@@ -1163,6 +1162,10 @@ app.post('/checklists', requireAccess('checklists'), async (req, res) => {
     console.error('Fehler POST /checklists:', e);
     res.status(500).json({ error: 'Datenbankfehler beim Speichern der Checklisten' });
   }
+});
+
+registerBackupRoutes({ app, mongoose, requireSession, version, recoveryKey: recoveryEncryptionKey, invalidateAllSessions: () => sessions.clear(),
+  models: { players: Player, trainings: Training, checklists: Checklist, settings: AppSettings, teamCash: TeamCash, users: User, recovery: AdminRecovery, passwordResets: PasswordResetRequest, loginEvents: LoginEvent },
 });
 
 // ---- 5.6 Mannschaftskasse ----
