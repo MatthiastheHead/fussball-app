@@ -16,7 +16,7 @@ const AdminRecovery = require('./models/AdminRecovery');
 const LoginEvent = require('./models/LoginEvent');
 const PasswordResetRequest = require('./models/PasswordResetRequest');
 const TeamCash = require('./models/TeamCash');
-const { ACCESS_KEYS, permissionsFor, isAdminUser } = require('./accessUtils');
+const { ACCESS_KEYS, permissionsFor, isAdminUser, cashPermissionsFor } = require('./accessUtils');
 const { hashPassword, isPasswordHash, verifyPassword } = require('./authUtils');
 const {
   createOtpAuthUrl,
@@ -89,12 +89,20 @@ const requireAccess = accessKey => (req, res, next) =>
   });
 
 const userPermissions = permissionsFor;
+const requireCashPermission = permission => (req, res, next) =>
+  requireSession(req, res, () => {
+    if (req.auth.cashPermissions?.[permission] !== true) {
+      return res.status(403).json({ error: 'Für diese Kassenfunktion fehlt dir die Berechtigung.' });
+    }
+    next();
+  });
 const safeUser = user => ({
   _id: user._id,
   name: user.name,
   isAdmin: isAdminUser(user, ADMIN_USERNAME),
   isMainAdmin: user.name === ADMIN_USERNAME,
   permissions: userPermissions(user),
+  cashPermissions: cashPermissionsFor(user, ADMIN_USERNAME),
 });
 
 const loginAttemptKey = (req, username = '') =>
@@ -230,6 +238,10 @@ const userSchema = new mongoose.Schema({
   name: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   isAdmin: { type: Boolean, default: false },
+  cashPermissions: {
+    canDelete: { type: Boolean, default: false },
+    canViewDeleted: { type: Boolean, default: false },
+  },
   permissions: {
     training: { type: Boolean, default: true },
     checklists: { type: Boolean, default: true },
@@ -322,6 +334,7 @@ app.post('/auth/login', async (req, res) => {
       username: user.name,
       isAdmin: isAdminUser(user, ADMIN_USERNAME),
       permissions: userPermissions(user),
+      cashPermissions: cashPermissionsFor(user, ADMIN_USERNAME),
       expiresAt: Date.now() + SESSION_TTL_MS,
     });
     await LoginEvent.create({ username: user.name, loggedInAt: new Date() });
@@ -329,6 +342,7 @@ app.post('/auth/login', async (req, res) => {
       name: user.name,
       isAdmin: isAdminUser(user, ADMIN_USERNAME),
       isMainAdmin: user.name === ADMIN_USERNAME,
+      cashPermissions: cashPermissionsFor(user, ADMIN_USERNAME),
       permissions: userPermissions(user),
       token,
       expiresInMs: SESSION_TTL_MS,
@@ -755,6 +769,12 @@ app.patch('/admin/users/:id/access', requireAdmin, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ error: 'Benutzer nicht gefunden.' });
+    if (req.body?.cashPermissions !== undefined && req.auth.username !== ADMIN_USERNAME) {
+      return res.status(403).json({ error: 'Nur der Hauptadmin darf besondere Kassenrechte vergeben.' });
+    }
+    if (user.cashPermissions?.canViewDeleted && req.auth.username !== ADMIN_USERNAME) {
+      return res.status(403).json({ error: 'Nur der Hauptadmin darf Konten mit Zugriff auf gelöschte Buchungen ändern.' });
+    }
     if (user.name === ADMIN_USERNAME && req.auth.username !== ADMIN_USERNAME) {
       return res.status(403).json({ error: 'Nur Matthias darf das Hauptadmin-Konto ändern.' });
     }
@@ -763,6 +783,12 @@ app.patch('/admin/users/:id/access', requireAdmin, async (req, res) => {
     }
     user.isAdmin = user.name === ADMIN_USERNAME || isAdmin;
     user.permissions = permissions;
+    if (req.body?.cashPermissions !== undefined) {
+      user.cashPermissions = {
+        canDelete: req.body.cashPermissions?.canDelete === true,
+        canViewDeleted: req.body.cashPermissions?.canViewDeleted === true,
+      };
+    }
     await user.save();
     invalidateSessionsForUsername(user.name);
     res.json(safeUser(user));
@@ -782,10 +808,10 @@ app.patch('/admin/users/:id/password', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Ungültiger Benutzer oder ungültiges Passwort.' });
   }
   try {
-    const target = await User.findById(req.params.id).select('name');
+    const target = await User.findById(req.params.id).select('name cashPermissions');
     if (!target) return res.status(404).json({ error: 'Benutzer nicht gefunden.' });
-    if (target.name === ADMIN_USERNAME && req.auth.username !== ADMIN_USERNAME) {
-      return res.status(403).json({ error: 'Nur Matthias darf das Hauptadmin-Konto ändern.' });
+    if ((target.name === ADMIN_USERNAME || target.cashPermissions?.canViewDeleted) && req.auth.username !== ADMIN_USERNAME) {
+      return res.status(403).json({ error: 'Nur der Hauptadmin darf dieses geschützte Konto ändern.' });
     }
     const user = await User.findByIdAndUpdate(
       req.params.id,
@@ -818,6 +844,9 @@ app.delete('/admin/users/:id', requireAdmin, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ error: 'Benutzer nicht gefunden.' });
+    if (user.cashPermissions?.canViewDeleted && req.auth.username !== ADMIN_USERNAME) {
+      return res.status(403).json({ error: 'Nur der Hauptadmin darf dieses Konto löschen.' });
+    }
     if (user.name === ADMIN_USERNAME && req.auth.username !== ADMIN_USERNAME) {
       return res.status(403).json({ error: 'Nur Matthias darf das Hauptadmin-Konto ändern.' });
     }
@@ -1171,10 +1200,10 @@ const validCashDate = value => {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 };
 
-app.get('/team-cash', requireAccess('teamCash'), async (_req, res) => {
+app.get('/team-cash', requireAccess('teamCash'), async (req, res) => {
   try {
     const cash = await TeamCash.findOne({ key: 'team-cash' }).lean();
-    res.json(cleanTeamCash(cash));
+    res.json({ ...cleanTeamCash(cash), generatedAt: new Date().toISOString(), generatedBy: req.auth.username });
   } catch (err) {
     console.error('Fehler GET /team-cash:', err);
     res.status(500).json({ error: 'Die Mannschaftskasse konnte nicht geladen werden.' });
@@ -1253,7 +1282,18 @@ app.post('/team-cash/transactions', requireAccess('teamCash'), async (req, res) 
   }
 });
 
-app.delete('/team-cash/transactions/:id', requireAdmin, async (req, res) => {
+app.get('/team-cash/deleted', requireCashPermission('canViewDeleted'), async (_req, res) => {
+  try {
+    const cash = await TeamCash.findOne({ key: 'team-cash' }).lean();
+    res.json((cash?.transactions || []).filter(transaction => transaction.deletedAt)
+      .sort((a, b) => new Date(b.deletedAt) - new Date(a.deletedAt)));
+  } catch (err) {
+    console.error('Fehler GET /team-cash/deleted:', err);
+    res.status(500).json({ error: 'Gelöschte Buchungen konnten nicht geladen werden.' });
+  }
+});
+
+app.delete('/team-cash/transactions/:id', requireCashPermission('canDelete'), async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) {
     return res.status(400).json({ error: 'Ungültige Buchung.' });
   }
