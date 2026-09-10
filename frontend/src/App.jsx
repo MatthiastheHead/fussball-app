@@ -1,7 +1,8 @@
-// Version 7.6: Getrennte Kassenrechte und nachvollziehbarer Exportstand.
+// Version 7.7: Mannschaftsdaten sichern und kontrolliert importieren.
 
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
+import BackupPanel from './BackupPanel.jsx';
 import './App.css';
 import {
   STATUS_OPTIONS,
@@ -304,11 +305,13 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '7.6';
+  const version = '7.7';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canDeleteCash = sessionUser?.cashPermissions?.canDelete === true;
   const canViewDeletedCash = sessionUser?.cashPermissions?.canViewDeleted === true;
+  const canExportBackup = isAdmin || sessionUser?.backupPermissions?.canExport === true;
+  const canImportBackup = isAdmin || sessionUser?.backupPermissions?.canImport === true;
   const canAccess = (key) => isAdmin || sessionUser?.permissions?.[key] !== false;
   const currentYear = new Date().getFullYear();
 
@@ -1096,6 +1099,7 @@ export default function App() {
           isAdmin: changes.isAdmin ?? user.isAdmin,
           permissions: { ...user.permissions, ...changes.permissions },
           ...(changes.cashPermissions ? { cashPermissions: { ...user.cashPermissions, ...changes.cashPermissions } } : {}),
+          ...(changes.backupPermissions ? { backupPermissions: { ...user.backupPermissions, ...changes.backupPermissions } } : {}),
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -2584,6 +2588,11 @@ export default function App() {
         description: 'Authenticator und persönliche Notfallcodes verwalten.',
         meta: recoveryStatus.enabled ? 'Eingerichtet' : 'Noch nicht eingerichtet',
       },
+      ...((canExportBackup || canImportBackup) ? [{
+        key: 'backup', icon: '💾', title: 'Sicherung',
+        description: 'Mannschaftsdaten sichern und ausgewählte Bereiche wiederherstellen.',
+        meta: 'Export und Import',
+      }] : []),
       ...(isAdmin
         ? [
             {
@@ -2826,6 +2835,14 @@ export default function App() {
             ⚙ {settingsCategories.find((category) => category.key === settingsCategory)?.title || 'Einstellungen'}
           </h1>
         </header>
+        {settingsCategory === 'backup' && (canExportBackup || canImportBackup) && <BackupPanel
+          key={authToken} request={authenticatedRequest} canExport={canExportBackup} canImport={canImportBackup}
+          onImported={async (full) => {
+            if (full) { window.location.reload(); return; }
+            setReportData(null); setGeneratedTeams([]); setDeletedCashTransactions([]); setShowDeletedCash(false);
+            await refetchAll();
+            if (canAccess('teamCash')) await loadTeamCash();
+          }} />}
         {settingsCategory === 'training' && (
         <section className="training-settings">
           <h2>Trainingseinstellungen</h2>
@@ -3253,6 +3270,21 @@ export default function App() {
                         disabled={busy || !isMainAdmin || u.isMainAdmin || !u.cashPermissions?.canDelete}
                         onChange={event => updateUserAccess(u, { cashPermissions: { canViewDeleted: event.target.checked } })} />
                       Gelöschte Kassenbuchungen sehen
+                    </label>
+                    <label>
+                      <input type="checkbox" checked={u.isAdmin || !!u.backupPermissions?.canExport} disabled={busy || u.isAdmin}
+                        onChange={event => updateUserAccess(u, { backupPermissions: { canExport: event.target.checked } })} />
+                      Sicherung erstellen
+                    </label>
+                    <label>
+                      <input type="checkbox" checked={u.isAdmin || !!u.backupPermissions?.canImport} disabled={busy || u.isAdmin}
+                        onChange={event => updateUserAccess(u, { backupPermissions: { canImport: event.target.checked } })} />
+                      Sicherung importieren (erlaubte Bereiche ersetzen)
+                    </label>
+                    <label>
+                      <input type="checkbox" checked={!!u.backupPermissions?.canFullBackup} disabled={busy || !isMainAdmin || u.isMainAdmin}
+                        onChange={event => updateUserAccess(u, { backupPermissions: { canFullBackup: event.target.checked } })} />
+                      Vollständige Sicherung und Import, einschließlich aller Konten, Rechte und gelöschten Buchungen. Nur vom Hauptadmin freigebbar.
                     </label>
                   </div>
                   <input

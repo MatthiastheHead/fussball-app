@@ -20,4 +20,10 @@ const cashPermissionsFor = (user, mainAdminName = 'Matthias') => {
   };
 };
 
-module.exports = { ACCESS_KEYS, permissionsFor, isAdminUser, mayAccess, cashPermissionsFor };
+const backupPermissionsFor = user => ({
+  canFullBackup: user?.name === 'Matthias' || user?.backupPermissions?.canFullBackup === true,
+  canExport: user?.backupPermissions?.canFullBackup === true || isAdminUser(user) || user?.backupPermissions?.canExport === true,
+  canImport: user?.backupPermissions?.canFullBackup === true || isAdminUser(user) || user?.backupPermissions?.canImport === true,
+});
+
+module.exports = { ACCESS_KEYS, permissionsFor, isAdminUser, mayAccess, cashPermissionsFor, backupPermissionsFor };

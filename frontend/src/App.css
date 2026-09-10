@@ -1070,6 +1070,13 @@ textarea::placeholder,
 }
 
 .cash-deposit { color: #71e5a1; }
+.backup-scopes { display: flex; flex-direction: column; gap: 0.75rem; margin: 1rem 0; }
+.backup-scopes label { display: flex; gap: 0.6rem; align-items: center; }
+.backup-scopes input { min-width: 20px; min-height: 20px; }
+.backup-panel input[type="file"] { max-width: 100%; }
+.backup-preview { border: 1px solid #426288; border-radius: 10px; padding: 1rem; margin-top: 1rem; }
+.backup-preview button { display: block; margin-top: 0.8rem; max-width: 100%; white-space: normal; }
+.backup-panel p { overflow-wrap: anywhere; line-height: 1.5; }
 .cash-expense { color: #ff9fa6; }
 .cash-history-actions { display: flex; flex-direction: column; gap: 0.6rem; align-items: flex-start; }
 .cash-delete-button { border: 1px solid #ff9fa6; color: #ffb4b9; background: #392433; border-radius: 8px; padding: 0.5rem 0.7rem; min-height: 44px; cursor: pointer; }
