@@ -34,7 +34,7 @@ export function calculateTeamCashBalance(teamCash) {
   return openingBalanceCents - spentCents;
 }
 
-export function createTeamCashReport(teamCash, { season, team, from, to }) {
+export function createTeamCashReport(teamCash, { season, team, from, to, generatedAt, generatedBy }) {
   const range = seasonDateRange(season);
   if (!range.from) throw new Error('Bitte eine gültige Saison auswählen.');
   const teamName = String(team || '').trim();
@@ -56,6 +56,7 @@ export function createTeamCashReport(teamCash, { season, team, from, to }) {
   const spentCents = transactions.filter(t => t.type !== 'deposit').reduce((sum, t) => sum + t.amountCents, 0);
   return {
     season, team: teamName, from, to, transactions, openingCents, depositedCents, spentCents,
+    generatedAt, generatedBy,
     closingCents: openingCents + depositedCents - spentCents,
   };
 }

@@ -55,9 +55,10 @@ function cashHarness() {
   const routes = {};
   const writes = [];
   const context = {
-    app: { get() {}, post(path, access, handler) { routes[path] = { access, handler }; }, delete(path, access, handler) { routes[path] = { access, handler }; } },
+    app: { get(path, access, handler) { routes[path] = { access, handler }; }, post(path, access, handler) { routes[path] = { access, handler }; }, delete(path, access, handler) { routes[path] = { access, handler }; } },
     mongoose: require('mongoose'),
     requireAccess: key => key,
+    requireCashPermission: key => key,
     requireAdmin: 'admin',
     TeamCash: { async findOneAndUpdate(query, update) { writes.push(update); return { openingBalanceCents: 1000, transactions: [update.$push.transactions] }; } },
     console,
@@ -89,10 +90,10 @@ test('ungültige Buchungsarten und Beträge erzeugen keine Buchung', async () =>
   assert.equal(writes.length, 0);
 });
 
-test('Löschen ist nur für Admins registriert und erhält einen internen Nachweis', async () => {
+test('Löschen verlangt das besondere Kassenrecht und erhält einen internen Nachweis', async () => {
   const { routes, context } = cashHarness();
   const route = routes['/team-cash/transactions/:id'];
-  assert.equal(route.access, 'admin');
+  assert.equal(route.access, 'canDelete');
   const id = '507f1f77bcf86cd799439011';
   context.TeamCash.findOneAndUpdate = async (query, update, options) => {
     assert.equal(query.transactions.$elemMatch._id, id);
@@ -138,4 +139,24 @@ test('Admin-Middleware sperrt normale und unangemeldete Benutzer', () => {
     vm.runInContext('requireAdmin(req, res, () => { res.code = 200; })', context);
     assert.equal(context.res.code, expected);
   }
+});
+
+test('gelöschte Buchungen kommen ausschließlich aus dem gesondert geschützten Endpunkt', async () => {
+  const { routes, context } = cashHarness();
+  context.TeamCash.findOne = () => ({ lean: async () => ({ transactions: [
+    { _id: 'active', amountCents: 100 },
+    { _id: 'deleted', amountCents: 500, deletedAt: '2026-09-10T12:00:00Z', deletedBy: 'Matthias' },
+  ] }) });
+  let result;
+  const res = { json(data) { result = data; } };
+  await routes['/team-cash'].handler({ auth: { username: 'Exporttrainer' } }, res);
+  assert.equal(result.transactions.length, 1);
+  assert.equal(result.transactions[0]._id, 'active');
+  assert.equal(result.generatedBy, 'Exporttrainer');
+  assert.ok(!Number.isNaN(new Date(result.generatedAt).getTime()));
+  assert.equal(routes['/team-cash/deleted'].access, 'canViewDeleted');
+  await routes['/team-cash/deleted'].handler({}, res);
+  assert.equal(result.length, 1);
+  assert.equal(result[0]._id, 'deleted');
+  assert.equal(result[0].deletedBy, 'Matthias');
 });
