@@ -55,7 +55,7 @@ function cashHarness() {
   const routes = {};
   const writes = [];
   const context = {
-    app: { get(path, access, handler) { routes[path] = { access, handler }; }, post(path, access, handler) { routes[path] = { access, handler }; }, delete(path, access, handler) { routes[path] = { access, handler }; } },
+    app: { patch(path, access, handler) { routes[`PATCH ${path}`] = { access, handler }; }, get(path, access, handler) { routes[path] = { access, handler }; }, post(path, access, handler) { routes[path] = { access, handler }; }, delete(path, access, handler) { routes[path] = { access, handler }; } },
     mongoose: require('mongoose'),
     requireAccess: key => key,
     requireCashPermission: key => key,
@@ -159,4 +159,57 @@ test('gelöschte Buchungen kommen ausschließlich aus dem gesondert geschützten
   assert.equal(result.length, 1);
   assert.equal(result[0]._id, 'deleted');
   assert.equal(result[0].deletedBy, 'Matthias');
+});
+
+
+test('Bearbeiten prüft die 15-Minuten-Grenze atomar und erhält Urheber, Zeitpunkt und Belegzuordnung', async () => {
+  const { routes, context } = cashHarness();
+  const route = routes['PATCH /team-cash/transactions/:id'];
+  assert.equal(route.access, 'teamCash');
+  const id = '507f1f77bcf86cd799439011';
+  const fixedNow = Date.parse('2026-09-11T12:00:00Z');
+  context.Date = class extends Date { constructor(value) { super(value === undefined ? fixedNow : value); } };
+  const body = { type: 'deposit', date: '2026-08-01', amountCents: 2500, purpose: ' Korrektur ', createdAt: new Date(), createdBy: 'Fake', person: 'Fake', _id: 'Fake', lastEditedBy: 'Fake' };
+  for (const [age, deleted, expected] of [[0, false, 200], [899999, false, 200], [900000, false, 409], [900001, false, 409], [-1, false, 409], [1000, true, 409]]) {
+    const original = { _id: id, type: 'expense', amountCents: 100, createdBy: 'Robert', person: 'Robert', createdAt: new Date(fixedNow - age), deletedAt: deleted ? new Date() : null };
+    context.TeamCash.findOneAndUpdate = async (query, update, options) => {
+      const match = query.transactions.$elemMatch;
+      assert.equal(match._id, id);
+      assert.equal(match.deletedAt, null);
+      assert.equal(match.createdAt.$gt.getTime(), fixedNow - 900000);
+      assert.equal(match.createdAt.$lte.getTime(), fixedNow);
+      assert.equal(options.runValidators, true);
+      assert.deepEqual(Object.keys(update.$set).sort(), ['amountCents', 'date', 'lastEditedAt', 'lastEditedBy', 'purpose', 'type'].map(k => `transactions.$.${k}`).sort());
+      if (original.deletedAt || original.createdAt <= match.createdAt.$gt || original.createdAt > match.createdAt.$lte) return null;
+      const row = { ...original };
+      for (const [key, value] of Object.entries(update.$set)) row[key.split('.').at(-1)] = value;
+      return { openingBalanceCents: 1000, transactions: [row] };
+    };
+    let result;
+    const res = { code: 200, status(code) { this.code = code; return this; }, json(value) { result = value; } };
+    await route.handler({ params: { id }, auth: { username: 'Matthias', isAdmin: true }, body }, res);
+    assert.equal(res.code, expected);
+    if (expected === 200) {
+      assert.equal(result.balanceCents, 3500);
+      const row = result.transactions[0];
+      assert.equal(row._id, id);
+      assert.equal(row.createdAt.getTime(), original.createdAt.getTime());
+      assert.equal(row.person, 'Robert');
+      assert.equal(row.createdBy, 'Robert');
+      assert.equal(row.lastEditedBy, 'Matthias');
+      assert.equal(row.lastEditedAt.getTime(), fixedNow);
+      assert.equal(row.purpose, 'Korrektur');
+      assert.equal(row.date, '2026-08-01');
+    }
+  }
+});
+
+test('Bearbeiten weist ungültige Daten ohne Schreibzugriff zurück', async () => {
+  const { routes, context } = cashHarness();
+  context.TeamCash.findOneAndUpdate = async () => assert.fail('Ungültige Eingabe darf nicht geschrieben werden');
+  for (const patch of [{ date: '2026-02-30' }, { type: 'invalid' }, { amountCents: 0 }, { amountCents: 1.5 }, { amountCents: '100' }, { purpose: ' ' }, { purpose: 'x'.repeat(201) }]) {
+    const res = { status(code) { this.code = code; return this; }, json() {} };
+    await routes['PATCH /team-cash/transactions/:id'].handler({ params: { id: '507f1f77bcf86cd799439011' }, auth: { username: 'Matthias' }, body: { type: 'expense', date: '2026-09-11', amountCents: 100, purpose: 'Test', ...patch } }, res);
+    assert.equal(res.code, 400);
+  }
 });

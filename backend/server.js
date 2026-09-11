@@ -1292,6 +1292,39 @@ app.post('/team-cash/transactions', requireAccess('teamCash'), async (req, res) 
   }
 });
 
+app.patch('/team-cash/transactions/:id', requireAccess('teamCash'), async (req, res) => {
+  const { type, date, amountCents, purpose } = req.body || {};
+  if (!mongoose.isValidObjectId(req.params.id) || !['expense', 'deposit'].includes(type)
+      || !validCashDate(date) || typeof purpose !== 'string' || !purpose.trim() || purpose.trim().length > 200
+      || !Number.isSafeInteger(amountCents) || amountCents < 1 || amountCents > 100_000_000) {
+    return res.status(400).json({ error: 'Bitte Datum, Buchungsart, positiven Betrag und Verwendungszweck prüfen.' });
+  }
+  try {
+    const now = new Date();
+    // Check the original creation time atomically with the write. Never restart the window.
+    const cash = await TeamCash.findOneAndUpdate(
+      { key: 'team-cash', transactions: { $elemMatch: {
+        _id: req.params.id, deletedAt: null,
+        createdAt: { $gt: new Date(now.getTime() - 15 * 60 * 1000), $lte: now },
+      } } },
+      { $set: {
+        'transactions.$.type': type,
+        'transactions.$.date': date,
+        'transactions.$.amountCents': amountCents,
+        'transactions.$.purpose': purpose.trim(),
+        'transactions.$.lastEditedAt': now,
+        'transactions.$.lastEditedBy': req.auth.username,
+      } },
+      { new: true, runValidators: true }
+    );
+    if (!cash) return res.status(409).json({ error: 'Bearbeiten nicht mehr möglich: Die 15 Minuten sind abgelaufen oder die Buchung wurde gelöscht.' });
+    res.json(cleanTeamCash(cash));
+  } catch (err) {
+    console.error('Fehler PATCH /team-cash/transactions:', err);
+    res.status(500).json({ error: 'Die Buchung konnte nicht geändert werden.' });
+  }
+});
+
 app.get('/team-cash/deleted', requireCashPermission('canViewDeleted'), async (_req, res) => {
   try {
     const cash = await TeamCash.findOne({ key: 'team-cash' }).lean();
