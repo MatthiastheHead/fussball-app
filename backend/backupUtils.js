@@ -1,8 +1,8 @@
 const { createHash } = require('crypto');
 const FORMAT = 'fussball-app-backup';
-const KEYS = ['players', 'trainings', 'checklists', 'settings', 'teamCash'];
+const KEYS = ['players', 'trainings', 'checklists', 'settings', 'teamCash', 'tasks'];
 const LIMIT = 8 * 1024 * 1024;
-const labels = { players: 'Spielerinnen und Trainer', trainings: 'Trainings', checklists: 'Checklisten', settings: 'Einstellungen', teamCash: 'Mannschaftskasse' };
+const labels = { players: 'Spielerinnen und Trainer', trainings: 'Trainings', checklists: 'Checklisten', settings: 'Einstellungen', teamCash: 'Mannschaftskasse', tasks: 'Aufgaben' };
 const fail = message => { throw Object.assign(new Error(message), { status: 400 }); };
 const canonical = value => {
   if (Array.isArray(value)) return value.map(canonical);
@@ -18,6 +18,7 @@ function scopeFor(auth, importing = false) {
     if (key === 'players' || key === 'settings') return !importing || auth.isAdmin;
     if (key === 'trainings') return allowed('training');
     if (key === 'checklists') return allowed('checklists');
+    if (key === 'tasks') return allowed('tasks');
     return allowed('teamCash') && (!importing || auth.isAdmin || auth.cashPermissions?.canDelete === true);
   });
 }

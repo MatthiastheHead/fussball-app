@@ -57,7 +57,7 @@ export default function BackupPanel({ request, canExport, canImport, onImported 
     {options && <>
       {options.canFullBackup && <section className="cash-entry-section">
         <h2>Alles vollständig sichern</h2>
-        <p>Enthält Spielerinnen und Trainer, alle Trainings und Notizen, Checklisten, Einstellungen, die gesamte Kasse, Benutzerkonten, Sicherheitsdaten und den Anmeldeverlauf.</p>
+        <p>Enthält Spielerinnen und Trainer, alle Trainings und Notizen, Checklisten, Aufgaben, Einstellungen, die gesamte Kasse, Benutzerkonten, Sicherheitsdaten und den Anmeldeverlauf.</p>
         <p>Bewahre dein Sicherungspasswort getrennt von der Datei auf. Ohne dieses Passwort lässt sie sich nicht wiederherstellen. Die Sicherheitsdaten benötigen beim Import dieselbe Serverkonfiguration. Aktive Anmeldungen werden nicht gesichert.</p>
         <label className="labeled-field"><span>Sicherungspasswort, mindestens 12 Zeichen</span><input type="password" autoComplete="new-password" maxLength={256} value={password} disabled={busy} onChange={event => setPassword(event.target.value)} /></label>
         <label className="labeled-field"><span>Sicherungspasswort wiederholen</span><input type="password" autoComplete="new-password" maxLength={256} value={passwordRepeat} disabled={busy} onChange={event => setPasswordRepeat(event.target.value)} /></label>
@@ -120,6 +120,7 @@ export default function BackupPanel({ request, canExport, canImport, onImported 
         </>}
         {preview && <div className="backup-preview">
           <h3>Diese Bereiche werden ersetzt</h3>
+          {preview.preservedTasks && <p>Diese ältere Sicherung enthält keine Aufgaben. Deine aktuell gespeicherten Aufgaben bleiben erhalten.</p>}
           <ul>{preview.summary.map(row => <li key={row.key}>{row.label}: {row.before} Datensätze vorhanden, {row.after} nach dem Import</li>)}</ul>
           {preview.full && <p>Die Sicherung vor dem Import ist mit demselben Passwort verschlüsselt wie die ausgewählte Datei.</p>}
           <p>Bei der Kasse wird ein Kassenbestand als Datensatz gezählt. Die Prüfung gilt fünf Minuten.</p>

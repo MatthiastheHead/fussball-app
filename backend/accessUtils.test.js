@@ -4,7 +4,7 @@ const { permissionsFor, isAdminUser, mayAccess, cashPermissionsFor } = require('
 
 test('bestehende Benutzer behalten standardmäßig alle bisherigen Zugriffe', () => {
   assert.deepEqual(permissionsFor({ name: 'Altbestand' }), {
-    training: true, checklists: true, teamGenerator: true, teamCash: true,
+    training: true, checklists: true, teamGenerator: true, teamCash: true, tasks: true,
   });
 });
 
