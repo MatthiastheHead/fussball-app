@@ -1,9 +1,11 @@
 const { randomBytes } = require('crypto');
+const { MAX_TOTAL } = require('./receiptUtils');
 const { FULL_KEYS, FULL_LABELS, seal, unseal, validateFull } = require('./fullBackupUtils');
 const { labels, snapshotHash, scopeFor, makeBackup, validateBackup, prepareCashImport } = require('./backupUtils');
 
 module.exports = function registerBackupRoutes({ app, mongoose, models, requireSession, version, recoveryKey, invalidateAllSessions = () => {} }) {
   const mayFull = auth => auth.username === 'Matthias' || auth.backupPermissions?.canFullBackup === true;
+  const withReceipts = keys => Array.isArray(keys) && keys.includes('teamCash') && !keys.includes('receipts') ? [...keys, 'receipts'] : keys;
   const previews = new Map();
   const requireBackup = permission => (req, res, next) => requireSession(req, res, () => {
     if (!req.auth.isAdmin && req.auth.backupPermissions?.[permission] !== true) {
@@ -29,7 +31,7 @@ module.exports = function registerBackupRoutes({ app, mongoose, models, requireS
     res.status(error.status || 503).json({ error: error.status ? error.message : 'Die Sicherung konnte nicht verarbeitet werden. Der Import benötigt eine Datenbank mit Transaktionsunterstützung. Es wurden keine Teiländerungen übernommen.' });
   };
   app.get('/backup/options', requireSession, (req, res) => res.json({
-    exportScopes: scopeFor(req.auth), importScopes: scopeFor(req.auth, true),
+    exportScopes: scopeFor(req.auth).filter(key => key !== 'receipts'), importScopes: scopeFor(req.auth, true).filter(key => key !== 'receipts'),
     canFullBackup: mayFull(req.auth), labels, includesDeletedCash: !!req.auth.cashPermissions?.canViewDeleted,
   }));
   const mainOnly = (req, res, next) => requireSession(req, res, () => {
@@ -48,15 +50,17 @@ module.exports = function registerBackupRoutes({ app, mongoose, models, requireS
       const before = await snapshot(FULL_KEYS);
       const preservedTasks = !Object.hasOwn(data, 'tasks');
       if (preservedTasks) data.tasks = before.tasks;
+      const preservedReceipts = !Object.hasOwn(data, 'receipts');
+      if (preservedReceipts) data.receipts = before.receipts;
       const recoveryBackup = await seal(before, req.body?.password, req.auth, version, recoveryKey);
       const token = randomBytes(24).toString('hex'), expiresAt = Date.now() + 5 * 60 * 1000;
       previews.set(token, { full: true, owner: req.auth.token, expiresAt, data, beforeHash: snapshotHash(before) });
-      res.json({ full: true, preservedTasks, token, expiresAt, recoveryBackup, summary: FULL_KEYS.map(key => ({ key, label: FULL_LABELS[key], before: before[key].length, after: data[key].length })) });
+      res.json({ full: true, preservedTasks, preservedReceipts, token, expiresAt, recoveryBackup, summary: FULL_KEYS.map(key => ({ key, label: FULL_LABELS[key], before: before[key].length, after: data[key].length })) });
     } catch (error) { sendError(res, error); }
   });
   app.post('/backup/export', requireBackup('canExport'), async (req, res) => {
     try {
-      const keys = req.body?.scopes;
+      const keys = withReceipts(req.body?.scopes);
       if (!Array.isArray(keys) || !keys.length || keys.some(key => !scopeFor(req.auth).includes(key)) || new Set(keys).size !== keys.length) {
         return res.status(400).json({ error: 'Bitte gültige Bereiche für die Sicherung auswählen.' });
       }
@@ -68,10 +72,18 @@ module.exports = function registerBackupRoutes({ app, mongoose, models, requireS
       for (const [id, preview] of previews) if (preview.expiresAt < Date.now()) previews.delete(id);
       for (const [id, preview] of previews) if (preview.owner === req.auth.token) previews.delete(id);
       if (previews.size >= 5) return res.status(429).json({ error: 'Zu viele offene Importprüfungen. Bitte später erneut versuchen.' });
-      const data = validateBackup(req.body?.backup, req.body?.scopes, req.auth, models);
-      const keys = Object.keys(data);
+      const selected = req.body?.backup?.data?.receipts ? withReceipts(req.body?.scopes) : req.body?.scopes;
+      const data = validateBackup(req.body?.backup, selected, req.auth, models);
+      const keys = withReceipts(Object.keys(data));
       const before = await snapshot(keys);
-      if (keys.includes('teamCash')) data.teamCash = prepareCashImport(data.teamCash, before.teamCash, req.auth);
+      if (keys.includes('teamCash')) {
+        data.teamCash = prepareCashImport(data.teamCash, before.teamCash, req.auth);
+        const deleted = new Set(data.teamCash.flatMap(c => c.transactions || []).filter(t => t.deletedAt).map(t => String(t._id)));
+        const protectedReceipts = before.receipts.filter(row => deleted.has(row.transactionId));
+        const ids = new Set(protectedReceipts.map(row => String(row._id)));
+        data.receipts = data.receipts ? [...data.receipts.filter(row => !ids.has(String(row._id))), ...protectedReceipts] : before.receipts;
+        if (data.receipts.reduce((sum, row) => sum + row.size, 0) > MAX_TOTAL) throw Object.assign(new Error('Die importierten und geschützten Belege überschreiten zusammen 32 MB.'), { status: 400 });
+      }
       const token = randomBytes(24).toString('hex');
       const expiresAt = Date.now() + 5 * 60 * 1000;
       const recoveryBackup = makeBackup(before, req.auth, version);

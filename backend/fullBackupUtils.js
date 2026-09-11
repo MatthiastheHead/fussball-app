@@ -14,14 +14,14 @@ async function seal(data, password, auth, version, recoveryKey) {
   const salt = randomBytes(16), iv = randomBytes(12);
   const key = await keyFor(password, salt);
   const payload = JSON.stringify({ data, appVersion: version, exportedAt: new Date().toISOString(), exportedBy: auth.username, recoveryKeyFingerprint: digest(recoveryKey.toString('hex')) });
-  if (Buffer.byteLength(payload) > 8 * 1024 * 1024) fail('Die vollständige Sicherung überschreitet die unterstützte Größe von 8 MB Nutzdaten.');
+  if (Buffer.byteLength(payload) > 64 * 1024 * 1024) fail('Die vollständige Sicherung überschreitet die unterstützte Größe von 64 MB Nutzdaten.');
   const cipher = createCipheriv('aes-256-gcm', key, iv);
   const ciphertext = Buffer.concat([cipher.update(payload, 'utf8'), cipher.final()]);
   key.fill(0);
   return { format: FORMAT, schemaVersion: 1, salt: salt.toString('base64'), iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64'), ciphertext: ciphertext.toString('base64') };
 }
 async function unseal(backup, password, recoveryKey) {
-  if (!backup || backup.format !== FORMAT || backup.schemaVersion !== 1 || Buffer.byteLength(JSON.stringify(backup)) > 12 * 1024 * 1024) fail('Keine unterstützte vollständige Sicherung.');
+  if (!backup || backup.format !== FORMAT || backup.schemaVersion !== 1 || Buffer.byteLength(JSON.stringify(backup)) > 96 * 1024 * 1024) fail('Keine unterstützte vollständige Sicherung.');
   const bytes = (field, length) => {
     if (typeof backup[field] !== 'string') fail('Beschädigte Sicherung.');
     const value = Buffer.from(backup[field], 'base64');
@@ -42,11 +42,11 @@ async function unseal(backup, password, recoveryKey) {
 }
 function validateFull(raw, models) {
   // Older complete backups predate tasks. Preserve current tasks instead of deleting them.
-  const keys = FULL_KEYS.filter(key => key !== 'tasks' || Object.hasOwn(raw || {}, 'tasks'));
+  const keys = FULL_KEYS.filter(key => !['tasks', 'receipts'].includes(key) || Object.hasOwn(raw || {}, key));
   if (!raw || Array.isArray(raw) || Object.keys(raw).length !== keys.length || keys.some(key => !Array.isArray(raw[key]))) fail('Die vollständige Sicherung enthält nicht alle erforderlichen Datenbereiche.');
   const businessKeys = KEYS.filter(key => keys.includes(key));
   const business = Object.fromEntries(businessKeys.map(key => [key, raw[key]]));
-  const auth = { username: 'Matthias', isAdmin: true, cashPermissions: { canViewDeleted: true } };
+  const auth = { username: 'Matthias', isAdmin: true, fullRestore: true, cashPermissions: { canViewDeleted: true } };
   const data = validateBackup(makeBackup(business, auth, '7.8.0'), businessKeys, auth, models);
   const inspect = value => {
     if (!value || typeof value !== 'object') return;

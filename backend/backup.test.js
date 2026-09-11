@@ -4,6 +4,7 @@ const registerRoutes = require('./backupRoutes');
 const { KEYS, makeBackup, validateBackup, scopeFor, prepareCashImport, digest } = require('./backupUtils');
 const { backupPermissionsFor } = require('./accessUtils');
 const realModels = {
+  receipts: require('./models/CashReceipt'),
   tasks: require('./models/Task'),
   players: require('./models/Player'), trainings: require('./models/Training'),
   checklists: require('./models/Checklist'), settings: require('./models/AppSettings'), teamCash: require('./models/TeamCash'),
@@ -13,10 +14,12 @@ const { FULL_KEYS, seal, unseal } = require('./fullBackupUtils');
 const { encryptSecret, decryptSecret, hashRecoveryCode } = require('./recoveryUtils');
 const recoveryKey = Buffer.alloc(32, 7);
 const password = 'Sicherung-Test-2026';
+const { validateReceipt } = require('./receiptUtils');
 const clone = value => JSON.parse(JSON.stringify(value));
 const id = n => n.toString(16).padStart(24, '0');
 const admin = { username: 'Matthias', token: 'session-a', isAdmin: true, cashPermissions: { canDelete: true, canViewDeleted: true } };
 const fixture = () => clone({
+  receipts: [],
   tasks: [new realModels.tasks({ _id: id(30), title: 'Leibchen waschen', assignedTo: id(20), assignedName: 'Matthias', dueDate: '2026-09-15', createdBy: 'Matthias', updatedBy: 'Matthias' })],
   players: [new realModels.players({ _id: id(1), name: 'Mia', note: 'Hinweis', inactive: false })],
   trainings: [new realModels.trainings({ _id: id(2), date: 'Do, 10.09.2026', participants: { Mia: '✅' }, ratings: { Mia: 3 }, history: [{ by: 'Matthias', action: 'Erstellt' }] })],
@@ -26,6 +29,33 @@ const fixture = () => clone({
     { _id: id(6), date: '2026-09-10', type: 'deposit', amountCents: 500, purpose: 'Beitrag', person: 'Matthias', createdBy: 'Matthias' },
     { _id: id(7), date: '2026-09-09', type: 'expense', amountCents: 200, purpose: 'Fehlbuchung', person: 'Matthias', createdBy: 'Matthias', deletedAt: new Date(), deletedBy: 'Matthias' },
   ] })],
+});
+
+test('Kassensicherung enthält Belegdateien und schützt gelöschte Belege beim Teilimport', async () => {
+  const { state, invoke } = harness();
+  const file = validateReceipt({ name: 'Beleg.pdf', type: 'application/pdf', data: Buffer.from('%PDF-1.4\n%%EOF').toString('base64') });
+  state.db.receipts = [
+    clone(new realModels.receipts({ _id: id(40), transactionId: id(6), ...file, createdBy: 'Matthias' })),
+    clone(new realModels.receipts({ _id: id(41), transactionId: id(7), ...file, createdBy: 'Matthias' })),
+  ];
+  const restricted = { ...admin, cashPermissions: { canDelete: true, canViewDeleted: false } };
+  const exported = await invoke('/backup/export', { scopes: ['teamCash'] }, restricted);
+  assert.equal(exported.body.data.receipts.length, 1);
+  assert.equal(exported.body.data.receipts[0].data, file.data);
+  const preview = await invoke('/backup/preview', { backup: exported.body, scopes: ['teamCash'] }, restricted);
+  assert.equal(preview.code, 200);
+  assert.equal((await invoke('/backup/import', { token: preview.body.token, confirm: true }, restricted)).code, 200);
+  assert.equal(state.db.receipts.length, 2);
+  const full = await invoke('/backup/full/export', { password });
+  const decoded = await unseal(full.body, password, recoveryKey);
+  assert.deepEqual(decoded.receipts, state.db.receipts);
+  delete decoded.receipts;
+  const old = await seal(decoded, password, admin, '8.0.0', recoveryKey);
+  const oldPreview = await invoke('/backup/full/preview', { backup: old, password });
+  assert.equal(oldPreview.code, 200);
+  assert.equal(oldPreview.body.preservedReceipts, true);
+  assert.equal((await invoke('/backup/import', { token: oldPreview.body.token, confirm: true })).code, 200);
+  assert.equal(state.db.receipts.length, 2);
 });
 
 test('Alte Komplettsicherungen lassen heutige Aufgaben erhalten', async () => {
@@ -192,7 +222,7 @@ test('Komplettsicherung ist verschlüsselt, authentifiziert und an die Serverkon
   await assert.rejects(seal(raw, 'kurz', admin, '7.7.0', recoveryKey), /12 bis/);
 });
 
-test('Vollständiger Import stellt alle zehn Bereiche wieder her und beendet Sitzungen', async () => {
+test('Vollständiger Import stellt alle elf Bereiche wieder her und beendet Sitzungen', async () => {
   const { state, invoke } = harness();
   state.db.recovery = clone([new realModels.recovery({ _id: id(21), key: 'main', userId: id(20), username: 'Matthias', encryptedSecret: encryptSecret('JBSWY3DPEHPK3PXP', recoveryKey), recoveryCodeHashes: [hashRecoveryCode('ABCDEFGHJKLM', recoveryKey)] })]);
   state.db.loginEvents = clone([new realModels.loginEvents({ _id: id(22), username: 'Matthias' })]);
@@ -203,7 +233,7 @@ test('Vollständiger Import stellt alle zehn Bereiche wieder her und beendet Sit
   state.db.teamCash[0].transactions = [];
   const preview = await invoke('/backup/full/preview', { backup: exported.body, password });
   assert.equal(preview.code, 200);
-  assert.equal(preview.body.summary.length, 10);
+  assert.equal(preview.body.summary.length, 11);
   assert.equal(preview.body.recoveryBackup.data, undefined);
   const result = await invoke('/backup/import', { token: preview.body.token, confirm: true });
   assert.equal(result.code, 200);

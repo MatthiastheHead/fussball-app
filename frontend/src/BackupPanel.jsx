@@ -85,13 +85,13 @@ export default function BackupPanel({ request, canExport, canImport, onImported 
         <h2>Sicherung importieren</h2>
         <p>Der Import ersetzt die ausgewählten Bereiche vollständig. Nicht ausgewählte Bereiche bleiben erhalten. Eine leere Liste leert den jeweiligen Bereich.</p>
         <p>Spielerinnen und Grundeinstellungen können nur allgemeine Admins importieren. Für die Kasse brauchst du mindestens Kassenadminrechte; ein abweichender Startbestand bleibt allgemeinen Admins vorbehalten. Bereits gelöschte Kassenbuchungen bleiben intern erhalten.</p>
-        <label className="labeled-field"><span>Sicherungsdatei auswählen (JSON, höchstens 12 MB)</span>
+        <label className="labeled-field"><span>Sicherungsdatei auswählen (JSON, höchstens 96 MB)</span>
           <input type="file" accept=".json,application/json" disabled={busy} onChange={event => {
             const selected = event.target.files?.[0];
             setFile(null); setImportPassword(''); setImportScopes([]); clearPreview();
             if (!selected) return;
             run(async () => {
-              if (selected.size > 12 * 1024 * 1024) throw new Error('Die Datei darf höchstens 12 MB groß sein.');
+              if (selected.size > 96 * 1024 * 1024) throw new Error('Die Datei darf höchstens 96 MB groß sein.');
               const backup = JSON.parse(await selected.text());
               if (backup?.format === 'fussball-app-encrypted-backup' && backup.schemaVersion === 1) {
                 if (!options.canFullBackup) throw new Error('Für vollständige Sicherungen fehlt dir die Freigabe des Hauptadmins.');
@@ -105,7 +105,7 @@ export default function BackupPanel({ request, canExport, canImport, onImported 
         </label>
         {file && <>
           {file.data ? <><p>Sicherung vom {new Date(file.exportedAt).toLocaleString('de-DE')} · Erstellt von {String(file.exportedBy || 'Unbekannt')}</p>
-          <div className="backup-scopes">{Object.keys(file.data).map(key => <label key={key}>
+          <div className="backup-scopes">{Object.keys(file.data).filter(key => key !== 'receipts').map(key => <label key={key}>
             <input type="checkbox" checked={importScopes.includes(key)} disabled={busy || !options.importScopes.includes(key)}
               onChange={() => { setImportScopes(value => toggle(value, key)); clearPreview(); }} />
             {options.labels[key] || key}{!options.importScopes.includes(key) ? ' (keine Importberechtigung)' : ''}
@@ -120,6 +120,7 @@ export default function BackupPanel({ request, canExport, canImport, onImported 
         </>}
         {preview && <div className="backup-preview">
           <h3>Diese Bereiche werden ersetzt</h3>
+          <p>Eine Kassensicherung enthält die zugehörigen Belege. Bei älteren Dateien ohne Belege bleiben gespeicherte Belegdateien erhalten. Sichtbar sind nur Belege zu vorhandenen und für dich freigegebenen Buchungen.</p>
           {preview.preservedTasks && <p>Diese ältere Sicherung enthält keine To-dos. Deine aktuell gespeicherten To-dos bleiben erhalten.</p>}
           <ul>{preview.summary.map(row => <li key={row.key}>{row.label}: {row.before} Datensätze vorhanden, {row.after} nach dem Import</li>)}</ul>
           {preview.full && <p>Die Sicherung vor dem Import ist mit demselben Passwort verschlüsselt wie die ausgewählte Datei.</p>}

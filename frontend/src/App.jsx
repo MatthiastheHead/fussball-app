@@ -1,8 +1,9 @@
-// Version 8.0: To-dos mit persönlichem Zähler und Löschfunktion.
+// Version 8.1: Geschützte Kassenbelege mit Sicherung und Import.
 
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import BackupPanel from './BackupPanel.jsx';
+import CashReceipts from './CashReceipts.jsx';
 import TasksPanel from './TasksPanel.jsx';
 import TaskMenuButton from './TaskMenuButton.jsx';
 import './App.css';
@@ -308,7 +309,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '8.0';
+  const version = '8.1';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canDeleteCash = sessionUser?.cashPermissions?.canDelete === true;
@@ -467,7 +468,7 @@ export default function App() {
         ...(options.headers || {}),
         Authorization: `Bearer ${token}`,
       },
-    });
+    }, path.startsWith('backup/') || path.includes('/receipts') ? 120000 : REQUEST_TIMEOUT);
 
   const applyTeamCashResponse = (data) => {
     const normalized = {
@@ -2236,6 +2237,7 @@ export default function App() {
               {busy ? 'Wird gespeichert…' : cashEntry.type === 'deposit' ? 'Einzahlung buchen' : 'Ausgabe buchen'}
             </button>
           </form>
+          <p>Belege kannst du nach dem Buchen im Buchungsverlauf fotografieren oder anhängen.</p>
           {cashError && <p className="login-error cash-error">{cashError}</p>}
         </section>
 
@@ -2315,6 +2317,7 @@ export default function App() {
                       aria-label={`Buchung ${transaction.purpose} vom ${formatInputDate(transaction.date)} löschen`}
                       onClick={() => deleteCashTransaction(transaction)}>Buchung löschen</button>}
                   </div>
+                  <CashReceipts key={`${authToken}-${transaction._id}`} request={authenticatedRequest} transactionId={transaction._id} />
                 </article>
               ))}
             </div>
@@ -2339,6 +2342,7 @@ export default function App() {
               <strong className={`cash-history-amount ${transaction.type === 'deposit' ? 'cash-deposit' : 'cash-expense'}`}>
                 {transaction.type === 'deposit' ? 'Einzahlung +' : 'Ausgabe −'} {formatEuro(transaction.amountCents)}
               </strong>
+              <CashReceipts key={`${authToken}-${transaction._id}`} request={authenticatedRequest} transactionId={transaction._id} readOnly />
             </article>)}
           </div>}
         </section>}
