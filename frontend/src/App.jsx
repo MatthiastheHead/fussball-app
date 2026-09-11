@@ -1,9 +1,10 @@
-// Version 7.8: Gemeinsame Aufgaben mit Zuständigkeit und Fälligkeit.
+// Version 8.0: To-dos mit persönlichem Zähler und Löschfunktion.
 
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import BackupPanel from './BackupPanel.jsx';
 import TasksPanel from './TasksPanel.jsx';
+import TaskMenuButton from './TaskMenuButton.jsx';
 import './App.css';
 import {
   STATUS_OPTIONS,
@@ -307,7 +308,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '7.8';
+  const version = '8.0';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canDeleteCash = sessionUser?.cashPermissions?.canDelete === true;
@@ -2027,9 +2028,8 @@ export default function App() {
         >
           {busy ? 'Bitte warten…' : '⚽ Trainingsteilnahme'}
         </button>}
-        {canAccess('tasks') && <button className="main-func-btn"
-          style={{ margin: '0.9em auto 0 auto', fontSize: '1.13rem', minWidth: 260 }}
-          disabled={busy} onClick={() => { setShowTasks(true); setShowStartMenu(false); }}>Aufgaben</button>}
+        {canAccess('tasks') && <TaskMenuButton key={authToken} request={authenticatedRequest}
+          disabled={busy} onClick={() => { setShowTasks(true); setShowStartMenu(false); }} />}
         {canAccess('checklists') && <button
           className="main-func-btn"
           style={{ margin: '0.9em auto 0 auto', fontSize: '1.13rem', minWidth: 260 }}
@@ -3255,7 +3255,7 @@ export default function App() {
                     {[
                       ['training', 'Trainingsteilnahme'],
                       ['checklists', 'Checklisten'],
-                      ['tasks', 'Aufgaben'],
+                      ['tasks', 'To-dos'],
                       ['teamGenerator', 'Teamgenerator'],
                       ['teamCash', 'Mannschaftskasse'],
                     ].map(([key, label]) => (
