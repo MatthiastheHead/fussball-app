@@ -1,8 +1,9 @@
 const { createHash } = require('crypto');
+const { validateReceipt, MAX_TOTAL } = require('./receiptUtils');
 const FORMAT = 'fussball-app-backup';
-const KEYS = ['players', 'trainings', 'checklists', 'settings', 'teamCash', 'tasks'];
-const LIMIT = 8 * 1024 * 1024;
-const labels = { players: 'Spielerinnen und Trainer', trainings: 'Trainings', checklists: 'Checklisten', settings: 'Einstellungen', teamCash: 'Mannschaftskasse', tasks: 'To-dos' };
+const KEYS = ['players', 'trainings', 'checklists', 'settings', 'teamCash', 'tasks', 'receipts'];
+const LIMIT = 64 * 1024 * 1024;
+const labels = { players: 'Spielerinnen und Trainer', trainings: 'Trainings', checklists: 'Checklisten', settings: 'Einstellungen', teamCash: 'Mannschaftskasse einschließlich Belegen', tasks: 'To-dos', receipts: 'Kassenbelege' };
 const fail = message => { throw Object.assign(new Error(message), { status: 400 }); };
 const canonical = value => {
   if (Array.isArray(value)) return value.map(canonical);
@@ -28,24 +29,30 @@ function makeBackup(raw, auth, version) {
   if (!auth.cashPermissions?.canViewDeleted && data.teamCash) {
     for (const cash of data.teamCash) cash.transactions = (cash.transactions || []).filter(t => !t.deletedAt);
   }
+  if (data.receipts && !auth.fullRestore) {
+    const visible = new Set((data.teamCash || []).flatMap(cash => cash.transactions || []).map(row => String(row._id)));
+    data.receipts = data.receipts.filter(row => visible.has(row.transactionId));
+  }
   const backup = {
     format: FORMAT, schemaVersion: 1, appVersion: version,
     exportedAt: new Date().toISOString(), exportedBy: auth.username,
     includesDeletedCash: !!auth.cashPermissions?.canViewDeleted,
     data, checksum: digest(data),
   };
-  if (Buffer.byteLength(JSON.stringify(backup, null, 2)) > LIMIT) fail('Die Sicherung ist größer als 8 MB. Bitte weniger Bereiche auswählen.');
+  if (Buffer.byteLength(JSON.stringify(backup, null, 2)) > LIMIT) fail('Die Sicherung ist größer als 64 MB. Bitte weniger Bereiche auswählen.');
   return backup;
 }
 
 function validateBackup(backup, selected, auth, models) {
   if (!backup || backup.format !== FORMAT || backup.schemaVersion !== 1) fail('Keine unterstützte Fußball-App-Sicherung (Formatversion 1).');
-  if (Buffer.byteLength(JSON.stringify(backup)) > LIMIT) fail('Die Sicherungsdatei darf höchstens 8 MB groß sein.');
+  if (Buffer.byteLength(JSON.stringify(backup)) > LIMIT) fail('Die Sicherungsdatei darf höchstens 64 MB groß sein.');
   if (!backup.data || typeof backup.data !== 'object' || Array.isArray(backup.data)) fail('Die Sicherung enthält keine gültigen Daten.');
   if (Object.keys(backup.data).some(key => !KEYS.includes(key))) fail('Die Sicherung enthält unbekannte Bereiche.');
   if (backup.checksum !== digest(backup.data)) fail('Die Prüfsumme stimmt nicht. Die Sicherung ist beschädigt oder wurde verändert.');
   if (!Array.isArray(selected) || !selected.length || new Set(selected).size !== selected.length) fail('Bitte Bereiche für den Import auswählen.');
   const permitted = scopeFor(auth, true);
+  if (selected.includes('receipts') && !selected.includes('teamCash')) fail('Belege müssen zusammen mit der Kasse importiert werden.');
+  let receiptBytes = 0;
   const data = {};
   const inspect = value => {
     if (!value || typeof value !== 'object') return;
@@ -64,6 +71,13 @@ function validateBackup(backup, selected, auth, models) {
     data[key] = rows.map(row => {
       if (!row || Array.isArray(row) || typeof row !== 'object') fail(`Ungültiger Datensatz in ${labels[key]}.`);
       inspect(row);
+      if (key === 'receipts') {
+        const checked = validateReceipt(row);
+        receiptBytes += checked.size;
+        if (receiptBytes > MAX_TOTAL || checked.size !== row.size || checked.sha256 !== row.sha256) fail('Ungültige Beleggröße oder Prüfsumme.');
+        const transaction = (backup.data.teamCash || []).flatMap(cash => cash.transactions || []).find(t => String(t._id) === row.transactionId);
+        if ((!transaction && !auth.fullRestore) || (transaction?.deletedAt && !auth.cashPermissions?.canViewDeleted)) fail('Beleg gehört nicht zu einer erlaubten Buchung.');
+      }
       if (!/^[a-f\d]{24}$/i.test(row._id || '') || ids.has(String(row._id))) fail(`Fehlende oder doppelte Datensatz-ID in ${labels[key]}.`);
       ids.add(String(row._id));
       const field = key === 'players' ? 'name' : key === 'trainings' ? 'date' : null;

@@ -2978,3 +2978,12 @@ footer a {
 @media (max-width: 600px) { .task-fields { grid-template-columns: 1fr; gap: 0; } .tasks-panel { padding: .75rem; } }
 .main-func-btn.todo-menu-button { display: flex; align-items: center; justify-content: center; gap: .8rem; margin: .9em auto 0; font-size: 1.13rem; min-width: 260px; }
 .todo-count-badge { display: inline-flex; justify-content: center; align-items: center; box-sizing: border-box; min-width: 1.65rem; height: 1.65rem; padding: 0 .4rem; border-radius: 999px; background: #c51e32; color: #fff; font-size: .9rem; font-weight: 700; line-height: 1; flex-shrink: 0; }
+.cash-receipts { grid-column: 1 / -1; min-width: 0; width: 100%; border-top: 1px solid #3a5477; padding-top: .7rem; }
+.cash-receipts p, .cash-receipts li { overflow-wrap: anywhere; }
+.cash-receipts ul { padding: 0; list-style: none; }
+.cash-receipts li { display: flex; flex-direction: column; gap: .5rem; padding: .8rem 0; }
+.cash-receipts button { min-height: 44px; margin: .25rem; }
+.receipt-upload label { display: flex; flex-direction: column; gap: .4rem; margin: .8rem 0; }
+.receipt-upload input { max-width: 100%; font-size: 1rem; }
+.receipt-preview img { width: 100%; max-height: 70vh; object-fit: contain; }
+.receipt-preview iframe { width: 100%; height: 65vh; border: 0; background: white; }

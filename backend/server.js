@@ -18,6 +18,8 @@ const PasswordResetRequest = require('./models/PasswordResetRequest');
 const TeamCash = require('./models/TeamCash');
 const { ACCESS_KEYS, permissionsFor, isAdminUser, cashPermissionsFor, backupPermissionsFor } = require('./accessUtils');
 const registerBackupRoutes = require('./backupRoutes');
+const CashReceipt = require('./models/CashReceipt');
+const registerReceiptRoutes = require('./receiptRoutes');
 const Task = require('./models/Task');
 const registerTaskRoutes = require('./taskRoutes');
 const { hashPassword, isPasswordHash, verifyPassword } = require('./authUtils');
@@ -248,6 +250,7 @@ app.set('trust proxy', 1);
 app.use(cors());
 
 // ⚙️ Body-Limit deutlich erhöht (Fix für HTTP 413)
+app.use('/backup', requireSession, express.json({ limit: '100mb' }));
 app.use(express.json({ limit: '16mb' }));
 app.use(express.urlencoded({ limit: '16mb', extended: true }));
 
@@ -1167,8 +1170,9 @@ app.post('/checklists', requireAccess('checklists'), async (req, res) => {
 });
 
 registerTaskRoutes({ app, Task, User, requireAccess, mongoose });
+registerReceiptRoutes({ app, mongoose, TeamCash, CashReceipt, requireAccess });
 registerBackupRoutes({ app, mongoose, requireSession, version, recoveryKey: recoveryEncryptionKey, invalidateAllSessions: () => sessions.clear(),
-  models: { players: Player, trainings: Training, checklists: Checklist, settings: AppSettings, teamCash: TeamCash, tasks: Task, users: User, recovery: AdminRecovery, passwordResets: PasswordResetRequest, loginEvents: LoginEvent },
+  models: { players: Player, trainings: Training, checklists: Checklist, settings: AppSettings, teamCash: TeamCash, receipts: CashReceipt, tasks: Task, users: User, recovery: AdminRecovery, passwordResets: PasswordResetRequest, loginEvents: LoginEvent },
 });
 
 // ---- 5.6 Mannschaftskasse ----
