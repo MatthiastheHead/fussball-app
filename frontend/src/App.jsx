@@ -1,8 +1,9 @@
-// Version 8.1: Geschützte Kassenbelege mit Sicherung und Import.
+// Version 8.2: Kassenbuchungen innerhalb von 15 Minuten korrigieren.
 
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import BackupPanel from './BackupPanel.jsx';
+import CashTransactionEditor from './CashTransactionEditor.jsx';
 import CashReceipts from './CashReceipts.jsx';
 import TasksPanel from './TasksPanel.jsx';
 import TaskMenuButton from './TaskMenuButton.jsx';
@@ -309,7 +310,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '8.1';
+  const version = '8.2';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canDeleteCash = sessionUser?.cashPermissions?.canDelete === true;
@@ -2308,6 +2309,7 @@ export default function App() {
                       Eingetragen von {transaction.createdBy || 'Unbekannt'} am{' '}
                       {formatAuditTime(transaction.createdAt)}
                     </span>
+                    {transaction.lastEditedAt && <span>Bearbeitet von {transaction.lastEditedBy} am {formatAuditTime(transaction.lastEditedAt)}</span>}
                   </div>
                   <div className="cash-history-actions">
                     <strong className={`cash-history-amount ${transaction.type === 'deposit' ? 'cash-deposit' : 'cash-expense'}`}>
@@ -2317,6 +2319,7 @@ export default function App() {
                       aria-label={`Buchung ${transaction.purpose} vom ${formatInputDate(transaction.date)} löschen`}
                       onClick={() => deleteCashTransaction(transaction)}>Buchung löschen</button>}
                   </div>
+                  <CashTransactionEditor key={`edit-${authToken}-${transaction._id}`} transaction={transaction} request={authenticatedRequest} onSaved={applyTeamCashResponse} disabled={busy} />
                   <CashReceipts key={`${authToken}-${transaction._id}`} request={authenticatedRequest} transactionId={transaction._id} />
                 </article>
               ))}
