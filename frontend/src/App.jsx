@@ -1,8 +1,9 @@
-// Version 7.7: Mannschaftsdaten sichern und kontrolliert importieren.
+// Version 7.8: Gemeinsame Aufgaben mit Zuständigkeit und Fälligkeit.
 
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import BackupPanel from './BackupPanel.jsx';
+import TasksPanel from './TasksPanel.jsx';
 import './App.css';
 import {
   STATUS_OPTIONS,
@@ -272,6 +273,7 @@ export default function App() {
   const [showReport, setShowReport] = useState(false);
   const [checklists, setChecklists] = useState([]);
   const [showChecklists, setShowChecklists] = useState(false);
+  const [showTasks, setShowTasks] = useState(false);
   const [newChecklistTitle, setNewChecklistTitle] = useState('');
   const [expandedChecklist, setExpandedChecklist] = useState(null);
   const [teamCash, setTeamCash] = useState({
@@ -305,7 +307,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '7.7';
+  const version = '7.8';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canDeleteCash = sessionUser?.cashPermissions?.canDelete === true;
@@ -801,6 +803,7 @@ export default function App() {
     setShowSettings(false);
     setSettingsCategory(null);
     setShowChecklists(false);
+    setShowTasks(false);
     setShowTeamGenerator(false);
     setShowTeamCash(false);
     setTeamCash({
@@ -2001,6 +2004,11 @@ export default function App() {
     );
   }
 
+  if (showTasks && canAccess('tasks')) {
+    return <TasksPanel key={authToken} request={authenticatedRequest} username={loggedInUser}
+      onBack={() => { setShowTasks(false); setShowStartMenu(true); }} />;
+  }
+
   if (showStartMenu) {
     return (
       <div className="start-menu modern-dark-blue">
@@ -2019,6 +2027,9 @@ export default function App() {
         >
           {busy ? 'Bitte warten…' : '⚽ Trainingsteilnahme'}
         </button>}
+        {canAccess('tasks') && <button className="main-func-btn"
+          style={{ margin: '0.9em auto 0 auto', fontSize: '1.13rem', minWidth: 260 }}
+          disabled={busy} onClick={() => { setShowTasks(true); setShowStartMenu(false); }}>Aufgaben</button>}
         {canAccess('checklists') && <button
           className="main-func-btn"
           style={{ margin: '0.9em auto 0 auto', fontSize: '1.13rem', minWidth: 260 }}
@@ -3244,6 +3255,7 @@ export default function App() {
                     {[
                       ['training', 'Trainingsteilnahme'],
                       ['checklists', 'Checklisten'],
+                      ['tasks', 'Aufgaben'],
                       ['teamGenerator', 'Teamgenerator'],
                       ['teamCash', 'Mannschaftskasse'],
                     ].map(([key, label]) => (

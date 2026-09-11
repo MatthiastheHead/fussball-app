@@ -46,10 +46,12 @@ module.exports = function registerBackupRoutes({ app, mongoose, models, requireS
       if (previews.size >= 5) return res.status(429).json({ error: 'Zu viele offene Importprüfungen.' });
       const data = validateFull(await unseal(req.body?.backup, req.body?.password, recoveryKey), models);
       const before = await snapshot(FULL_KEYS);
+      const preservedTasks = !Object.hasOwn(data, 'tasks');
+      if (preservedTasks) data.tasks = before.tasks;
       const recoveryBackup = await seal(before, req.body?.password, req.auth, version, recoveryKey);
       const token = randomBytes(24).toString('hex'), expiresAt = Date.now() + 5 * 60 * 1000;
       previews.set(token, { full: true, owner: req.auth.token, expiresAt, data, beforeHash: snapshotHash(before) });
-      res.json({ full: true, token, expiresAt, recoveryBackup, summary: FULL_KEYS.map(key => ({ key, label: FULL_LABELS[key], before: before[key].length, after: data[key].length })) });
+      res.json({ full: true, preservedTasks, token, expiresAt, recoveryBackup, summary: FULL_KEYS.map(key => ({ key, label: FULL_LABELS[key], before: before[key].length, after: data[key].length })) });
     } catch (error) { sendError(res, error); }
   });
   app.post('/backup/export', requireBackup('canExport'), async (req, res) => {

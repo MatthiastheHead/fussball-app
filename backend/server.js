@@ -18,6 +18,8 @@ const PasswordResetRequest = require('./models/PasswordResetRequest');
 const TeamCash = require('./models/TeamCash');
 const { ACCESS_KEYS, permissionsFor, isAdminUser, cashPermissionsFor, backupPermissionsFor } = require('./accessUtils');
 const registerBackupRoutes = require('./backupRoutes');
+const Task = require('./models/Task');
+const registerTaskRoutes = require('./taskRoutes');
 const { hashPassword, isPasswordHash, verifyPassword } = require('./authUtils');
 const {
   createOtpAuthUrl,
@@ -1164,8 +1166,9 @@ app.post('/checklists', requireAccess('checklists'), async (req, res) => {
   }
 });
 
+registerTaskRoutes({ app, Task, User, requireAccess, mongoose });
 registerBackupRoutes({ app, mongoose, requireSession, version, recoveryKey: recoveryEncryptionKey, invalidateAllSessions: () => sessions.clear(),
-  models: { players: Player, trainings: Training, checklists: Checklist, settings: AppSettings, teamCash: TeamCash, users: User, recovery: AdminRecovery, passwordResets: PasswordResetRequest, loginEvents: LoginEvent },
+  models: { players: Player, trainings: Training, checklists: Checklist, settings: AppSettings, teamCash: TeamCash, tasks: Task, users: User, recovery: AdminRecovery, passwordResets: PasswordResetRequest, loginEvents: LoginEvent },
 });
 
 // ---- 5.6 Mannschaftskasse ----

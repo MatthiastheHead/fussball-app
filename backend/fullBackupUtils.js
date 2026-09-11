@@ -41,10 +41,13 @@ async function unseal(backup, password, recoveryKey) {
   return payload.data;
 }
 function validateFull(raw, models) {
-  if (!raw || Array.isArray(raw) || Object.keys(raw).length !== FULL_KEYS.length || FULL_KEYS.some(key => !Array.isArray(raw[key]))) fail('Die vollständige Sicherung muss alle neun Datenbereiche enthalten.');
-  const business = Object.fromEntries(KEYS.map(key => [key, raw[key]]));
+  // Older complete backups predate tasks. Preserve current tasks instead of deleting them.
+  const keys = FULL_KEYS.filter(key => key !== 'tasks' || Object.hasOwn(raw || {}, 'tasks'));
+  if (!raw || Array.isArray(raw) || Object.keys(raw).length !== keys.length || keys.some(key => !Array.isArray(raw[key]))) fail('Die vollständige Sicherung enthält nicht alle erforderlichen Datenbereiche.');
+  const businessKeys = KEYS.filter(key => keys.includes(key));
+  const business = Object.fromEntries(businessKeys.map(key => [key, raw[key]]));
   const auth = { username: 'Matthias', isAdmin: true, cashPermissions: { canViewDeleted: true } };
-  const data = validateBackup(makeBackup(business, auth, '7.7.0'), KEYS, auth, models);
+  const data = validateBackup(makeBackup(business, auth, '7.8.0'), businessKeys, auth, models);
   const inspect = value => {
     if (!value || typeof value !== 'object') return;
     for (const [key, item] of Object.entries(value)) {

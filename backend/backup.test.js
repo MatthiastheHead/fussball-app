@@ -4,6 +4,7 @@ const registerRoutes = require('./backupRoutes');
 const { KEYS, makeBackup, validateBackup, scopeFor, prepareCashImport, digest } = require('./backupUtils');
 const { backupPermissionsFor } = require('./accessUtils');
 const realModels = {
+  tasks: require('./models/Task'),
   players: require('./models/Player'), trainings: require('./models/Training'),
   checklists: require('./models/Checklist'), settings: require('./models/AppSettings'), teamCash: require('./models/TeamCash'),
 };
@@ -16,6 +17,7 @@ const clone = value => JSON.parse(JSON.stringify(value));
 const id = n => n.toString(16).padStart(24, '0');
 const admin = { username: 'Matthias', token: 'session-a', isAdmin: true, cashPermissions: { canDelete: true, canViewDeleted: true } };
 const fixture = () => clone({
+  tasks: [new realModels.tasks({ _id: id(30), title: 'Leibchen waschen', assignedTo: id(20), assignedName: 'Matthias', dueDate: '2026-09-15', createdBy: 'Matthias', updatedBy: 'Matthias' })],
   players: [new realModels.players({ _id: id(1), name: 'Mia', note: 'Hinweis', inactive: false })],
   trainings: [new realModels.trainings({ _id: id(2), date: 'Do, 10.09.2026', participants: { Mia: '✅' }, ratings: { Mia: 3 }, history: [{ by: 'Matthias', action: 'Erstellt' }] })],
   checklists: [new realModels.checklists({ _id: id(3), title: 'Beitrag', items: { Mia: true }, remarks: { Mia: 'Bezahlt' } })],
@@ -24,6 +26,25 @@ const fixture = () => clone({
     { _id: id(6), date: '2026-09-10', type: 'deposit', amountCents: 500, purpose: 'Beitrag', person: 'Matthias', createdBy: 'Matthias' },
     { _id: id(7), date: '2026-09-09', type: 'expense', amountCents: 200, purpose: 'Fehlbuchung', person: 'Matthias', createdBy: 'Matthias', deletedAt: new Date(), deletedBy: 'Matthias' },
   ] })],
+});
+
+test('Alte Komplettsicherungen lassen heutige Aufgaben erhalten', async () => {
+  const { state, invoke } = harness();
+  const originalTasks = clone(state.db.tasks);
+  const old = clone(state.db);
+  delete old.tasks;
+  const backup = await seal(old, password, admin, '7.7.0', recoveryKey);
+  const preview = await invoke('/backup/full/preview', { backup, password });
+  assert.equal(preview.code, 200);
+  assert.equal(preview.body.preservedTasks, true);
+  assert.equal((await invoke('/backup/import', { token: preview.body.token, confirm: true })).code, 200);
+  assert.deepEqual(state.db.tasks, originalTasks);
+});
+
+test('Aufgaben in Teilsicherungen beachten die Bereichsrechte', () => {
+  const auth = { username: 'Trainer', permissions: { tasks: false } };
+  assert.equal(scopeFor(auth).includes('tasks'), false);
+  assert.throws(() => validateBackup(makeBackup(fixture(), admin, '7.8.0'), ['tasks'], auth, realModels), /Importberechtigung/);
 });
 
 function harness() {
@@ -171,7 +192,7 @@ test('Komplettsicherung ist verschlüsselt, authentifiziert und an die Serverkon
   await assert.rejects(seal(raw, 'kurz', admin, '7.7.0', recoveryKey), /12 bis/);
 });
 
-test('Vollständiger Import stellt alle neun Bereiche wieder her und beendet Sitzungen', async () => {
+test('Vollständiger Import stellt alle zehn Bereiche wieder her und beendet Sitzungen', async () => {
   const { state, invoke } = harness();
   state.db.recovery = clone([new realModels.recovery({ _id: id(21), key: 'main', userId: id(20), username: 'Matthias', encryptedSecret: encryptSecret('JBSWY3DPEHPK3PXP', recoveryKey), recoveryCodeHashes: [hashRecoveryCode('ABCDEFGHJKLM', recoveryKey)] })]);
   state.db.loginEvents = clone([new realModels.loginEvents({ _id: id(22), username: 'Matthias' })]);
@@ -182,7 +203,7 @@ test('Vollständiger Import stellt alle neun Bereiche wieder her und beendet Sit
   state.db.teamCash[0].transactions = [];
   const preview = await invoke('/backup/full/preview', { backup: exported.body, password });
   assert.equal(preview.code, 200);
-  assert.equal(preview.body.summary.length, 9);
+  assert.equal(preview.body.summary.length, 10);
   assert.equal(preview.body.recoveryBackup.data, undefined);
   const result = await invoke('/backup/import', { token: preview.body.token, confirm: true });
   assert.equal(result.code, 200);
