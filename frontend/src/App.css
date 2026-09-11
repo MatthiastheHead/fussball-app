@@ -2976,3 +2976,5 @@ footer a {
 .task-check { display: flex; gap: .6rem; align-items: center; min-height: 44px; }
 .task-check input { width: 22px; height: 22px; }
 @media (max-width: 600px) { .task-fields { grid-template-columns: 1fr; gap: 0; } .tasks-panel { padding: .75rem; } }
+.main-func-btn.todo-menu-button { display: flex; align-items: center; justify-content: center; gap: .8rem; margin: .9em auto 0; font-size: 1.13rem; min-width: 260px; }
+.todo-count-badge { display: inline-flex; justify-content: center; align-items: center; box-sizing: border-box; min-width: 1.65rem; height: 1.65rem; padding: 0 .4rem; border-radius: 999px; background: #c51e32; color: #fff; font-size: .9rem; font-weight: 700; line-height: 1; flex-shrink: 0; }

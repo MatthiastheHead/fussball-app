@@ -15,6 +15,18 @@ module.exports = function registerTaskRoutes({ app, Task, User, requireAccess, m
   app.get('/tasks', access, wrap(async (_req, res) => {
     res.json(await Task.find({}).sort({ completed: 1, createdAt: -1 }).lean());
   }));
+  app.get('/tasks/my-open-count', access, wrap(async (req, res) => {
+    const user = await User.findOne({ name: req.auth.username }).select('_id').lean();
+    const count = user ? await Task.countDocuments({ assignedTo: String(user._id), completed: false }) : 0;
+    res.json({ count });
+  }));
+  app.delete('/tasks/:id', access, wrap(async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.id)) fail('Ungültiges To-do.');
+    if (req.body?.confirm !== true) fail('Bitte das Löschen bestätigen.');
+    const removed = await Task.findByIdAndDelete(req.params.id);
+    if (!removed) fail('Das To-do wurde nicht gefunden.', 404);
+    res.json({ ok: true, id: String(removed._id) });
+  }));
   async function fields(body, current) {
     if (!body || typeof body !== 'object' || Array.isArray(body)) fail('Ungültige Aufgabe.');
     const title = typeof body.title === 'string' ? body.title.trim() : '';

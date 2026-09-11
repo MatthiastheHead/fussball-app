@@ -2,7 +2,7 @@ const { createHash } = require('crypto');
 const FORMAT = 'fussball-app-backup';
 const KEYS = ['players', 'trainings', 'checklists', 'settings', 'teamCash', 'tasks'];
 const LIMIT = 8 * 1024 * 1024;
-const labels = { players: 'Spielerinnen und Trainer', trainings: 'Trainings', checklists: 'Checklisten', settings: 'Einstellungen', teamCash: 'Mannschaftskasse', tasks: 'Aufgaben' };
+const labels = { players: 'Spielerinnen und Trainer', trainings: 'Trainings', checklists: 'Checklisten', settings: 'Einstellungen', teamCash: 'Mannschaftskasse', tasks: 'To-dos' };
 const fail = message => { throw Object.assign(new Error(message), { status: 400 }); };
 const canonical = value => {
   if (Array.isArray(value)) return value.map(canonical);
