@@ -1,6 +1,7 @@
-// Version 8.4: Aufklappbarer Verlauf und endgültiges Löschen durch Kassenadmins.
+// Version 9.0: SquadHQ im sportlichen Design, mit unveränderter Start- und Anmeldelogik.
 
 import React, { useState, useEffect } from 'react';
+import SquadBrand from './SquadBrand.jsx';
 import QRCode from 'qrcode';
 import BackupPanel from './BackupPanel.jsx';
 import CashTransactionEditor from './CashTransactionEditor.jsx';
@@ -9,6 +10,7 @@ import { uploadCashReceipt, validateCashFiles } from './cashReceiptUpload.js';
 import TasksPanel from './TasksPanel.jsx';
 import TaskMenuButton from './TaskMenuButton.jsx';
 import './App.css';
+import './SquadBrand.css';
 import {
   STATUS_OPTIONS,
   RATING_VALUES,
@@ -316,7 +318,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '8.4';
+  const version = '9.0';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canDeleteCash = sessionUser?.cashPermissions?.canDelete === true;
@@ -1887,13 +1889,13 @@ export default function App() {
   // === UI Rendering ===
   if (!loggedInUser) {
     return (
-      <div className="login-screen modern-dark-blue">
-        <div className="login-icon-row">
-          <span className="login-icon" role="img" aria-label="fußball">⚽</span>
-        </div>
-        <div>
-          <h1 className="login-headline">Fußball-App</h1>
-          <div className="login-version">Version {version}</div>
+      <div className="login-screen modern-dark-blue squad-login">
+        <SquadBrand />
+        <div className="squad-login-card">
+          <div className={`login-hint squad-status ${initializing ? 'starting' : loadError ? 'failed' : 'ready'}`} role="status" aria-live="polite">
+            <span aria-hidden="true" className="squad-status-dot" />
+            {initializing ? 'App startet. Der Server wird gestartet und die Daten werden geladen…' : loadError || 'Die App ist bereit.'}
+          </div>
           {showPasswordRecovery ? (
             <div className="password-recovery-form">
               <h2>Passwort zurücksetzen</h2>
@@ -1993,12 +1995,9 @@ export default function App() {
             </div>
           ) : (
             <>
-              <div className="login-hint">
-                {initializing
-                  ? 'Der Server wird gestartet und die Daten werden geladen…'
-                  : loadError || 'Die App ist bereit.'}
-              </div>
+              <label className="squad-login-label" htmlFor="squad-username">Benutzername</label>
               <input
+                id="squad-username"
                 type="text"
                 placeholder="Benutzername"
                 value={loginName}
@@ -2007,7 +2006,9 @@ export default function App() {
                 autoComplete="username"
                 disabled={initializing}
               />
+              <label className="squad-login-label" htmlFor="squad-password">Passwort</label>
               <input
+                id="squad-password"
                 type="password"
                 placeholder="Passwort"
                 value={loginPass}
@@ -2017,7 +2018,7 @@ export default function App() {
                 disabled={initializing}
               />
               <button onClick={handleLogin} disabled={busy || initializing || !!loadError}>
-                {initializing ? 'Bitte warten…' : 'Einloggen'}
+                {initializing ? 'Bitte warten…' : busy ? 'Anmeldung läuft…' : 'Anmelden'}
               </button>
               <button
                 className="login-secondary-button"
@@ -2043,6 +2044,8 @@ export default function App() {
             </>
           )}
         </div>
+        <p className="squad-description">Training, Teamorganisation, Aufgaben und Kasse an einem Ort.</p>
+        <div className="login-version">Version {version}</div>
       </div>
     );
   }
@@ -2054,8 +2057,9 @@ export default function App() {
 
   if (showStartMenu) {
     return (
-      <div className="start-menu modern-dark-blue">
-        <h2 style={{ color: '#7dc4ff', marginTop: '1.3em' }}>Willkommen, {loggedInUser}!</h2>
+      <div className="start-menu modern-dark-blue squad-start">
+        <SquadBrand compact />
+        <h2 className="squad-welcome">Willkommen, {loggedInUser}!</h2>
         {canAccess('training') && <button
           className="main-func-btn"
           style={{ margin: '2.2em auto 0 auto', fontSize: '1.3rem', minWidth: 260 }}
