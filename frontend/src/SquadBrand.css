@@ -1,0 +1,43 @@
+/* Branding scoped to login and start menu; functional module styles stay intact. */
+.squad-login.login-screen {
+  width: min(calc(100% - 2rem), 460px);
+  margin: 0 auto;
+  padding: clamp(1.25rem, 4vh, 3rem) 0 1.5rem;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+body:has(.squad-login), body:has(.squad-start) {
+  background: radial-gradient(ellipse at 50% 30%, #11263c 0%, #091827 65%);
+}
+.squad-brand { text-align: center; margin: 0 auto 1.5rem; }
+.squad-brand img { display: block; width: 128px; height: 128px; margin: 0 auto; border-radius: 24px; }
+.squad-brand h1 { font-size: clamp(2.6rem, 10vw, 3.6rem); line-height: 1.1; font-weight: 850; font-style: italic; letter-spacing: -.055em; color: #f7fbff; margin: .35rem 0 .8rem; }
+.squad-brand h1 span { color: #45eb36; }
+.squad-brand p { font-size: .94rem; line-height: 1.6; color: #bdcde3; margin: 0 auto; max-width: 360px; }
+.squad-login-card { padding: clamp(1.2rem, 5vw, 2rem); background: linear-gradient(145deg, #122235, #0e1c2b); border: 1px solid #293e53; border-radius: 22px; box-shadow: 0 18px 42px #0004; text-align: left; }
+.squad-login .squad-login-label { display: block; margin: 1.1rem 0 .4rem; font-weight: 550; font-size: 1rem; color: #f1f5fa; }
+.squad-login input { margin: 0; min-height: 52px; padding: .9rem 1rem; border-radius: 12px; background: #1a2a3d; border: 1px solid #3b4e64; font-size: 1rem; }
+.squad-login input:focus-visible { outline: 2px solid #45eb36; outline-offset: 2px; }
+.squad-login button { min-height: 52px; margin-top: 1rem; border-radius: 12px; background: linear-gradient(120deg, #49e539, #32c829); color: #071b0a; font-size: 1rem; font-weight: 700; border: 1px solid transparent; box-shadow: none; }
+.squad-login button:hover:not(:disabled) { background: #63ed55; }
+.squad-login .login-secondary-button, .squad-login .login-admin-request-button { background: #1a2a3d; border: 1px solid #3b4e64; color: #e6eef8; font-weight: 500; }
+.squad-login .login-secondary-button:hover:not(:disabled), .squad-login .login-admin-request-button:hover:not(:disabled) { background: #263b53; }
+.squad-login .squad-status { display: flex; align-items: flex-start; gap: .6rem; font-size: .875rem; line-height: 1.5; background: #0b1726; border: 1px solid #2c4056; color: #c2d3e5; padding: .7rem .8rem; margin: 0 0 1rem; }
+.squad-status-dot { width: 8px; height: 8px; flex: 0 0 8px; margin-top: .4rem; border-radius: 50%; background: #e8bb60; }
+.squad-status.ready .squad-status-dot { background: #45eb36; }
+.squad-status.failed .squad-status-dot { background: #ff8989; }
+.squad-status.failed { color: #ffb9b9; }
+.squad-description { text-align: center; color: #99acc4; font-size: .875rem; line-height: 1.6; max-width: 350px; margin: 1.5rem auto; }
+.squad-login .login-version { font-size: .8rem; color: #8fa4bd; margin: 0; }
+.squad-start.start-menu { width: min(100%, 560px); margin: 0 auto; padding: 1.25rem 1rem 2rem; }
+.squad-brand.compact { margin-bottom: 1.5rem; }
+.squad-brand.compact img { width: 88px; height: 88px; border-radius: 18px; }
+.squad-brand.compact h1 { font-size: 2.5rem; }
+.squad-start .squad-welcome { font-size: 1.15rem; color: #eaf2fc; margin: 1.4rem 0; text-align: center; }
+.squad-start .main-func-btn { display: block; position: relative; width: 100%; min-width: 0 !important; min-height: 62px; margin: .75rem auto 0 !important; padding: 1rem 1.25rem; border-radius: 15px; border: 1px solid #30465e; background: linear-gradient(120deg, #172b40, #112236); box-shadow: 0 6px 16px #0002; color: #edf5ff; font-size: 1.05rem !important; text-align: left; }
+.squad-start .main-func-btn:hover:not(:disabled) { background: #203c53; border-color: #45eb36; }
+.squad-start .main-func-btn:first-of-type { background: linear-gradient(120deg, #49e539, #32c829); border-color: transparent; color: #08210b; }
+.squad-start .account-security-reminder { margin-top: 1.2rem; }
+@media (max-width: 360px) { .squad-brand img { width: 100px; height: 100px; } .squad-brand h1 { font-size: 2.7rem; } }
