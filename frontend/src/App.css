@@ -3009,3 +3009,5 @@ footer a {
 .cash-file-picker input { box-sizing: border-box; max-width: 100%; }
 .cash-file-row { display: flex; justify-content: space-between; align-items: center; gap: .6rem; margin: .5rem 0; }
 .cash-file-row span { overflow-wrap: anywhere; min-width: 0; }
+
+.cash-history-toggle { width: 100%; min-height: 48px; margin: 1rem 0; font-size: 1rem; }

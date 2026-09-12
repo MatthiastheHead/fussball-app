@@ -1,4 +1,4 @@
-// Version 8.3: Kompakte Kasse mit direkter Belegauswahl.
+// Version 8.4: Aufklappbarer Verlauf und endgültiges Löschen durch Kassenadmins.
 
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
@@ -287,6 +287,7 @@ export default function App() {
     transactions: [],
   });
   const [showTeamCash, setShowTeamCash] = useState(false);
+  const [cashHistoryOpen, setCashHistoryOpen] = useState(false);
   const [cashPanel, setCashPanel] = useState(null);
   const [cashFiles, setCashFiles] = useState([]);
   const [pendingCashId, setPendingCashId] = useState(null);
@@ -315,7 +316,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '8.3';
+  const version = '8.4';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canDeleteCash = sessionUser?.cashPermissions?.canDelete === true;
@@ -588,7 +589,7 @@ export default function App() {
   const loadDeletedCash = async () => {
     setDeletedCashError('');
     setDeletedCashTransactions([]);
-    const response = await authenticatedRequest('team-cash/deleted', { cache: 'no-store' });
+    const response = await authenticatedRequest(canViewDeletedCash ? 'team-cash/deleted' : 'team-cash/deleted-removal', { cache: 'no-store' });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       setDeletedCashError(data.error || 'Gelöschte Buchungen konnten nicht geladen werden.');
@@ -613,6 +614,16 @@ export default function App() {
     applyTeamCashResponse(data);
     if (canViewDeletedCash && showDeletedCash) await loadDeletedCash();
     return true;
+  });
+
+  const purgeCashTransaction = transaction => runOnce(async () => {
+    if (!canDeleteCash || !transaction._id) return false;
+    if (!window.confirm(`Buchung „${transaction.purpose}“ vom ${formatInputDate(transaction.date)} über ${formatEuro(transaction.amountCents)} endgültig löschen? Zugehörige Belege werden ebenfalls entfernt. Das lässt sich in der App nicht rückgängig machen.`)) return false;
+    setDeletedCashError('');
+    const response = await authenticatedRequest(`team-cash/transactions/${transaction._id}/permanent`, { method: 'DELETE' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) { setDeletedCashError(data.error || 'Endgültiges Löschen fehlgeschlagen.'); return false; }
+    return loadDeletedCash();
   });
 
   const exportTeamCash = () => runOnce(async () => {
@@ -2103,6 +2114,7 @@ export default function App() {
           style={{ margin: '0.9em auto 0 auto', fontSize: '1.13rem', minWidth: 260 }}
           onClick={() => {
             setShowTeamCash(true);
+            setCashHistoryOpen(false);
             setCashPanel(null);
             setCashNotice('');
             setShowStartMenu(false);
@@ -2327,7 +2339,10 @@ export default function App() {
           {cashExportError && <p className="login-error" role="alert">{cashExportError}</p>}
         </section>}
 
-        <section className="cash-history-section">
+        <button type="button" className="btn-edit cash-history-toggle" aria-expanded={cashHistoryOpen} aria-controls="cash-history-panel" onClick={() => setCashHistoryOpen(value => !value)}>
+          {cashHistoryOpen ? 'Buchungsverlauf schließen' : `Buchungsverlauf (${teamCash.transactions.length})`}
+        </button>
+        {cashHistoryOpen && <section className="cash-history-section" id="cash-history-panel">
           <div className="cash-history-heading">
             <div>
               <h2>Buchungsverlauf</h2>
@@ -2375,9 +2390,9 @@ export default function App() {
               ))}
             </div>
           )}
-        </section>
+        </section>}
 
-        {canViewDeletedCash && <details className="cash-history-section"><summary>Gelöschte Buchungen</summary>
+        {(canViewDeletedCash || canDeleteCash) && <details className="cash-history-section"><summary>Gelöschte Buchungen</summary>
           <button type="button" className="btn-edit" disabled={busy} onClick={() => runOnce(async () => {
             setShowDeletedCash(true);
             return loadDeletedCash();
@@ -2388,12 +2403,13 @@ export default function App() {
             {deletedCashTransactions.map(transaction => <article key={transaction._id} className="cash-history-card">
               <div className="cash-history-date"><strong>{formatInputDate(transaction.date)}</strong><span>{transaction.person}</span></div>
               <div className="cash-history-purpose"><strong>{transaction.purpose}</strong>
-                <span>Gelöscht von {transaction.deletedBy || 'Unbekannt'} am {formatAuditTime(transaction.deletedAt)}</span>
+                {canViewDeletedCash && <span>Gelöscht von {transaction.deletedBy || 'Unbekannt'} am {formatAuditTime(transaction.deletedAt)}</span>}
               </div>
               <strong className={`cash-history-amount ${transaction.type === 'deposit' ? 'cash-deposit' : 'cash-expense'}`}>
                 {transaction.type === 'deposit' ? 'Einzahlung +' : 'Ausgabe −'} {formatEuro(transaction.amountCents)}
               </strong>
-              <CashReceipts key={`${authToken}-${transaction._id}`} request={authenticatedRequest} transactionId={transaction._id} readOnly />
+              {canViewDeletedCash && <CashReceipts key={`${authToken}-${transaction._id}`} request={authenticatedRequest} transactionId={transaction._id} readOnly />}
+              {canDeleteCash && <button type="button" className="cash-delete-button" disabled={busy} onClick={() => purgeCashTransaction(transaction)}>Endgültig löschen</button>}
             </article>)}
           </div>}
         </details>}
@@ -3330,13 +3346,13 @@ export default function App() {
                           canDelete: event.target.checked,
                           ...(!event.target.checked ? { canViewDeleted: false } : {}),
                         } })} />
-                      Kassenadmin: Buchungen löschen
+                      Kassenadmin: Buchungen löschen und endgültig entfernen
                     </label>
                     <label>
                       <input type="checkbox" checked={!!u.cashPermissions?.canViewDeleted}
                         disabled={busy || !isMainAdmin || u.isMainAdmin || !u.cashPermissions?.canDelete}
                         onChange={event => updateUserAccess(u, { cashPermissions: { canViewDeleted: event.target.checked } })} />
-                      Gelöschte Kassenbuchungen sehen
+                      Gelöschte Kassenbuchungen: Löschangaben und Belege sehen
                     </label>
                     <label>
                       <input type="checkbox" checked={u.isAdmin || !!u.backupPermissions?.canExport} disabled={busy || u.isAdmin}
