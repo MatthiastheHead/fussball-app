@@ -2994,3 +2994,18 @@ footer a {
 .cash-transaction-editor label { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
 .cash-transaction-editor button { min-height: 44px; }
 .cash-transaction-editor .cash-entry-form { margin-top: .7rem; }
+
+.cash-toolbar { display: flex; gap: .75rem; margin: 1rem 0; flex-wrap: wrap; }
+.cash-toolbar button { flex: 1; min-height: 48px; font-size: 1rem; }
+.cash-toolbar button[aria-expanded="true"] { outline: 2px solid #8bb2f4; }
+.cash-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.cash-panel-heading h2 { margin: 0; }
+.cash-booking-details { grid-column: 1 / -1; border-top: 1px solid #3a5477; padding-top: .5rem; min-width: 0; }
+.team-cash-page summary { cursor: pointer; padding: .6rem 0; min-height: 44px; box-sizing: border-box; font-size: .95rem; color: #aacaef; }
+.cash-booking-audit { display: flex; flex-direction: column; gap: .4rem; font-size: .875rem; padding: .5rem 0 1rem; }
+.cash-booking-details .cash-delete-button { margin-top: .75rem; min-height: 44px; }
+.cash-file-picker { border-top: 1px solid #3a5477; padding-top: 1rem; min-width: 0; }
+.cash-file-picker p { font-size: .875rem; }
+.cash-file-picker input { box-sizing: border-box; max-width: 100%; }
+.cash-file-row { display: flex; justify-content: space-between; align-items: center; gap: .6rem; margin: .5rem 0; }
+.cash-file-row span { overflow-wrap: anywhere; min-width: 0; }

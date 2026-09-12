@@ -1,10 +1,11 @@
-// Version 8.2: Kassenbuchungen innerhalb von 15 Minuten korrigieren.
+// Version 8.3: Kompakte Kasse mit direkter Belegauswahl.
 
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import BackupPanel from './BackupPanel.jsx';
 import CashTransactionEditor from './CashTransactionEditor.jsx';
 import CashReceipts from './CashReceipts.jsx';
+import { uploadCashReceipt, validateCashFiles } from './cashReceiptUpload.js';
 import TasksPanel from './TasksPanel.jsx';
 import TaskMenuButton from './TaskMenuButton.jsx';
 import './App.css';
@@ -286,6 +287,10 @@ export default function App() {
     transactions: [],
   });
   const [showTeamCash, setShowTeamCash] = useState(false);
+  const [cashPanel, setCashPanel] = useState(null);
+  const [cashFiles, setCashFiles] = useState([]);
+  const [pendingCashId, setPendingCashId] = useState(null);
+  const [cashNotice, setCashNotice] = useState('');
   const [cashOpeningBalance, setCashOpeningBalance] = useState('0,00');
   const [cashEntry, setCashEntry] = useState({
     type: 'expense',
@@ -310,7 +315,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '8.2';
+  const version = '8.3';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canDeleteCash = sessionUser?.cashPermissions?.canDelete === true;
@@ -542,23 +547,41 @@ export default function App() {
         setCashError('Bitte einen gültigen Buchungsbetrag größer als 0 € eingeben.');
         return false;
       }
-      const response = await authenticatedRequest('team-cash/transactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: cashEntry.type,
-          date: cashEntry.date,
-          amountCents,
-          purpose: cashEntry.purpose.trim(),
-        }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setCashError(data.error || 'Die Buchung konnte nicht gespeichert werden.');
+      try {
+        validateCashFiles(cashFiles);
+        let transactionId = pendingCashId;
+        if (!transactionId) {
+          const response = await authenticatedRequest('team-cash/transactions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: cashEntry.type,
+              date: cashEntry.date,
+              amountCents,
+              purpose: cashEntry.purpose.trim(),
+            }),
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            setCashError(data.error || 'Die Buchung konnte nicht gespeichert werden.');
+            return false;
+          }
+          applyTeamCashResponse(data);
+          transactionId = data.createdTransactionId || 'unavailable';
+          setPendingCashId(transactionId);
+        }
+        for (const file of cashFiles) {
+          await uploadCashReceipt(authenticatedRequest, transactionId, file);
+          setCashFiles(previous => previous.filter(item => item !== file));
+        }
+        setPendingCashId(null);
+        setCashEntry(entry => ({ ...entry, amount: '', purpose: '' }));
+        setCashPanel(null);
+        setCashNotice('Buchung gespeichert. Belege kannst du jederzeit unter „Details und Belege“ ergänzen.');
+      } catch (error) {
+        setCashError(error.message + ' Bereits gespeicherte Buchungen und Belege bleiben erhalten.');
         return false;
       }
-      applyTeamCashResponse(data);
-      setCashEntry((entry) => ({ ...entry, amount: '', purpose: '' }));
       return true;
     });
 
@@ -762,6 +785,9 @@ export default function App() {
       setSettingsCategory(null);
       setShowTeamGenerator(false);
       setShowTeamCash(false);
+      setPendingCashId(null);
+      setCashFiles([]);
+      setCashPanel(null);
       setCashEntry((entry) => ({ ...entry, person: session.name }));
       const accountStatusPromise = loadRecoveryStatus(session.token);
       const teamCashPromise = (session.isAdmin || session.permissions?.teamCash !== false)
@@ -809,6 +835,9 @@ export default function App() {
     setShowTasks(false);
     setShowTeamGenerator(false);
     setShowTeamCash(false);
+    setPendingCashId(null);
+    setCashFiles([]);
+    setCashPanel(null);
     setTeamCash({
       openingBalanceCents: 0,
       openingBalanceUpdatedBy: '',
@@ -2074,6 +2103,8 @@ export default function App() {
           style={{ margin: '0.9em auto 0 auto', fontSize: '1.13rem', minWidth: 260 }}
           onClick={() => {
             setShowTeamCash(true);
+            setCashPanel(null);
+            setCashNotice('');
             setShowStartMenu(false);
             setShowSettings(false);
             setShowChecklists(false);
@@ -2168,11 +2199,15 @@ export default function App() {
           </div>
         </section>
 
-        <section className="cash-entry-section">
-          <div>
-            <h2>Buchung eintragen</h2>
-            <p>Jede Einzahlung und Ausgabe wird mit allen Angaben und dem eingeloggten Benutzer gespeichert.</p>
-          </div>
+        <div className="cash-toolbar">
+          <button type="button" className="btn-edit" aria-expanded={cashPanel === 'entry'} aria-controls="cash-entry-panel" disabled={busy} onClick={() => setCashPanel(cashPanel === 'entry' ? null : 'entry')}>Neue Buchung</button>
+          <button type="button" className="btn-edit" aria-expanded={cashPanel === 'export'} aria-controls="cash-export-panel" disabled={busy} onClick={() => setCashPanel(cashPanel === 'export' ? null : 'export')}>PDF exportieren</button>
+        </div>
+        {cashNotice && <p role="status">{cashNotice}</p>}
+        {cashError && <p className="login-error cash-error" role="alert">{cashError}</p>}
+        {cashPanel === 'entry' && <section className="cash-entry-section" id="cash-entry-panel">
+          <div className="cash-panel-heading"><h2>Neue Buchung</h2><button type="button" className="btn-edit" disabled={busy} onClick={() => setCashPanel(null)}>Schließen</button></div>
+
           <form
             className="cash-entry-form"
             onSubmit={(event) => {
@@ -2234,17 +2269,29 @@ export default function App() {
                 disabled={busy}
               />
             </label>
+            <div className="cash-purpose-field cash-file-picker">
+              <span>Belege (optional)</span>
+              <p>Jetzt auswählen oder später zur Buchung hinzufügen. Fotos oder PDF, bis 10 MB je Datei.</p>
+              <label className="labeled-field">Fotografieren<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" disabled={busy} onChange={event => {
+                const files = [...event.target.files]; event.target.value = '';
+                try { validateCashFiles([...cashFiles, ...files]); setCashFiles(previous => [...previous, ...files]); setCashError(''); } catch (error) { setCashError(error.message); }
+              }} /></label>
+              <label className="labeled-field">Dateien auswählen<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple disabled={busy} onChange={event => {
+                const files = [...event.target.files]; event.target.value = '';
+                try { validateCashFiles([...cashFiles, ...files]); setCashFiles(previous => [...previous, ...files]); setCashError(''); } catch (error) { setCashError(error.message); }
+              }} /></label>
+              {cashFiles.map((file, index) => <div className="cash-file-row" key={`${file.name}-${index}`}><span>{file.name}</span><button type="button" className="btn-edit" disabled={busy} onClick={() => setCashFiles(previous => previous.filter((_, i) => i !== index))}>Entfernen</button></div>)}
+              {pendingCashId && <p role="status">Die Buchung ist gespeichert. Du kannst die ausstehenden Belege erneut hochladen oder entfernen und abschließen.</p>}
+            </div>
             <button type="submit" className="cash-submit-button" disabled={busy}>
-              {busy ? 'Wird gespeichert…' : cashEntry.type === 'deposit' ? 'Einzahlung buchen' : 'Ausgabe buchen'}
+              {busy ? 'Wird gespeichert…' : pendingCashId ? 'Belege speichern / Abschließen' : cashEntry.type === 'deposit' ? 'Einzahlung buchen' : 'Ausgabe buchen'}
             </button>
           </form>
-          <p>Belege kannst du nach dem Buchen im Buchungsverlauf fotografieren oder anhängen.</p>
-          {cashError && <p className="login-error cash-error">{cashError}</p>}
-        </section>
+        </section>}
 
-        <section className="cash-entry-section">
-          <h2>Als PDF exportieren</h2>
-          <p>Zeitraum innerhalb der Saison wählen. Der Mannschaftsname ist die Überschrift für diese Kasse, kein Filter für getrennte Mannschaftskassen.</p>
+        {cashPanel === 'export' && <section className="cash-entry-section" id="cash-export-panel">
+          <div className="cash-panel-heading"><h2>PDF exportieren</h2><button type="button" className="btn-edit" disabled={busy} onClick={() => setCashPanel(null)}>Schließen</button></div>
+          <p>Mannschaft und Zeitraum für deinen Bericht wählen.</p>
           <form className="cash-entry-form" onSubmit={event => { event.preventDefault(); exportTeamCash(); }}>
             <label className="labeled-field">
               <span>Saison für den Export</span>
@@ -2278,7 +2325,7 @@ export default function App() {
             <button type="submit" className="cash-submit-button" disabled={busy}>PDF herunterladen</button>
           </form>
           {cashExportError && <p className="login-error" role="alert">{cashExportError}</p>}
-        </section>
+        </section>}
 
         <section className="cash-history-section">
           <div className="cash-history-heading">
@@ -2305,31 +2352,32 @@ export default function App() {
                   </div>
                   <div className="cash-history-purpose">
                     <strong>{transaction.purpose}</strong>
-                    <span>
-                      Eingetragen von {transaction.createdBy || 'Unbekannt'} am{' '}
-                      {formatAuditTime(transaction.createdAt)}
-                    </span>
-                    {transaction.lastEditedAt && <span>Bearbeitet von {transaction.lastEditedBy} am {formatAuditTime(transaction.lastEditedAt)}</span>}
                   </div>
                   <div className="cash-history-actions">
                     <strong className={`cash-history-amount ${transaction.type === 'deposit' ? 'cash-deposit' : 'cash-expense'}`}>
                       {transaction.type === 'deposit' ? 'Einzahlung +' : 'Ausgabe −'} {formatEuro(transaction.amountCents)}
                     </strong>
+                  </div>
+                  <details className="cash-booking-details"><summary>Details und Belege</summary>
+<div className="cash-booking-audit">                    <span>
+                      Eingetragen von {transaction.createdBy || 'Unbekannt'} am{' '}
+                      {formatAuditTime(transaction.createdAt)}
+                    </span>
+                    {transaction.lastEditedAt && <span>Bearbeitet von {transaction.lastEditedBy} am {formatAuditTime(transaction.lastEditedAt)}</span>}
+</div>
+                  <CashTransactionEditor key={`edit-${authToken}-${transaction._id}`} transaction={transaction} request={authenticatedRequest} onSaved={applyTeamCashResponse} disabled={busy} />
+                  <CashReceipts key={`${authToken}-${transaction._id}`} request={authenticatedRequest} transactionId={transaction._id} />
                     {canDeleteCash && transaction._id && <button type="button" className="cash-delete-button" disabled={busy}
                       aria-label={`Buchung ${transaction.purpose} vom ${formatInputDate(transaction.date)} löschen`}
                       onClick={() => deleteCashTransaction(transaction)}>Buchung löschen</button>}
-                  </div>
-                  <CashTransactionEditor key={`edit-${authToken}-${transaction._id}`} transaction={transaction} request={authenticatedRequest} onSaved={applyTeamCashResponse} disabled={busy} />
-                  <CashReceipts key={`${authToken}-${transaction._id}`} request={authenticatedRequest} transactionId={transaction._id} />
+                  </details>
                 </article>
               ))}
             </div>
           )}
         </section>
 
-        {canViewDeletedCash && <section className="cash-history-section">
-          <h2>Gelöschte Buchungen</h2>
-          <p>Nur mit besonderer Kassenberechtigung sichtbar. Diese Einträge zählen nicht zum Kassenstand.</p>
+        {canViewDeletedCash && <details className="cash-history-section"><summary>Gelöschte Buchungen</summary>
           <button type="button" className="btn-edit" disabled={busy} onClick={() => runOnce(async () => {
             setShowDeletedCash(true);
             return loadDeletedCash();
@@ -2348,7 +2396,7 @@ export default function App() {
               <CashReceipts key={`${authToken}-${transaction._id}`} request={authenticatedRequest} transactionId={transaction._id} readOnly />
             </article>)}
           </div>}
-        </section>}
+        </details>}
 
         <button
           className="main-func-btn team-cash-back"

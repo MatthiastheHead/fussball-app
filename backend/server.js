@@ -1267,12 +1267,14 @@ app.post('/team-cash/transactions', requireAccess('teamCash'), async (req, res) 
   }
 
   try {
+    const transactionId = new mongoose.Types.ObjectId();
     const cash = await TeamCash.findOneAndUpdate(
       { key: 'team-cash' },
       {
         $setOnInsert: { key: 'team-cash', openingBalanceCents: 0 },
         $push: {
           transactions: {
+            _id: transactionId,
             type,
             date,
             person,
@@ -1285,7 +1287,7 @@ app.post('/team-cash/transactions', requireAccess('teamCash'), async (req, res) 
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
-    res.status(201).json(cleanTeamCash(cash));
+    res.status(201).json({ ...cleanTeamCash(cash), createdTransactionId: String(transactionId) });
   } catch (err) {
     console.error('Fehler POST /team-cash/transactions:', err);
     res.status(500).json({ error: 'Die Buchung konnte nicht gespeichert werden.' });
