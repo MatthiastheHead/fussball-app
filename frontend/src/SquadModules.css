@@ -1,0 +1,95 @@
+/* Shared SquadHQ surfaces across every functional module. Status colors stay semantic. */
+:root {
+  --squad-bg: #091827;
+  --squad-surface: #122235;
+  --squad-raised: #1a2c40;
+  --squad-border: #30465e;
+  --squad-text: #edf5ff;
+  --squad-muted: #b3c4d9;
+  --squad-green: #45eb36;
+}
+body { background: radial-gradient(ellipse at 50% 0, #142c43, var(--squad-bg) 65%); color: var(--squad-text); }
+.App { padding: 1rem; }
+.App > header { border: 1px solid var(--squad-border); border-radius: 18px; background: linear-gradient(120deg, #142a3e, #0e1c2b); padding: 1rem 1.25rem 1.2rem; box-shadow: 0 10px 28px #0003; }
+.squad-module-brand { display: flex; justify-content: center; align-items: center; gap: .5rem; margin-bottom: .6rem; }
+.squad-module-brand img { border-radius: 10px; flex-shrink: 0; }
+.squad-module-brand > span { font-size: 1.55rem; font-style: italic; font-weight: 850; letter-spacing: -.05em; color: #f7fbff; }
+.squad-module-brand strong { color: var(--squad-green); }
+.App > header h1 { color: var(--squad-text); font-size: clamp(1.25rem, 4vw, 1.75rem); }
+.App > header p { text-align: center; color: var(--squad-muted); line-height: 1.5; font-size: .95rem; }
+.App .blue-version { display: inline-block; vertical-align: middle; padding: .2rem .5rem; border: 1px solid #3c584f; border-radius: 7px; color: #a8e9ab; font-size: .75rem; font-weight: 600; }
+.App :is(.player-management, .admin-section, .settings-category-section, .cash-opening-section,
+  .cash-entry-section, .cash-history-section, .team-generator-controls, .team-generator-result,
+  .training-settings, .report-section, .add-training-panel, .checklist-create, .checklist-list,
+  .season-toolbar, .task-card, .task-form) {
+  background: var(--squad-surface); border-color: var(--squad-border); border-radius: 16px; box-shadow: 0 8px 24px #0002;
+}
+.App :is(.player-management, .admin-section, .settings-category-section, .cash-entry-section,
+  .training-settings, .report-section, .checklist-create, .task-form) h2 { color: var(--squad-text); }
+.App :is(.settings-category-card, .team-member-card, .team-add-panel, .team-group,
+  .login-overview-card, .password-request-card, .recovery-admin-card, .backup-preview,
+  .recovery-step, .user-access-controls, .cash-history-card, .training-card, .training-player-card) {
+  background: var(--squad-raised); border-color: var(--squad-border); border-radius: 12px;
+}
+.App .settings-category-card { box-shadow: 0 6px 16px #0002; min-height: 88px; }
+.App .settings-category-card:hover { background: #213a50; border-color: #68a784; }
+.App .settings-category-icon { background: #12332d; border-color: #366147; color: var(--squad-green); }
+.App .settings-category-copy strong { color: var(--squad-text); }
+.App .settings-category-copy small { color: var(--squad-muted); }
+.App .settings-category-card.has-alert { border-color: #b18742; }
+.App input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+.App select, .App textarea { background: #0e1c2d; border: 1px solid #415971; border-radius: 10px; color: var(--squad-text); min-height: 44px; font-size: 1rem; padding: .65rem .8rem; max-width: 100%; }
+.App input::placeholder, .App textarea::placeholder { color: #96acc5; }
+.App input[type="checkbox"], .App input[type="radio"] { accent-color: #38d42e; }
+.App :is(button, input, select, textarea, summary):focus-visible { outline: 3px solid #8ae780; outline-offset: 3px; }
+.App :is(.btn-edit, .btn-save-date, .btn-edit-date, .main-func-btn, .report-export-button,
+  .team-image-actions button, .remix-teams-button, .generator-player-selection-heading button),
+.App .controls button, .App .training-filter button, .App .report-form button {
+  background: #1c3349; border: 1px solid #3a5772; color: var(--squad-text); border-radius: 11px; box-shadow: 0 3px 10px #0002; min-height: 44px;
+}
+.App :is(.btn-save-players, .btn-save-training, .generate-teams-button, .cash-submit-button, .child-export-button),
+.App .add-player-form button:not(.btn-delete):not(.btn-edit) {
+  background: linear-gradient(120deg, #49e539, #32c829); border: 1px solid transparent; color: #08210b; border-radius: 11px; box-shadow: none; min-height: 46px; font-weight: 750;
+}
+.App :is(.btn-delete, .btn-delete-training, .cash-delete-button) { background: #3a2330; color: #ffbac1; border: 1px solid #98515e; border-radius: 10px; min-height: 44px; box-shadow: none; }
+.App :is(.btn-edit, .main-func-btn, .report-export-button):hover:not(:disabled) { background: #29465e; border-color: #80b2a0; }
+.App :is(.btn-save-players, .btn-save-training, .generate-teams-button, .cash-submit-button):hover:not(:disabled) { filter: brightness(1.08); }
+.App :is(.team-count-options button.active, .task-toolbar button[aria-pressed="true"]) { background: #193b2e; color: #baf4b4; border-color: #68c962; outline-color: #68c962; }
+.App .generator-player-options label { background: #14293c; border-color: var(--squad-border); border-radius: 10px; }
+.App .generator-player-options label.selected { background: #193a30; border-color: #427e58; }
+.App .checklist-items { border-color: var(--squad-border); border-radius: 12px; }
+.App .checklist-items-head { background: #20364b; color: var(--squad-muted); }
+.App .checklist-person-row { border-top-color: var(--squad-border); --checklist-row-bg: #162a3d; }
+.App .player-list li { background: #192e42; border-color: var(--squad-border); }
+.App :is(.training, .team-add-card, .child-report-card, .report-player-selection) { background: var(--squad-surface); border-color: var(--squad-border); border-radius: 14px; }
+.App .training-header { background: #192e42; color: var(--squad-text); }
+.App .training-header.expanded { background: #214037; border-color: #4c7a59; }
+.App :is(.report-player-options label, .team-filter button, .report-view-switch button) { background: #192e42; border-color: var(--squad-border); color: var(--squad-text); border-radius: 10px; }
+.App :is(.report-player-options label.selected, .team-filter button.active, .report-view-switch button.active) { background: #193a30; border-color: #5b9c62; color: #c2f3ba; }
+.App .team-add-button { background: linear-gradient(120deg, #49e539, #32c829); color: #08210b; border-radius: 11px; }
+.App .report-player-selection-actions button { background: #1c3349; color: var(--squad-text); border: 1px solid #3a5772; border-radius: 10px; min-height: 44px; }
+.App .team-member-card.inactive { background: #252936; }
+.App .team-member-card.editing { background: #17382f; border-color: #5e9e69; }
+.App .team-member-avatar { background: #1b4636; border-color: #417758; color: #c0f3b9; }
+.App .task-overdue { border-left: 5px solid #ff7777; }
+.App .cash-balance-card:not(.negative) { background: linear-gradient(125deg, #163d31, #102a34); border-color: #487858; border-radius: 18px; }
+.App .cash-balance-card:not(.negative) > strong { color: #9cf18a; }
+.App .cash-receipts, .App .cash-booking-details { border-color: var(--squad-border); }
+.App .cash-receipts button { white-space: normal; }
+.App table { border-color: var(--squad-border); }
+.App th { background: #1b3349; color: #d8e9f9; }
+.App td { border-color: #304258; }
+.App .status-btn-row button { background: #1c3145; border-color: #45617a; }
+.App .status-btn-row button.active { background: #1b4933; border-color: #85dc79; box-shadow: 0 0 0 2px #85dc7922; }
+.App .status-text { color: #b2e5b3; }
+.App .recovery-code-grid code, .App .recovery-manual-key code { background: #0b1929; border-color: var(--squad-border); color: #e5f0fa; }
+.App .recovery-qr-area { background: #14283b; }
+.App .recovery-qr-area img { background: white; }
+@media (max-width: 699px) {
+  .App { padding: .75rem; }
+  .App > header { padding: .85rem; border-radius: 14px; }
+  .App :is(.cash-entry-section, .task-form, .admin-section, .report-section) { padding: .85rem; }
+  .squad-module-brand { margin-bottom: .45rem; }
+  .squad-module-brand img { width: 36px; height: 36px; }
+}
+@media (prefers-reduced-motion: reduce) { .App button { transition: none; } }

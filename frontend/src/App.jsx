@@ -1,7 +1,8 @@
-// Version 9.0: SquadHQ im sportlichen Design, mit unveränderter Start- und Anmeldelogik.
+// Version 9.1: Einheitliches SquadHQ-Design für alle Bereiche.
 
 import React, { useState, useEffect } from 'react';
 import SquadBrand from './SquadBrand.jsx';
+import SquadModuleBrand from './SquadModuleBrand.jsx';
 import QRCode from 'qrcode';
 import BackupPanel from './BackupPanel.jsx';
 import CashTransactionEditor from './CashTransactionEditor.jsx';
@@ -11,6 +12,7 @@ import TasksPanel from './TasksPanel.jsx';
 import TaskMenuButton from './TaskMenuButton.jsx';
 import './App.css';
 import './SquadBrand.css';
+import './SquadModules.css';
 import {
   STATUS_OPTIONS,
   RATING_VALUES,
@@ -318,7 +320,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '9.0';
+  const version = '9.1';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canDeleteCash = sessionUser?.cashPermissions?.canDelete === true;
@@ -1772,7 +1774,7 @@ export default function App() {
 
     context.fillStyle = '#8eafd4';
     context.font = '500 22px Inter, Arial, sans-serif';
-    context.fillText(`Fußball-App Version ${version}`, outerMargin, canvas.height - 32);
+    context.fillText(`SquadHQ Version ${version}`, outerMargin, canvas.height - 32);
     context.textAlign = 'right';
     context.fillText(`Erstellt von ${loggedInUser}`, width - outerMargin, canvas.height - 32);
     context.textAlign = 'left';
@@ -2173,7 +2175,7 @@ export default function App() {
           style={{
             margin: '2.5em auto 0 auto',
             display: 'block',
-            backgroundColor: '#1363d2',
+            backgroundColor: 'var(--squad-raised)' ,
             color: '#fff',
             border: 'none',
             borderRadius: '4px',
@@ -2200,6 +2202,7 @@ export default function App() {
     return (
       <div className="App team-cash-page">
         <header>
+          <SquadModuleBrand />
           <h1>
             Mannschaftskasse <span className="blue-version">{version}</span>
           </h1>
@@ -2437,6 +2440,7 @@ export default function App() {
     return (
       <div className="App team-generator-page">
         <header>
+          <SquadModuleBrand />
           <h1>
             🎲 Teamgenerator <span className="blue-version">{version}</span>
           </h1>
@@ -2711,6 +2715,7 @@ export default function App() {
       return (
         <div className="App settings-home">
           <header>
+          <SquadModuleBrand />
             <h1>⚙ Einstellungen</h1>
           </header>
           <section className="settings-category-section">
@@ -2917,6 +2922,7 @@ export default function App() {
     return (
       <div className="App">
         <header>
+          <SquadModuleBrand />
           <h1>
             ⚙ {settingsCategories.find((category) => category.key === settingsCategory)?.title || 'Einstellungen'}
           </h1>
@@ -3388,7 +3394,7 @@ export default function App() {
                     minLength={8}
                     style={{
                       marginLeft: '0.5rem',
-                      backgroundColor: '#232942',
+                      backgroundColor: 'var(--squad-surface)' ,
                       color: '#f1f1f1',
                       border: '1px solid #2d385b',
                       borderRadius: '4px',
@@ -3485,8 +3491,9 @@ export default function App() {
     return (
       <div className="App">
         <header>
+          <SquadModuleBrand />
           <h1>
-            ⚽ Fußball‐App <span className="blue-version">{version}</span> Trainingsteilnahme
+            Trainingsteilnahme <span className="blue-version">{version}</span>
           </h1>
         </header>
         <section className="season-toolbar">
@@ -3891,7 +3898,7 @@ export default function App() {
                                         minHeight: 38,
                                         maxHeight: 60,
                                         fontSize: '1em',
-                                        background: '#232942',
+                                        background: 'var(--squad-surface)' ,
                                         color: '#96ffc4',
                                         border: '1.2px solid #2d385b',
                                         borderRadius: 5,
@@ -4223,7 +4230,7 @@ export default function App() {
             style={{
               margin: '2rem auto 0 auto',
               display: 'block',
-              backgroundColor: '#1363d2',
+              backgroundColor: 'var(--squad-raised)' ,
               color: '#fff',
               border: 'none',
               borderRadius: '4px',
@@ -4374,6 +4381,7 @@ export default function App() {
     return (
       <div className="App">
         <header>
+          <SquadModuleBrand />
           <h1>
             ✔ Checklisten <span className="blue-version">{version}</span>
           </h1>
@@ -4536,7 +4544,7 @@ export default function App() {
             style={{
               margin: '2rem auto 0 auto',
               display: 'block',
-              backgroundColor: '#1363d2',
+              backgroundColor: 'var(--squad-raised)' ,
               color: '#fff',
               border: 'none',
               borderRadius: '4px',
@@ -4621,7 +4629,7 @@ export default function App() {
       14,
       27
     );
-    doc.text(`Fußball-App Version ${version}`, 230, 18);
+    doc.text(`SquadHQ Version ${version}`, 230, 18);
     const tableColumn = [
       'Spielerin',
       'Hinweis',
@@ -4795,7 +4803,7 @@ export default function App() {
       doc.setTextColor(101, 116, 132);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
-      doc.text(`Fußball-App ${version} | Seite ${page} von ${pageCount}`, margin, pageHeight - 5);
+      doc.text(`SquadHQ ${version} | Seite ${page} von ${pageCount}`, margin, pageHeight - 5);
       doc.text(`© ${currentYear} Matthias Kopf`, pageWidth - margin, pageHeight - 5, {
         align: 'right',
       });

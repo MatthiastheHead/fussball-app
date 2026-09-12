@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import SquadModuleBrand from './SquadModuleBrand.jsx';
 import { isOverdue, visibleTasks } from './taskUtils.js';
 
 const empty = () => ({ title: '', description: '', dueDate: '', assignedTo: '' });
@@ -35,7 +36,7 @@ export default function TasksPanel({ request, username, onBack }) {
   const update = task => setTasks(rows => rows.some(row => row._id === task._id) ? rows.map(row => row._id === task._id ? task : row) : [...rows, task]);
   const shown = visibleTasks(tasks, mine, username);
   return <main className="App tasks-panel">
-    <header><h1>📝 To-dos</h1><p>Gemeinsam organisieren, Zuständigkeiten festhalten und abhaken.</p></header>
+    <header><SquadModuleBrand /><h1>📝 To-dos</h1><p>Gemeinsam organisieren, Zuständigkeiten festhalten und abhaken.</p></header>
     <div className="task-toolbar">
       <button type="button" className="btn-edit" disabled={busy} onClick={onBack}>Zum Startmenü</button>
       <button type="button" className="btn-save-players" disabled={busy || loading || !!draft} onClick={() => { setDraft(empty()); setEditing(null); }}>Neues To-do</button>
