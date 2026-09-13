@@ -42,7 +42,7 @@ async function unseal(backup, password, recoveryKey) {
 }
 function validateFull(raw, models) {
   // Older complete backups predate tasks. Preserve current tasks instead of deleting them.
-  const keys = FULL_KEYS.filter(key => !['tasks', 'receipts'].includes(key) || Object.hasOwn(raw || {}, key));
+  const keys = FULL_KEYS.filter(key => !['tasks', 'receipts', 'squads'].includes(key) || Object.hasOwn(raw || {}, key));
   if (!raw || Array.isArray(raw) || Object.keys(raw).length !== keys.length || keys.some(key => !Array.isArray(raw[key]))) fail('Die vollständige Sicherung enthält nicht alle erforderlichen Datenbereiche.');
   const businessKeys = KEYS.filter(key => keys.includes(key));
   const business = Object.fromEntries(businessKeys.map(key => [key, raw[key]]));

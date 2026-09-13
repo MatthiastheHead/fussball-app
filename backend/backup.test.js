@@ -4,6 +4,7 @@ const registerRoutes = require('./backupRoutes');
 const { KEYS, makeBackup, validateBackup, scopeFor, prepareCashImport, digest } = require('./backupUtils');
 const { backupPermissionsFor } = require('./accessUtils');
 const realModels = {
+  squads: require('./models/Squad'),
   receipts: require('./models/CashReceipt'),
   tasks: require('./models/Task'),
   players: require('./models/Player'), trainings: require('./models/Training'),
@@ -19,6 +20,7 @@ const clone = value => JSON.parse(JSON.stringify(value));
 const id = n => n.toString(16).padStart(24, '0');
 const admin = { username: 'Matthias', token: 'session-a', isAdmin: true, cashPermissions: { canDelete: true, canViewDeleted: true } };
 const fixture = () => clone({
+  squads: [],
   receipts: [],
   tasks: [new realModels.tasks({ _id: id(30), title: 'Leibchen waschen', assignedTo: id(20), assignedName: 'Matthias', dueDate: '2026-09-15', createdBy: 'Matthias', updatedBy: 'Matthias' })],
   players: [new realModels.players({ _id: id(1), name: 'Mia', note: 'Hinweis', inactive: false })],
@@ -222,7 +224,7 @@ test('Komplettsicherung ist verschlüsselt, authentifiziert und an die Serverkon
   await assert.rejects(seal(raw, 'kurz', admin, '7.7.0', recoveryKey), /12 bis/);
 });
 
-test('Vollständiger Import stellt alle elf Bereiche wieder her und beendet Sitzungen', async () => {
+test('Vollständiger Import stellt alle zwölf Bereiche wieder her und beendet Sitzungen', async () => {
   const { state, invoke } = harness();
   state.db.recovery = clone([new realModels.recovery({ _id: id(21), key: 'main', userId: id(20), username: 'Matthias', encryptedSecret: encryptSecret('JBSWY3DPEHPK3PXP', recoveryKey), recoveryCodeHashes: [hashRecoveryCode('ABCDEFGHJKLM', recoveryKey)] })]);
   state.db.loginEvents = clone([new realModels.loginEvents({ _id: id(22), username: 'Matthias' })]);
@@ -233,7 +235,7 @@ test('Vollständiger Import stellt alle elf Bereiche wieder her und beendet Sitz
   state.db.teamCash[0].transactions = [];
   const preview = await invoke('/backup/full/preview', { backup: exported.body, password });
   assert.equal(preview.code, 200);
-  assert.equal(preview.body.summary.length, 11);
+  assert.equal(preview.body.summary.length, 12);
   assert.equal(preview.body.recoveryBackup.data, undefined);
   const result = await invoke('/backup/import', { token: preview.body.token, confirm: true });
   assert.equal(result.code, 200);
@@ -277,4 +279,18 @@ test('Hauptadmin kann vollständige Sicherung gezielt an Benutzer delegieren', a
   const preview = await invoke('/backup/full/preview', { backup: exported.body, password }, auth);
   assert.equal(preview.code, 200);
   assert.equal((await invoke('/backup/import', { token: preview.body.token, confirm: true }, auth)).code, 200);
+});
+
+test('Spielkader und Gastprofile überleben Sicherung, Import und ältere Komplettsicherungen', async () => {
+ const {state,invoke}=harness();
+ state.db.squads=clone([new realModels.squads({_id:id(50),key:'squads',profiles:[{_id:id(51),name:'Gast',foot:'links',mainPosition:'ST',positions:['LA']}],games:[{_id:id(52),opponent:'FC Test',date:'2026-09-20',time:'10:00',from:'2026-08-01',to:'2026-09-19',lineup:[{personId:`g:${id(51)}`,name:'Gast',guest:true,role:'field',position:'ST',x:50,y:20}],createdBy:'Matthias'}]})]);
+ const original=clone(state.db.squads);
+ const exported=await invoke('/backup/export',{scopes:['squads']});assert.equal(exported.code,200);
+ const preview=await invoke('/backup/preview',{backup:exported.body,scopes:['squads']});assert.equal(preview.code,200);
+ assert.equal((await invoke('/backup/import',{token:preview.body.token,confirm:true})).code,200);assert.deepEqual(state.db.squads,original);
+ const full=await invoke('/backup/full/export',{password});const raw=await unseal(full.body,password,recoveryKey);delete raw.squads;
+ const old=await seal(raw,password,admin,'9.1.0',recoveryKey);const oldPreview=await invoke('/backup/full/preview',{backup:old,password});assert.equal(oldPreview.code,200);
+ assert.equal((await invoke('/backup/import',{token:oldPreview.body.token,confirm:true})).code,200);assert.deepEqual(state.db.squads,original);
+ assert.equal(scopeFor({permissions:{squads:false}}).includes('squads'),false);
+ assert.equal(scopeFor({permissions:{squads:true}},true).includes('squads'),false);
 });

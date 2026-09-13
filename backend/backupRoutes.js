@@ -48,6 +48,7 @@ module.exports = function registerBackupRoutes({ app, mongoose, models, requireS
       if (previews.size >= 5) return res.status(429).json({ error: 'Zu viele offene Importprüfungen.' });
       const data = validateFull(await unseal(req.body?.backup, req.body?.password, recoveryKey), models);
       const before = await snapshot(FULL_KEYS);
+      if (!Object.hasOwn(data, 'squads')) data.squads = before.squads;
       const preservedTasks = !Object.hasOwn(data, 'tasks');
       if (preservedTasks) data.tasks = before.tasks;
       const preservedReceipts = !Object.hasOwn(data, 'receipts');
