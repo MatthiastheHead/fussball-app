@@ -99,7 +99,9 @@ function validateBackup(backup, selected, auth, models) {
       if (key === 'squads') {
         const utils = require('./squadUtils');
         if (row.key !== 'squads') fail('Ungültiger Spielkader-Schlüssel.');
+        if (row.fussballTeamUrl !== undefined) require('./fussballSource').teamUrl(row.fussballTeamUrl);
         utils.settings(row);
+        utils.captains(row, [row.captainId, ...(row.viceCaptainIds || [])].filter(Boolean));
         if (!Array.isArray(row.profiles) || !Array.isArray(row.games)) fail('Ungültige Spielkader-Daten.');
         const playerIds = new Set(), guestNames = new Set();
         const profileIds = new Set();
@@ -115,7 +117,7 @@ function validateBackup(backup, selected, auth, models) {
         const gameIds = new Set();
         for (const g of row.games || []) {
           if (!/^[a-f\d]{24}$/i.test(g._id || '') || gameIds.has(g._id)) fail('Ungültige Spiel-ID.'); gameIds.add(g._id);
-          utils.game(g, (g.lineup || []).map(t => ({ id: t.personId, name: t.name, guest: t.guest })));
+          utils.game(g, [...(g.lineup || []).map(t => ({ id: t.personId, name: t.name, guest: t.guest })), ...(g.availableIds || []).filter(id => !g.lineup.some(t => t.personId === id)).map(id => ({ id, name: 'Archiv', guest: id.startsWith('g:') }))]);
         }
       }
       if (key === 'settings' && row.key !== 'app') fail('Ungültiger Einstellungsschlüssel.');

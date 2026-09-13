@@ -55,3 +55,28 @@ test('Statistik zählt nur vorhandene Trainings, schließt Pausen aus und wertet
  const result=await harness().invoke('get /squads/statistics');assert.equal(result.code,200);
  assert.deepEqual(result.data[0],{id:`p:${id}`,total:3,attended:2,rated:1,average:3,attendance:2/3});
 });
+
+test('Nur verfügbare Spielerinnen dürfen in den Kader, Verfügbarkeit wird gespeichert',async()=>{
+ const h=harness();const availableIds=[`p:${id}`];
+ assert.equal((await h.invoke('post /squads/games',{...input,availableIds:[],version:0})).code,400);
+ const result=await h.invoke('post /squads/games',{...input,availableIds,version:0});assert.equal(result.code,200);assert.deepEqual([...result.data.games[0].availableIds],availableIds);
+ assert.throws(()=>game({...input,availableIds:[...availableIds,...availableIds]},candidates));
+});
+test('Kapitäninnenvorgaben nur durch Admins, keine doppelten oder fremden Funktionen',async()=>{
+ const h=harness();const result=await h.invoke('put /squads/settings',{...input,captainId:`p:${id}`,viceCaptainIds:[],version:0});assert.equal(result.code,200);assert.equal(result.data.captainId,`p:${id}`);
+ assert.equal((await h.invoke('put /squads/settings',{...input,captainId:`p:${id}`,viceCaptainIds:[`p:${id}`],version:1})).code,400);
+ assert.throws(()=>game({...input,viceCaptainIds:[`g:${guestId}`]},candidates));
+ const changed=game({...input,fieldPlayers:6,formation:'2-3-1',benchSize:1},candidates);assert.equal(changed.fieldPlayers,6);assert.equal(changed.benchSize,1);
+});
+
+test('Mannschaftsquelle ist nur für Admins änderbar; importierte Spiele werden nicht doppelt angelegt',async()=>{
+ const h=harness();
+ assert.equal((await h.invoke('put /squads/source',{version:0,fussballTeamUrl:''},{username:'Trainer'})).code,403);
+ assert.equal((await h.invoke('put /squads/source',{version:0,fussballTeamUrl:'https://localhost'})).code,400);
+ assert.equal((await h.invoke('put /squads/source',{version:0,fussballTeamUrl:''})).code,200);
+ assert.equal((await h.invoke('get /squads')).data.fussballTeamUrl,'');
+ const body={...input,version:1,fussballGameId:'A'.repeat(32),fussballTeamId:'B'.repeat(32)};
+ const result=await h.invoke('post /squads/games',body);assert.equal(result.code,200);
+ assert.equal((await h.invoke('post /squads/games',{...body,version:2})).code,409);
+ assert.equal((await h.invoke('post /squads/games',{...body,version:2,id:String(result.data.games[0]._id)})).code,200);
+});

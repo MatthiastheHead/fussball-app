@@ -1,4 +1,4 @@
-// Version 10.0: Spielkader, grafische Aufstellung und Gastspielerinnen.
+// Version 10.1: Verfügbarkeit, Kapitäninnen, Spielmodi und Kader-PDF.
 
 import React, { useState, useEffect } from 'react';
 import SquadBrand from './SquadBrand.jsx';
@@ -324,7 +324,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '10.0';
+  const version = '10.1';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canDeleteCash = sessionUser?.cashPermissions?.canDelete === true;
@@ -2058,7 +2058,7 @@ export default function App() {
   }
 
   if (showSquads && canAccess('squads')) {
-    return <SquadPanel key={authToken} request={authenticatedRequest} onBack={() => { setShowSquads(false); setShowStartMenu(true); }} />;
+    return <SquadPanel key={authToken} username={loggedInUser} request={authenticatedRequest} onBack={() => { setShowSquads(false); setShowStartMenu(true); }} />;
   }
 
   if (showTasks && canAccess('tasks')) {

@@ -1,4 +1,5 @@
-const { settings, profile, game, validDate } = require('./squadUtils');
+const { settings, profile, game, validDate, captains } = require('./squadUtils');
+const { teamUrl, fetchGames } = require('./fussballSource');
 module.exports = function registerSquadRoutes({ app, Squad, Player, Training, requireAccess, requireAdmin }) {
   const access = requireAccess('squads');
   const wrap = fn => async (req, res) => { try { await fn(req, res); } catch (e) { res.status((e.name === 'VersionError' || e.code === 11000) ? 409 : e.status || 500).json({ error: (e.name === 'VersionError' || e.code === 11000) ? 'Der Spielkader wurde inzwischen geändert. Bitte neu laden.' : e.status ? e.message : 'Spielkader konnte nicht gespeichert oder geladen werden.' }); } };
@@ -11,12 +12,20 @@ module.exports = function registerSquadRoutes({ app, Squad, Player, Training, re
       return { ...(info?.toObject() || {}), id: `p:${p._id}`, playerId: String(p._id), name: p.name, guest: false, inactive: p.inactive === true };
     }), ...doc.profiles.filter(p => !p.playerId).map(p => ({ ...p.toObject(), id: `g:${p._id}`, guest: true }))];
   }
-  async function output(doc) { return { version: doc.__v || 0, fieldPlayers: doc.fieldPlayers, benchSize: doc.benchSize, formation: doc.formation, candidates: await candidates(doc), games: doc.games }; }
+  async function output(doc) { return { version: doc.__v || 0, fussballTeamUrl: doc.fussballTeamUrl, fieldPlayers: doc.fieldPlayers, benchSize: doc.benchSize, formation: doc.formation, captainId: doc.captainId, viceCaptainIds: doc.viceCaptainIds, candidates: await candidates(doc), games: doc.games }; }
   function checkVersion(req, doc) { if (req.body?.version !== (doc.__v || 0)) fail('Der Bereich wurde inzwischen geändert. Bitte neu laden.', 409); }
   app.get('/squads', access, wrap(async (_req, res) => { res.set('Cache-Control', 'no-store'); res.json(await output(await read())); }));
   app.get('/squads/admin', requireAdmin, wrap(async (_req, res) => res.json(await output(await read()))));
+  app.put('/squads/source', requireAdmin, wrap(async (req, res) => {
+    const doc = await read(); checkVersion(req, doc); doc.fussballTeamUrl = teamUrl(req.body.fussballTeamUrl); await doc.save(); res.json(await output(doc));
+  }));
+  app.get('/squads/fixtures', access, wrap(async (_req, res) => {
+    res.set('Cache-Control', 'no-store');
+    try { res.json(await fetchGames((await read()).fussballTeamUrl)); }
+    catch (error) { fail(error.status ? error.message : 'Der Spielabruf ist gerade nicht möglich. Bitte später erneut versuchen.', 502); }
+  }));
   app.put('/squads/settings', requireAdmin, wrap(async (req, res) => {
-    const doc = await read(); checkVersion(req, doc); Object.assign(doc, settings(req.body)); await doc.save(); res.json(await output(doc));
+    const doc = await read(); checkVersion(req, doc); Object.assign(doc, settings(req.body), captains(req.body, (await candidates(doc)).filter(p => !p.inactive).map(p => p.id))); await doc.save(); res.json(await output(doc));
   }));
   app.post('/squads/profiles', requireAdmin, wrap(async (req, res) => {
     const doc = await read(); checkVersion(req, doc);
@@ -35,6 +44,7 @@ module.exports = function registerSquadRoutes({ app, Squad, Player, Training, re
     const row = req.body.id ? doc.games.id(req.body.id) : null;
     if (req.body.id && !row) fail('Spiel nicht gefunden.', 404);
     const fields = game(req.body, await candidates(doc)); const now = new Date();
+    if (fields.fussballGameId && doc.games.some(g => g.fussballGameId === fields.fussballGameId && g.fussballTeamId === fields.fussballTeamId && String(g._id) !== String(row?._id))) fail('Dieses FUSSBALL.DE-Spiel ist bereits angelegt.', 409);
     if (row) Object.assign(row, fields, { updatedBy: req.auth.username, updatedAt: now });
     else doc.games.push({ ...fields, createdBy: req.auth.username, createdAt: now, updatedBy: req.auth.username, updatedAt: now });
     await doc.save(); res.json(await output(doc));
