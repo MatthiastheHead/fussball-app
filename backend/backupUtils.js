@@ -1,9 +1,9 @@
 const { createHash } = require('crypto');
 const { validateReceipt, MAX_TOTAL } = require('./receiptUtils');
 const FORMAT = 'fussball-app-backup';
-const KEYS = ['players', 'trainings', 'checklists', 'settings', 'teamCash', 'tasks', 'receipts'];
+const KEYS = ['players', 'trainings', 'checklists', 'settings', 'teamCash', 'tasks', 'receipts', 'squads'];
 const LIMIT = 64 * 1024 * 1024;
-const labels = { players: 'Spielerinnen und Trainer', trainings: 'Trainings', checklists: 'Checklisten', settings: 'Einstellungen', teamCash: 'Mannschaftskasse einschließlich Belegen', tasks: 'To-dos', receipts: 'Kassenbelege' };
+const labels = { squads: 'Spielkader, Positionen und Gastspielerinnen', players: 'Spielerinnen und Trainer', trainings: 'Trainings', checklists: 'Checklisten', settings: 'Einstellungen', teamCash: 'Mannschaftskasse einschließlich Belegen', tasks: 'To-dos', receipts: 'Kassenbelege' };
 const fail = message => { throw Object.assign(new Error(message), { status: 400 }); };
 const canonical = value => {
   if (Array.isArray(value)) return value.map(canonical);
@@ -19,6 +19,7 @@ function scopeFor(auth, importing = false) {
     if (key === 'players' || key === 'settings') return !importing || auth.isAdmin;
     if (key === 'trainings') return allowed('training');
     if (key === 'checklists') return allowed('checklists');
+    if (key === 'squads') return allowed('squads') && (!importing || auth.isAdmin);
     if (key === 'tasks') return allowed('tasks');
     return allowed('teamCash') && (!importing || auth.isAdmin || auth.cashPermissions?.canDelete === true);
   });
@@ -65,7 +66,7 @@ function validateBackup(backup, selected, auth, models) {
     if (!KEYS.includes(key) || !permitted.includes(key)) throw Object.assign(new Error('Für einen ausgewählten Bereich fehlt dir die Importberechtigung.'), { status: 403 });
     const rows = backup.data[key];
     if (!Array.isArray(rows) || rows.length > 20000) fail(`Ungültige Daten in ${labels[key]}.`);
-    if (['settings', 'teamCash'].includes(key) && rows.length > 1) fail('Einstellungen und Kasse dürfen jeweils nur einen Datensatz enthalten.');
+    if (['settings', 'teamCash', 'squads'].includes(key) && rows.length > 1) fail('Einstellungen und Kasse dürfen jeweils nur einen Datensatz enthalten.');
     const ids = new Set();
     const unique = new Set();
     data[key] = rows.map(row => {
@@ -94,6 +95,28 @@ function validateBackup(backup, selected, auth, models) {
         const date = new Date(`${iso}T00:00:00Z`);
         if (!iso || Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== iso) fail('Ungültiges Trainingsdatum.');
         if (Object.values(row.ratings || {}).some(value => !Number.isInteger(value) || value < 0 || value > 3)) fail('Ungültige Trainingsbewertung.');
+      }
+      if (key === 'squads') {
+        const utils = require('./squadUtils');
+        if (row.key !== 'squads') fail('Ungültiger Spielkader-Schlüssel.');
+        utils.settings(row);
+        if (!Array.isArray(row.profiles) || !Array.isArray(row.games)) fail('Ungültige Spielkader-Daten.');
+        const playerIds = new Set(), guestNames = new Set();
+        const profileIds = new Set();
+        for (const p of row.profiles || []) { utils.profile(p);
+          if (p.playerId) {
+            if (!/^[a-f\d]{24}$/i.test(p.playerId) || playerIds.has(p.playerId)) fail('Ungültige oder doppelte Spielerinnen-Zuordnung.');
+            playerIds.add(p.playerId);
+          } else {
+            const name = p.name.trim().toLocaleLowerCase('de');
+            if (guestNames.has(name)) fail('Doppelte Gastspielerin.');
+            guestNames.add(name);
+          } if (!/^[a-f\d]{24}$/i.test(p._id || '') || profileIds.has(p._id)) fail('Ungültige Profil-ID.'); profileIds.add(p._id); }
+        const gameIds = new Set();
+        for (const g of row.games || []) {
+          if (!/^[a-f\d]{24}$/i.test(g._id || '') || gameIds.has(g._id)) fail('Ungültige Spiel-ID.'); gameIds.add(g._id);
+          utils.game(g, (g.lineup || []).map(t => ({ id: t.personId, name: t.name, guest: t.guest })));
+        }
       }
       if (key === 'settings' && row.key !== 'app') fail('Ungültiger Einstellungsschlüssel.');
       if (key === 'teamCash') {

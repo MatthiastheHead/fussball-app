@@ -1,8 +1,10 @@
-// Version 9.1: Einheitliches SquadHQ-Design für alle Bereiche.
+// Version 10.0: Spielkader, grafische Aufstellung und Gastspielerinnen.
 
 import React, { useState, useEffect } from 'react';
 import SquadBrand from './SquadBrand.jsx';
 import SquadModuleBrand from './SquadModuleBrand.jsx';
+import SquadPanel from './SquadPanel.jsx';
+import SquadSettings from './SquadSettings.jsx';
 import QRCode from 'qrcode';
 import BackupPanel from './BackupPanel.jsx';
 import CashTransactionEditor from './CashTransactionEditor.jsx';
@@ -13,6 +15,7 @@ import TaskMenuButton from './TaskMenuButton.jsx';
 import './App.css';
 import './SquadBrand.css';
 import './SquadModules.css';
+import './Squad.css';
 import {
   STATUS_OPTIONS,
   RATING_VALUES,
@@ -281,6 +284,7 @@ export default function App() {
   const [showReport, setShowReport] = useState(false);
   const [checklists, setChecklists] = useState([]);
   const [showChecklists, setShowChecklists] = useState(false);
+  const [showSquads, setShowSquads] = useState(false);
   const [showTasks, setShowTasks] = useState(false);
   const [newChecklistTitle, setNewChecklistTitle] = useState('');
   const [expandedChecklist, setExpandedChecklist] = useState(null);
@@ -320,7 +324,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '9.1';
+  const version = '10.0';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canDeleteCash = sessionUser?.cashPermissions?.canDelete === true;
@@ -847,6 +851,7 @@ export default function App() {
     setShowSettings(false);
     setSettingsCategory(null);
     setShowChecklists(false);
+    setShowSquads(false);
     setShowTasks(false);
     setShowTeamGenerator(false);
     setShowTeamCash(false);
@@ -2052,6 +2057,10 @@ export default function App() {
     );
   }
 
+  if (showSquads && canAccess('squads')) {
+    return <SquadPanel key={authToken} request={authenticatedRequest} onBack={() => { setShowSquads(false); setShowStartMenu(true); }} />;
+  }
+
   if (showTasks && canAccess('tasks')) {
     return <TasksPanel key={authToken} request={authenticatedRequest} username={loggedInUser}
       onBack={() => { setShowTasks(false); setShowStartMenu(true); }} />;
@@ -2076,6 +2085,7 @@ export default function App() {
         >
           {busy ? 'Bitte warten…' : '⚽ Trainingsteilnahme'}
         </button>}
+        {canAccess('squads') && <button className="main-func-btn" disabled={busy} onClick={() => { setShowSquads(true); setShowStartMenu(false); }}>⚽ Spielkader</button>}
         {canAccess('tasks') && <TaskMenuButton key={authToken} request={authenticatedRequest}
           disabled={busy} onClick={() => { setShowTasks(true); setShowStartMenu(false); }} />}
         {canAccess('checklists') && <button
@@ -2686,6 +2696,9 @@ export default function App() {
       ...(isAdmin
         ? [
             {
+              key: 'squad-settings', icon: '⚽', title: 'Spielkader', description: 'Spielstärke, Positionen und Gastspielerinnen verwalten.', meta: 'Aufstellung und Profile',
+            },
+            {
               key: 'cash-admin',
               icon: '💰',
               title: 'Mannschaftskasse',
@@ -3227,6 +3240,7 @@ export default function App() {
           </div>
         </section>
         )}
+        {settingsCategory === 'squad-settings' && isAdmin && <SquadSettings request={authenticatedRequest} />}
         {settingsCategory === 'cash-admin' && isAdmin && (
           <section className="cash-opening-section">
             <div>
@@ -3339,6 +3353,7 @@ export default function App() {
                       ['tasks', 'To-dos'],
                       ['teamGenerator', 'Teamgenerator'],
                       ['teamCash', 'Mannschaftskasse'],
+                      ['squads', 'Spielkader'],
                     ].map(([key, label]) => (
                       <label key={key}>
                         <input type="checkbox" checked={u.isAdmin || u.permissions?.[key] !== false}

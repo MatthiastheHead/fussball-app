@@ -13,6 +13,7 @@ const userSchema = new mongoose.Schema({
     canViewDeleted: { type: Boolean, default: false },
   },
   permissions: {
+    squads: { type: Boolean, default: true },
     tasks: { type: Boolean, default: true },
     training: { type: Boolean, default: true },
     checklists: { type: Boolean, default: true },

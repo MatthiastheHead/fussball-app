@@ -1169,11 +1169,12 @@ app.post('/checklists', requireAccess('checklists'), async (req, res) => {
   }
 });
 
+require('./squadRoutes')({ app, Squad: require('./models/Squad'), Player, Training, requireAccess, requireAdmin });
 registerTaskRoutes({ app, Task, User, requireAccess, mongoose });
 registerReceiptRoutes({ app, mongoose, TeamCash, CashReceipt, requireAccess });
 require('./cashRemovalRoutes')({ app, mongoose, TeamCash, CashReceipt, requireCashPermission });
 registerBackupRoutes({ app, mongoose, requireSession, version, recoveryKey: recoveryEncryptionKey, invalidateAllSessions: () => sessions.clear(),
-  models: { players: Player, trainings: Training, checklists: Checklist, settings: AppSettings, teamCash: TeamCash, receipts: CashReceipt, tasks: Task, users: User, recovery: AdminRecovery, passwordResets: PasswordResetRequest, loginEvents: LoginEvent },
+  models: { squads: require('./models/Squad'), players: Player, trainings: Training, checklists: Checklist, settings: AppSettings, teamCash: TeamCash, receipts: CashReceipt, tasks: Task, users: User, recovery: AdminRecovery, passwordResets: PasswordResetRequest, loginEvents: LoginEvent },
 });
 
 // ---- 5.6 Mannschaftskasse ----
