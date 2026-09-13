@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import SquadConfigFields from './SquadConfigFields.jsx';
 import { POSITIONS } from './squadUtils.js';
 const empty = { name: '', playerId: '', foot: 'unbekannt', mainPosition: '', positions: [], number: '', club: '', note: '', inactive: false };
 export default function SquadSettings({ request }) {
@@ -17,11 +18,20 @@ export default function SquadSettings({ request }) {
     <button className="btn-edit" disabled={busy} onClick={() => run(async () => { setData(await call('squads/admin')); setDraft(null); })}>Neu laden</button>
     {!data && <p>Lädt …</p>}
     {data && <>
+      <form className="cash-entry-section squad-fields" onSubmit={e => { e.preventDefault(); run(async () => { setData(await call('squads/source', 'PUT', { fussballTeamUrl: data.fussballTeamUrl || '', version: data.version })); setNotice('Mannschaftslink gespeichert. Vorhandene Spiele bleiben unverändert.'); }); }}>
+        <h3>Spieltermine von FUSSBALL.DE</h3>
+        <label className="squad-wide">Mannschaftslink<input type="url" maxLength={600} disabled={busy} value={data.fussballTeamUrl || ''} onChange={e => setData({ ...data, fussballTeamUrl: e.target.value })} placeholder="https://www.fussball.de/mannschaft/…" /></label>
+        <p>Du kannst hier eine andere Mannschaft oder Saison hinterlegen. Ein leerer Link deaktiviert den Abruf. Deine Spielerinnen und bisherigen Spielkader werden dadurch nicht geändert.</p>
+        <button className="btn-save-players" disabled={busy}>Mannschaftslink speichern</button>
+      </form>
       <form className="cash-entry-section squad-fields" onSubmit={e => { e.preventDefault(); run(async () => { setData(await call('squads/settings', 'PUT', { ...data, fieldPlayers: Number(data.fieldPlayers), benchSize: Number(data.benchSize) })); setNotice('Voreinstellung gespeichert. Bestehende Spiele behalten ihre Aufstellung.'); }); }}>
-        <label>Feldspielerinnen<input type="number" min="2" max="10" required value={data.fieldPlayers} disabled={busy} onChange={e => setData({ ...data, fieldPlayers: e.target.value })} /></label>
-        <label>Ersatzplätze<input type="number" min="0" max="15" required value={data.benchSize} disabled={busy} onChange={e => setData({ ...data, benchSize: e.target.value })} /></label>
-        <label>Formation<input required value={data.formation} disabled={busy} placeholder="3-3-2" onChange={e => setData({ ...data, formation: e.target.value })} /></label>
-        <p>Zusätzlich eine Torhüterin. Formation von Abwehr bis Angriff, z. B. 3-3-2 bei 8+1. Die Summe muss stimmen.</p>
+        <SquadConfigFields value={data} disabled={busy} onChange={values => setData({ ...data, ...values })} />
+        <p>Der Spielmodus enthält eine Torhüterin. Die Vorgaben lassen sich bei jedem Spiel ändern.</p>
+        {[0, 1, 2].map(index => {
+          const values = [data.captainId || '', ...(data.viceCaptainIds || [])];
+          return <label key={index}>{index === 0 ? 'Kapitänin' : `${index}. Vizekapitänin`}<select value={values[index] || ''} disabled={busy} onChange={e => { values[index] = e.target.value; setData({ ...data, captainId: values[0], viceCaptainIds: values.slice(1).filter(Boolean) }); }}><option value="">Noch offen</option>{data.candidates.filter(p => !p.inactive || values.includes(p.id)).map(p => <option key={p.id} value={p.id} disabled={values.includes(p.id) && values[index] !== p.id}>{p.name}{p.inactive ? ' (inaktiv)' : ''}</option>)}</select></label>;
+        })}
+        <p>Ist die Kapitänin nicht im Kader, rückt die erste verfügbare Vizekapitänin nach. Pro Spiel kannst du die Auswahl anpassen.</p>
         <button className="btn-save-players" disabled={busy}>Voreinstellung speichern</button>
       </form>
       <button className="btn-save-players" disabled={busy} onClick={() => setDraft({ ...empty })}>Gastspielerin anlegen</button>

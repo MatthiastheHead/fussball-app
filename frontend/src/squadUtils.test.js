@@ -22,3 +22,17 @@ test('Fehlende Sterne bleiben neutral, null Sterne zählen; Verschieben verände
  const rows=[{personId:'a',x:50,y:50},{personId:'b',x:20,y:30}];
  const moved=movePlayer(rows,'a',-5,105); assert.deepEqual(moved[0],{personId:'a',x:5,y:95}); assert.deepEqual(moved[1],rows[1]); assert.equal(rows[0].x,50);
 });
+
+test('Standardformationen passen zum Spielmodus; kleinere Kader verwerfen keine Spielerinnen', async () => {
+ const { FORMATIONS, reconfigure } = await import('./squadUtils.js');
+ for (const [count, formations] of Object.entries(FORMATIONS)) for (const f of formations) assert.equal(slots(f).length, Number(count) + 1);
+ const lineup = slots('3-3-2').map((s,i)=>({...s,personId:String(i)}));
+ assert.throws(()=>reconfigure(lineup,{fieldPlayers:6,formation:'2-3-1',benchSize:2}), /zuerst/);
+ const changed=reconfigure(lineup,{fieldPlayers:8,formation:'2-4-2',benchSize:2});
+ assert.deepEqual(changed.map(p=>p.personId),lineup.map(p=>p.personId)); assert.equal(changed[1].x,100/3);
+});
+test('Kapitänin und Vizekapitäninnen rücken nur aus dem gewählten Kader nach', async () => {
+ const { leadership } = await import('./squadUtils.js');
+ assert.deepEqual(leadership([{personId:'v1'},{personId:'v2'}],'c',['v1','v2']),{captainId:'v1',viceCaptainIds:['v2']});
+ assert.deepEqual(leadership([{personId:'c'},{personId:'v2'}],'c',['v1','v2']),{captainId:'c',viceCaptainIds:['v2']});
+});

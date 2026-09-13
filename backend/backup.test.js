@@ -283,7 +283,7 @@ test('Hauptadmin kann vollständige Sicherung gezielt an Benutzer delegieren', a
 
 test('Spielkader und Gastprofile überleben Sicherung, Import und ältere Komplettsicherungen', async () => {
  const {state,invoke}=harness();
- state.db.squads=clone([new realModels.squads({_id:id(50),key:'squads',profiles:[{_id:id(51),name:'Gast',foot:'links',mainPosition:'ST',positions:['LA']}],games:[{_id:id(52),opponent:'FC Test',date:'2026-09-20',time:'10:00',from:'2026-08-01',to:'2026-09-19',lineup:[{personId:`g:${id(51)}`,name:'Gast',guest:true,role:'field',position:'ST',x:50,y:20}],createdBy:'Matthias'}]})]);
+ state.db.squads=clone([new realModels.squads({_id:id(50),key:'squads',captainId:`g:${id(51)}`,viceCaptainIds:[],profiles:[{_id:id(51),name:'Gast',foot:'links',mainPosition:'ST',positions:['LA']}],games:[{_id:id(52),opponent:'FC Test',date:'2026-09-20',time:'10:00',from:'2026-08-01',to:'2026-09-19',availableIds:[`g:${id(51)}`],captainId:`g:${id(51)}`,viceCaptainIds:[],lineup:[{personId:`g:${id(51)}`,name:'Gast',guest:true,role:'field',position:'ST',x:50,y:20}],createdBy:'Matthias'}]})]);
  const original=clone(state.db.squads);
  const exported=await invoke('/backup/export',{scopes:['squads']});assert.equal(exported.code,200);
  const preview=await invoke('/backup/preview',{backup:exported.body,scopes:['squads']});assert.equal(preview.code,200);
