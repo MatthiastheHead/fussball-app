@@ -32,6 +32,27 @@ export function movePlayer(lineup, id, x, y) {
   return lineup.map(row => row.personId === id ? { ...row, x: Math.min(95, Math.max(5, x)), y: Math.min(95, Math.max(5, y)) } : row);
 }
 
+export function transferPlayer(lineup, id, target, config) {
+  const source = lineup.find(p => p.personId === id);
+  if (!source) throw new Error('Bitte zuerst eine Spielerin auswählen.');
+  const other = target.personId && lineup.find(p => p.personId === target.personId);
+  if (target.personId && !other) throw new Error('Die Zielspielerin ist nicht mehr im Kader.');
+  if (other) {
+    if (other.personId === id) return lineup;
+    const place = p => ({ role: p.role, position: p.role === 'bench' ? '' : p.position, x: p.x, y: p.y });
+    return lineup.map(p => p.personId === id ? { ...p, ...place(other) } : p.personId === other.personId ? { ...p, ...place(source) } : p);
+  }
+  const role = target.role;
+  if (!['field', 'keeper', 'bench'].includes(role)) throw new Error('Ungültiger Zielbereich.');
+  const limit = role === 'keeper' ? 1 : Number(role === 'field' ? config.fieldPlayers : config.benchSize);
+  if (lineup.filter(p => p.personId !== id && p.role === role).length >= limit) throw new Error('Dieser Bereich ist voll. Ziehe auf eine Spielerin oder tippe sie an, um die Plätze zu tauschen.');
+  const spot = slots(config.formation).find(s => s.role === role && !lineup.some(p => p.personId !== id && p.role !== 'bench' && Math.hypot(p.x - s.x, p.y - s.y) < 10));
+  const position = role === 'keeper' ? 'TW' : role === 'bench' ? '' : source.role === 'field' ? source.position : spot?.position || 'ZM';
+  const x = Number.isFinite(target.x) ? target.x : spot?.x ?? source.x;
+  const y = Number.isFinite(target.y) ? target.y : spot?.y ?? source.y;
+  return movePlayer(lineup.map(p => p.personId === id ? { ...p, role, position } : p), id, x, y);
+}
+
 export const FORMATIONS = {
   2: ['1-1'], 3: ['1-2', '2-1'], 4: ['2-2', '1-2-1'],
   5: ['2-2-1', '2-1-2', '1-3-1'], 6: ['2-3-1', '3-2-1', '2-2-2'],

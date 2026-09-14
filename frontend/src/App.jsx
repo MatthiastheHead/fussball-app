@@ -1,4 +1,4 @@
-// Version 10.1.1: Feste Rückennummern auch im Training und in der Teamverwaltung.
+// Version 10.2: Platztausch zwischen Feld und Bank, übersichtliche Kaderverwaltung.
 
 import React, { useState, useEffect } from 'react';
 import SquadBrand from './SquadBrand.jsx';
@@ -324,7 +324,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '10.1.1';
+  const version = '10.2';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canDeleteCash = sessionUser?.cashPermissions?.canDelete === true;
