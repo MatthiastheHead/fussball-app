@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import SquadConfigFields from './SquadConfigFields.jsx';
 import { POSITIONS } from './squadUtils.js';
 const empty = { name: '', playerId: '', foot: 'unbekannt', mainPosition: '', positions: [], number: '', club: '', note: '', inactive: false };
-export default function SquadSettings({ request }) {
+export default function SquadSettings({ request, onProfileSaved }) {
   const [data, setData] = useState(null), [draft, setDraft] = useState(null), [error, setError] = useState(''), [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
   async function call(path, method, body) {
     const res = await request(path, method ? { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : { cache: 'no-store' });
@@ -35,13 +35,14 @@ export default function SquadSettings({ request }) {
         <button className="btn-save-players" disabled={busy}>Voreinstellung speichern</button>
       </form>
       <button className="btn-save-players" disabled={busy} onClick={() => setDraft({ ...empty })}>Gastspielerin anlegen</button>
-      {draft && <form className="cash-entry-section squad-fields" onSubmit={e => { e.preventDefault(); run(async () => { setData(await call('squads/profiles', 'POST', { ...draft, version: data.version })); setDraft(null); setNotice('Profil gespeichert.'); }); }}>
+      {draft && <form className="cash-entry-section squad-fields" onSubmit={e => { e.preventDefault(); run(async () => { setData(await call('squads/profiles', 'POST', { ...draft, version: data.version })); setDraft(null); setNotice('Profil gespeichert.'); await onProfileSaved?.(); }); }}>
         <h3>{draft.playerId ? 'Spielerinnenprofil' : 'Gastspielerin'}</h3>
         <label>Name<input required maxLength={100} value={draft.name} disabled={busy || !!draft.playerId} onChange={e => setDraft({ ...draft, name: e.target.value })} /></label>
         <label>Starker Fuß<select value={draft.foot} disabled={busy} onChange={e => setDraft({ ...draft, foot: e.target.value })}>{['unbekannt', 'links', 'rechts', 'beidfüßig'].map(v => <option key={v}>{v}</option>)}</select></label>
         <label>Stammposition<select value={draft.mainPosition} disabled={busy} onChange={e => setDraft({ ...draft, mainPosition: e.target.value })}><option value="">Noch offen</option>{Object.entries(POSITIONS).map(([id, name]) => <option key={id} value={id}>{id} · {name}</option>)}</select></label>
         <fieldset><legend>Weitere Positionen</legend><div className="squad-position-options">{Object.entries(POSITIONS).map(([id, name]) => <label key={id}><input type="checkbox" checked={draft.positions.includes(id)} disabled={busy} onChange={e => setDraft({ ...draft, positions: e.target.checked ? [...draft.positions, id] : draft.positions.filter(p => p !== id) })} />{id} · {name}</label>)}</div></fieldset>
         <label>Rückennummer<input inputMode="numeric" maxLength={2} value={draft.number} disabled={busy} onChange={e => setDraft({ ...draft, number: e.target.value })} /></label>
+        {draft.playerId && <p>Diese feste Rückennummer gilt auch für Training und Teamverwaltung.</p>}
         <label>Verein<input maxLength={100} value={draft.club} disabled={busy} onChange={e => setDraft({ ...draft, club: e.target.value })} /></label>
         <label>Notizen<textarea maxLength={1000} value={draft.note} disabled={busy} onChange={e => setDraft({ ...draft, note: e.target.value })} /></label>
         {!draft.playerId && <label><input type="checkbox" checked={draft.inactive} disabled={busy} onChange={e => setDraft({ ...draft, inactive: e.target.checked })} />Gastspielerin inaktiv</label>}

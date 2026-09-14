@@ -10,6 +10,8 @@ const revision = process.env.RENDER_GIT_COMMIT?.slice(0, 7) || 'local';
 // === Modelle ===
 const Checklist = require('./models/Checklist');
 const Player = require('./models/Player');
+const Squad = require('./models/Squad');
+const { withPlayerNumbers } = require('./playerNumbers');
 const Training = require('./models/Training');
 const AppSettings = require('./models/AppSettings');
 const AdminRecovery = require('./models/AdminRecovery');
@@ -908,8 +910,12 @@ app.post('/users', requireAdmin, (_req, res) => {
 // ---- 5.2 Players ----
 app.get('/players', requireSession, async (req, res) => {
   try {
-    const allPlayers = await Player.find().lean();
-    res.json(allPlayers);
+    const [allPlayers, squad] = await Promise.all([
+      Player.find().lean(),
+      Squad.findOne({ key: 'squads' }).select('profiles.playerId profiles.number').lean(),
+    ]);
+    res.set('Cache-Control', 'no-store');
+    res.json(withPlayerNumbers(allPlayers, squad?.profiles));
   } catch (err) {
     console.error('Fehler GET /players:', err);
     res.status(500).json({ error: 'Datenbankfehler beim Laden der Players' });

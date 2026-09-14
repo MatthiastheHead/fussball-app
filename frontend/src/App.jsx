@@ -1,4 +1,4 @@
-// Version 10.1: Verfügbarkeit, Kapitäninnen, Spielmodi und Kader-PDF.
+// Version 10.1.1: Feste Rückennummern auch im Training und in der Teamverwaltung.
 
 import React, { useState, useEffect } from 'react';
 import SquadBrand from './SquadBrand.jsx';
@@ -324,7 +324,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '10.1';
+  const version = '10.1.1';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canDeleteCash = sessionUser?.cashPermissions?.canDelete === true;
@@ -2886,6 +2886,7 @@ export default function App() {
             </span>
             <div className="team-member-identity">
               <strong>{player.name}</strong>
+              {!player.isTrainer && player.number && <span className="player-hint">Nr. {player.number}</span>}
               <div className="team-member-badges">
                 <span className={player.isTrainer ? 'team-role trainer' : 'team-role player'}>
                   {player.isTrainer ? 'Trainer' : 'Spielerin'}
@@ -3240,7 +3241,7 @@ export default function App() {
           </div>
         </section>
         )}
-        {settingsCategory === 'squad-settings' && isAdmin && <SquadSettings request={authenticatedRequest} />}
+        {settingsCategory === 'squad-settings' && isAdmin && <SquadSettings request={authenticatedRequest} onProfileSaved={refetchAll} />}
         {settingsCategory === 'cash-admin' && isAdmin && (
           <section className="cash-opening-section">
             <div>
@@ -3764,6 +3765,7 @@ export default function App() {
                                 <div className="participant-col">
                                   <div className="player-name-line">
                                     <b>{p.name}</b>
+                                    {p.number && <span className="player-hint">Nr. {p.number}</span>}
                                     <em className="trainer-label">Trainer*in</em>
                                     {teamHinweis && (
                                       <span className="player-hint">Hinweis: {teamHinweis}</span>
