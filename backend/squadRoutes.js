@@ -14,6 +14,16 @@ module.exports = function registerSquadRoutes({ app, Squad, Player, Training, re
   }
   async function output(doc) { return { version: doc.__v || 0, fussballTeamUrl: doc.fussballTeamUrl, fieldPlayers: doc.fieldPlayers, benchSize: doc.benchSize, formation: doc.formation, captainId: doc.captainId, viceCaptainIds: doc.viceCaptainIds, candidates: await candidates(doc), games: doc.games }; }
   function checkVersion(req, doc) { if (req.body?.version !== (doc.__v || 0)) fail('Der Bereich wurde inzwischen geändert. Bitte neu laden.', 409); }
+  function removePersonFromUpcomingGames(doc, personId) {
+    const today = new Date().toISOString().slice(0, 10);
+    for (const row of doc.games) {
+      if (!row.date || row.date < today) continue;
+      if (Array.isArray(row.availableIds)) row.availableIds = row.availableIds.filter(id => id !== personId);
+      if (Array.isArray(row.lineup)) row.lineup = row.lineup.filter(item => item.personId !== personId);
+      if (row.captainId === personId) row.captainId = '';
+      if (Array.isArray(row.viceCaptainIds)) row.viceCaptainIds = row.viceCaptainIds.filter(id => id !== personId);
+    }
+  }
   app.get('/squads', access, wrap(async (_req, res) => { res.set('Cache-Control', 'no-store'); res.json(await output(await read())); }));
   app.get('/squads/admin', requireAdmin, wrap(async (_req, res) => res.json(await output(await read()))));
   app.put('/squads/source', requireAdmin, wrap(async (req, res) => {
@@ -50,6 +60,32 @@ module.exports = function registerSquadRoutes({ app, Squad, Player, Training, re
     if (row) Object.assign(row, fields, { guest }); else doc.profiles.push({ ...fields, playerId, guest });
     await doc.save(); res.json(await output(doc));
   }));
+  app.delete('/squads/people/:personId', requireAdmin, wrap(async (req, res) => {
+    const personId = String(req.params.personId || '');
+    if (!/^[pg]:[a-f\d]{24}$/i.test(personId)) fail('Ungültiges Kader-Mitglied.');
+    const doc = await read();
+    if (personId.startsWith('p:')) {
+      const playerId = personId.slice(2);
+      const player = await Player.findById(playerId);
+      if (!player) fail('Kader-Mitglied nicht gefunden.', 404);
+      doc.profiles = doc.profiles.filter(p => p.playerId !== playerId);
+      if (doc.captainId === personId) doc.captainId = '';
+      doc.viceCaptainIds = (doc.viceCaptainIds || []).filter(id => id !== personId);
+      removePersonFromUpcomingGames(doc, personId);
+      await doc.save();
+      await Player.deleteOne({ _id: playerId });
+      return res.json(await output(doc));
+    }
+    const profileId = personId.slice(2);
+    const legacy = doc.profiles.find(p => !p.playerId && String(p._id) === profileId);
+    if (!legacy) fail('Gastspielerin nicht gefunden.', 404);
+    doc.profiles = doc.profiles.filter(p => String(p._id) !== profileId);
+    if (doc.captainId === personId) doc.captainId = '';
+    doc.viceCaptainIds = (doc.viceCaptainIds || []).filter(id => id !== personId);
+    removePersonFromUpcomingGames(doc, personId);
+    await doc.save();
+    res.json(await output(doc));
+  }));
   app.delete('/squads/guests/:playerId', requireAdmin, wrap(async (req, res) => {
     const playerId = String(req.params.playerId || '');
     if (!/^[a-f\d]{24}$/i.test(playerId)) fail('Ungültige Gastspielerin.');
@@ -57,10 +93,12 @@ module.exports = function registerSquadRoutes({ app, Squad, Player, Training, re
     const row = doc.profiles.find(p => p.playerId === playerId && p.guest === true);
     if (!row) fail('Gastspielerin nicht gefunden.', 404);
     const personId = `p:${playerId}`;
-    const used = doc.games.some(g => (g.availableIds || []).includes(personId) || (g.lineup || []).some(l => l.personId === personId));
-    if (used) fail('Die Gastspielerin ist bereits in einem gespeicherten Spiel verwendet und kann deshalb nicht gelöscht werden.', 409);
     doc.profiles = doc.profiles.filter(p => p.playerId !== playerId);
-    await Promise.all([doc.save(), Player.deleteOne({ _id: playerId, isTrainer: { $ne: true } })]);
+    if (doc.captainId === personId) doc.captainId = '';
+    doc.viceCaptainIds = (doc.viceCaptainIds || []).filter(id => id !== personId);
+    removePersonFromUpcomingGames(doc, personId);
+    await doc.save();
+    await Player.deleteOne({ _id: playerId, isTrainer: { $ne: true } });
     res.json(await output(doc));
   }));
   app.post('/squads/games', access, wrap(async (req, res) => {
