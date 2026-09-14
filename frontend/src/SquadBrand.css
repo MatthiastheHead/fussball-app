@@ -30,7 +30,8 @@ body:has(.squad-login), body:has(.squad-start) {
 .squad-status.failed .squad-status-dot { background: #ff8989; }
 .squad-status.failed { color: #ffb9b9; }
 .squad-description { text-align: center; color: #99acc4; font-size: .875rem; line-height: 1.6; max-width: 350px; margin: 1.5rem auto; }
-.squad-login .login-version { font-size: .8rem; color: #8fa4bd; margin: 0; }
+.squad-login .login-version { font-size: 0; color: #8fa4bd; margin: 0; }
+.squad-login .login-version::after { content: 'Version 10.3'; font-size: .8rem; }
 .squad-start.start-menu { width: min(100%, 560px); margin: 0 auto; padding: 1.25rem 1rem 2rem; }
 .squad-brand.compact { margin-bottom: 1.5rem; }
 .squad-brand.compact img { width: 88px; height: 88px; border-radius: 18px; }
