@@ -3,7 +3,7 @@ const { POSITIONS, validDate } = require('../squadUtils');
 const Schema = mongoose.Schema;
 const config = { fieldPlayers: { type: Number, default: 8, min: 2, max: 10 }, benchSize: { type: Number, default: 4, min: 0, max: 15 }, formation: { type: String, default: '3-3-2' } };
 const profile = new Schema({
-  playerId: { type: String, default: '' }, name: { type: String, required: true, maxlength: 100 },
+  playerId: { type: String, default: '' }, name: { type: String, required: true, maxlength: 100 }, guest: { type: Boolean, default: false },
   foot: { type: String, enum: ['unbekannt', 'links', 'rechts', 'beidfüßig'], default: 'unbekannt' },
   mainPosition: { type: String, enum: ['', ...POSITIONS], default: '' }, positions: [{ type: String, enum: POSITIONS }],
   number: { type: String, default: '', maxlength: 2 }, club: { type: String, default: '', maxlength: 100 }, note: { type: String, default: '', maxlength: 1000 }, inactive: { type: Boolean, default: false },
