@@ -9,7 +9,7 @@ module.exports = function registerSquadRoutes({ app, Squad, Player, Training, re
     const players = await Player.find({ isTrainer: { $ne: true } }).lean();
     return [...players.map(p => {
       const info = doc.profiles.find(row => row.playerId === String(p._id));
-      return { ...(info?.toObject() || {}), id: `p:${p._id}`, playerId: String(p._id), name: p.name, guest: p.isGuest === true, inactive: p.inactive === true };
+      return { ...(info?.toObject() || {}), id: `p:${p._id}`, playerId: String(p._id), name: p.name, guest: info?.guest === true, inactive: p.inactive === true };
     }), ...doc.profiles.filter(p => !p.playerId).map(p => ({ ...p.toObject(), id: `g:${p._id}`, guest: true, legacyGuest: true }))];
   }
   async function output(doc) { return { version: doc.__v || 0, fussballTeamUrl: doc.fussballTeamUrl, fieldPlayers: doc.fieldPlayers, benchSize: doc.benchSize, formation: doc.formation, captainId: doc.captainId, viceCaptainIds: doc.viceCaptainIds, candidates: await candidates(doc), games: doc.games }; }
@@ -35,29 +35,32 @@ module.exports = function registerSquadRoutes({ app, Squad, Player, Training, re
     if (playerId && !player) fail('Spielerin nicht gefunden.');
     const fields = profile(req.body);
     if (!playerId) {
-      const duplicate = await Player.findOne({ name: { $regex: `^${fields.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' }, isTrainer: { $ne: true } });
+      const duplicate = await Player.findOne({ name: fields.name, isTrainer: { $ne: true } });
       if (duplicate) fail('Eine Spielerin mit diesem Namen besteht bereits.');
-      player = await Player.create({ name: fields.name, isGuest: true, inactive: fields.inactive === true });
+      player = await Player.create({ name: fields.name, inactive: fields.inactive === true });
       playerId = String(player._id);
-    } else if (player.isGuest) {
+    }
+    let row = doc.profiles.find(p => p.playerId === playerId);
+    const guest = row?.guest === true || !req.body.playerId;
+    if (guest) {
       player.name = fields.name;
       player.inactive = fields.inactive === true;
       await player.save();
     }
-    let row = doc.profiles.find(p => p.playerId === playerId);
-    if (row) Object.assign(row, fields); else doc.profiles.push({ ...fields, playerId });
+    if (row) Object.assign(row, fields, { guest }); else doc.profiles.push({ ...fields, playerId, guest });
     await doc.save(); res.json(await output(doc));
   }));
   app.delete('/squads/guests/:playerId', requireAdmin, wrap(async (req, res) => {
     const playerId = String(req.params.playerId || '');
     if (!/^[a-f\d]{24}$/i.test(playerId)) fail('Ungültige Gastspielerin.');
-    const player = await Player.findOne({ _id: playerId, isGuest: true, isTrainer: { $ne: true } });
-    if (!player) fail('Gastspielerin nicht gefunden.', 404);
     const doc = await read();
-    const used = doc.games.some(g => (g.squadIds || []).includes(`p:${playerId}`) || (g.lineup || []).some(l => l.playerId === `p:${playerId}`));
+    const row = doc.profiles.find(p => p.playerId === playerId && p.guest === true);
+    if (!row) fail('Gastspielerin nicht gefunden.', 404);
+    const personId = `p:${playerId}`;
+    const used = doc.games.some(g => (g.availableIds || []).includes(personId) || (g.lineup || []).some(l => l.personId === personId));
     if (used) fail('Die Gastspielerin ist bereits in einem gespeicherten Spiel verwendet und kann deshalb nicht gelöscht werden.', 409);
     doc.profiles = doc.profiles.filter(p => p.playerId !== playerId);
-    await Promise.all([doc.save(), player.deleteOne()]);
+    await Promise.all([doc.save(), Player.deleteOne({ _id: playerId, isTrainer: { $ne: true } })]);
     res.json(await output(doc));
   }));
   app.post('/squads/games', access, wrap(async (req, res) => {
