@@ -12,8 +12,8 @@ export default function SquadSettings({ request, onProfileSaved }) {
   useEffect(() => { run(async () => setData(await call('squads/admin'))); }, []);
   const edit = p => setDraft({ ...empty, ...p, id: p.guest ? p._id : undefined, playerId: p.guest ? '' : p.playerId, positions: p.positions || [] });
   return <section className="squad-settings">
-    <h2>Spielkader und Gastspielerinnen</h2>
-    <p>Profile ergänzen den vorhandenen Mannschaftskader. Gastspielerinnen bleiben außerhalb von Training und Teamgenerator.</p>
+    <h2>Kaderverwaltung</h2>
+    <p>Eine gemeinsame Spielerinnenbasis für Training, Teamgenerator und Spiele. Rückennummern und Spielerinnenprofile werden zentral gepflegt.</p>
     {error && <p role="alert" className="login-error">{error}</p>}{notice && <p role="status">{notice}</p>}
     <button className="btn-edit" disabled={busy} onClick={() => run(async () => { setData(await call('squads/admin')); setDraft(null); })}>Neu laden</button>
     {!data && <p>Lädt …</p>}
@@ -48,7 +48,7 @@ export default function SquadSettings({ request, onProfileSaved }) {
         {!draft.playerId && <label><input type="checkbox" checked={draft.inactive} disabled={busy} onChange={e => setDraft({ ...draft, inactive: e.target.checked })} />Gastspielerin inaktiv</label>}
         <div className="task-toolbar"><button className="btn-save-players" disabled={busy}>Profil speichern</button><button type="button" className="btn-edit" disabled={busy} onClick={() => setDraft(null)}>Abbrechen</button></div>
       </form>}
-      {['Mannschaft', 'Gastspielerinnen'].map((title, index) => <section className="cash-entry-section" key={title}><h3>{title}</h3><ul className="squad-profile-list">{data.candidates.filter(p => p.guest === Boolean(index)).map(p => <li key={p.id}><span><strong>{p.name}</strong><small>{p.mainPosition || 'Position offen'} · {p.foot || 'Fuß unbekannt'}{p.inactive ? ' · Inaktiv' : ''}</small></span><button className="btn-edit" disabled={busy} onClick={() => edit(p)}>Bearbeiten</button></li>)}</ul></section>)}
+      {['Mannschaft', 'Gastspielerinnen'].map((title, index) => <section className="cash-entry-section" key={title}><h3>{title}</h3><ul className="squad-profile-list">{data.candidates.filter(p => p.guest === Boolean(index)).map(p => <li key={p.id}><span><strong>{p.number ? `#${p.number} ` : ''}{p.name}</strong><small>{p.mainPosition || 'Position offen'} · {p.foot || 'Fuß unbekannt'}{p.inactive ? ' · Inaktiv' : ''}</small></span><button className="btn-edit" disabled={busy} onClick={() => edit(p)}>Bearbeiten</button></li>)}</ul></section>)}
     </>}
   </section>;
 }
