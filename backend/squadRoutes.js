@@ -9,8 +9,8 @@ module.exports = function registerSquadRoutes({ app, Squad, Player, Training, re
     const players = await Player.find({ isTrainer: { $ne: true } }).lean();
     return [...players.map(p => {
       const info = doc.profiles.find(row => row.playerId === String(p._id));
-      return { ...(info?.toObject() || {}), id: `p:${p._id}`, playerId: String(p._id), name: p.name, guest: false, inactive: p.inactive === true };
-    }), ...doc.profiles.filter(p => !p.playerId).map(p => ({ ...p.toObject(), id: `g:${p._id}`, guest: true }))];
+      return { ...(info?.toObject() || {}), id: `p:${p._id}`, playerId: String(p._id), name: p.name, guest: p.isGuest === true, inactive: p.inactive === true };
+    }), ...doc.profiles.filter(p => !p.playerId).map(p => ({ ...p.toObject(), id: `g:${p._id}`, guest: true, legacyGuest: true }))];
   }
   async function output(doc) { return { version: doc.__v || 0, fussballTeamUrl: doc.fussballTeamUrl, fieldPlayers: doc.fieldPlayers, benchSize: doc.benchSize, formation: doc.formation, captainId: doc.captainId, viceCaptainIds: doc.viceCaptainIds, candidates: await candidates(doc), games: doc.games }; }
   function checkVersion(req, doc) { if (req.body?.version !== (doc.__v || 0)) fail('Der Bereich wurde inzwischen geändert. Bitte neu laden.', 409); }
@@ -29,15 +29,36 @@ module.exports = function registerSquadRoutes({ app, Squad, Player, Training, re
   }));
   app.post('/squads/profiles', requireAdmin, wrap(async (req, res) => {
     const doc = await read(); checkVersion(req, doc);
-    const playerId = String(req.body.playerId || '');
+    let playerId = String(req.body.playerId || '');
     if (playerId && !/^[a-f\d]{24}$/i.test(playerId)) fail('Ungültige Spielerin.');
-    if (playerId && !await Player.exists({ _id: playerId, isTrainer: { $ne: true } })) fail('Spielerin nicht gefunden.');
-    let row = playerId ? doc.profiles.find(p => p.playerId === playerId) : req.body.id ? doc.profiles.id(req.body.id) : null;
-    if (req.body.id && (!row || row.playerId)) fail('Gastspielerin nicht gefunden.');
+    let player = playerId ? await Player.findOne({ _id: playerId, isTrainer: { $ne: true } }) : null;
+    if (playerId && !player) fail('Spielerin nicht gefunden.');
     const fields = profile(req.body);
-    if (!playerId && doc.profiles.some(p => !p.playerId && String(p._id) !== String(row?._id) && p.name.toLocaleLowerCase('de') === fields.name.toLocaleLowerCase('de'))) fail('Eine Gastspielerin mit diesem Namen besteht bereits.');
+    if (!playerId) {
+      const duplicate = await Player.findOne({ name: { $regex: `^${fields.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' }, isTrainer: { $ne: true } });
+      if (duplicate) fail('Eine Spielerin mit diesem Namen besteht bereits.');
+      player = await Player.create({ name: fields.name, isGuest: true, inactive: fields.inactive === true });
+      playerId = String(player._id);
+    } else if (player.isGuest) {
+      player.name = fields.name;
+      player.inactive = fields.inactive === true;
+      await player.save();
+    }
+    let row = doc.profiles.find(p => p.playerId === playerId);
     if (row) Object.assign(row, fields); else doc.profiles.push({ ...fields, playerId });
     await doc.save(); res.json(await output(doc));
+  }));
+  app.delete('/squads/guests/:playerId', requireAdmin, wrap(async (req, res) => {
+    const playerId = String(req.params.playerId || '');
+    if (!/^[a-f\d]{24}$/i.test(playerId)) fail('Ungültige Gastspielerin.');
+    const player = await Player.findOne({ _id: playerId, isGuest: true, isTrainer: { $ne: true } });
+    if (!player) fail('Gastspielerin nicht gefunden.', 404);
+    const doc = await read();
+    const used = doc.games.some(g => (g.squadIds || []).includes(`p:${playerId}`) || (g.lineup || []).some(l => l.playerId === `p:${playerId}`));
+    if (used) fail('Die Gastspielerin ist bereits in einem gespeicherten Spiel verwendet und kann deshalb nicht gelöscht werden.', 409);
+    doc.profiles = doc.profiles.filter(p => p.playerId !== playerId);
+    await Promise.all([doc.save(), player.deleteOne()]);
+    res.json(await output(doc));
   }));
   app.post('/squads/games', access, wrap(async (req, res) => {
     const doc = await read(); checkVersion(req, doc);
@@ -56,7 +77,7 @@ module.exports = function registerSquadRoutes({ app, Squad, Player, Training, re
     const rows = trainings.filter(t => { const m = t.date?.match(/(\d{2})\.(\d{2})\.(\d{4})$/); const date = m ? `${m[3]}-${m[2]}-${m[1]}` : ''; return date && date >= from && date <= to; });
     const stats = people.map(p => {
       let total = 0, attended = 0, rated = 0, stars = 0;
-      if (!p.guest) for (const t of rows) {
+      for (const t of rows) {
         const name = p.name;
         if (![t.participants, t.ratings, t.inactiveReasons].some(map => Object.hasOwn(map || {}, name)) || String(t.inactiveReasons?.[name] || '').trim()) continue;
         total++;
