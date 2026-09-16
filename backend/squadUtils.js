@@ -41,12 +41,12 @@ function game(input, candidates) {
   const lineup = input.lineup.map(row => {
     if (!row || typeof row !== 'object') fail('Ungültiger Kaderplatz.');
     const candidate = candidates.find(p => p.id === row.personId);
-    if (!/^[pg]:[a-f\d]{24}$/i.test(row.personId) || !availableIds.includes(row.personId) || !candidate || typeof candidate.name !== 'string' || !candidate.name.trim() || candidate.name.length > 100 || candidate.guest !== row.personId.startsWith('g:') || candidate.inactive || seen.has(row.personId)) fail('Unbekannte, inaktive oder doppelte Spielerin im Kader.');
+    if (!/^[pg]:[a-f\d]{24}$/i.test(row.personId) || !availableIds.includes(row.personId) || !candidate || typeof candidate.name !== 'string' || !candidate.name.trim() || candidate.name.length > 100 || candidate.inactive || seen.has(row.personId)) fail('Unbekannte, inaktive oder doppelte Spielerin im Kader.');
     seen.add(row.personId);
     if (!['field', 'keeper', 'bench'].includes(row.role) || (row.position && !POSITIONS.includes(row.position))) fail('Ungültige Position.');
     if (!Number.isFinite(row.x) || !Number.isFinite(row.y) || row.x < 5 || row.x > 95 || row.y < 5 || row.y > 95) fail('Position liegt außerhalb des Spielfelds.');
     if (row.role === 'field') field++; else if (row.role === 'keeper') keepers++; else bench++;
-    return { personId: row.personId, name: candidate.name, guest: candidate.guest, role: row.role, position: row.role === 'keeper' ? 'TW' : row.position || '', x: row.x, y: row.y };
+    return { personId: row.personId, name: candidate.name, guest: candidate.guest === true, role: row.role, position: row.role === 'keeper' ? 'TW' : row.position || '', x: row.x, y: row.y };
   });
   if (field > config.fieldPlayers || keepers > 1 || bench > config.benchSize) fail('Zu viele Feldspielerinnen, Torhüterinnen oder Ersatzspielerinnen.');
   const leaders = captains(input, [...seen]);
