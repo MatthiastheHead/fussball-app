@@ -1,4 +1,4 @@
-// Version 12.1: Spielkarten, löschbare Spiele und Gegner Gefährlichkeit.
+// Version 12.2: Heimspielort, bessere Spielort Erkennung und Kaderauswahl weiter oben.
 
 import React, { useState, useEffect } from 'react';
 import SquadBrand from './SquadBrand.jsx';
@@ -326,7 +326,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '12.1';
+  const version = '12.2';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canDeleteCash = sessionUser?.cashPermissions?.canDelete === true;

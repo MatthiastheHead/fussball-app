@@ -12,7 +12,7 @@ module.exports = function registerSquadRoutes({ app, Squad, Player, Training, re
       return { ...(info?.toObject() || {}), id: `p:${p._id}`, playerId: String(p._id), name: p.name, guest: info?.guest === true, inactive: p.inactive === true };
     }), ...doc.profiles.filter(p => !p.playerId).map(p => ({ ...p.toObject(), id: `g:${p._id}`, guest: true, legacyGuest: true }))];
   }
-  async function output(doc) { return { version: doc.__v || 0, fussballTeamUrl: doc.fussballTeamUrl, fieldPlayers: doc.fieldPlayers, benchSize: doc.benchSize, formation: doc.formation, captainId: doc.captainId, viceCaptainIds: doc.viceCaptainIds, candidates: await candidates(doc), games: doc.games }; }
+  async function output(doc) { return { version: doc.__v || 0, fussballTeamUrl: doc.fussballTeamUrl, homeVenue: doc.homeVenue || '', fieldPlayers: doc.fieldPlayers, benchSize: doc.benchSize, formation: doc.formation, captainId: doc.captainId, viceCaptainIds: doc.viceCaptainIds, candidates: await candidates(doc), games: doc.games }; }
   function checkVersion(req, doc) { if (req.body?.version !== (doc.__v || 0)) fail('Der Bereich wurde inzwischen geändert. Bitte neu laden.', 409); }
   function removePersonFromUpcomingGames(doc, personId) {
     const today = new Date().toISOString().slice(0, 10);
@@ -31,7 +31,15 @@ module.exports = function registerSquadRoutes({ app, Squad, Player, Training, re
   }));
   app.get('/squads/fixtures', access, wrap(async (_req, res) => {
     res.set('Cache-Control', 'no-store');
-    try { res.json(await fetchGames((await read()).fussballTeamUrl)); }
+    try {
+      const doc = await read();
+      const result = await fetchGames(doc.fussballTeamUrl);
+      result.games = result.games.map(game => ({
+        ...game,
+        location: game.location || (game.home ? String(doc.homeVenue || '').trim() : ''),
+      }));
+      res.json(result);
+    }
     catch (error) { fail(error.status ? error.message : 'Der Spielabruf ist gerade nicht möglich. Bitte später erneut versuchen.', 502); }
   }));
   app.get('/squads/opponent-analysis', access, wrap(async (req, res) => {
