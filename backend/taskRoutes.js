@@ -8,18 +8,22 @@ module.exports = function registerTaskRoutes({ app, Task, User, requireAccess, m
     try { await handler(req, res); }
     catch (error) { res.status(error.status || 500).json({ error: error.status ? error.message : 'Der Eintrag konnte nicht verarbeitet werden. Bitte erneut versuchen.' }); }
   };
+
   app.get('/tasks/assignees', access, wrap(async (_req, res) => {
     const users = await User.find({}).select('_id name isAdmin permissions').lean();
     res.json(users.filter(user => mayAccess(user, 'tasks')).map(user => ({ _id: String(user._id), name: user.name })));
   }));
+
   app.get('/tasks', access, wrap(async (_req, res) => {
     res.json(await Task.find({}).sort({ completed: 1, createdAt: -1 }).lean());
   }));
+
   app.get('/tasks/my-open-count', access, wrap(async (req, res) => {
     const user = await User.findOne({ name: req.auth.username }).select('_id').lean();
     const count = user ? await Task.countDocuments({ kind: { $ne: 'note' }, assignedTo: String(user._id), completed: false }) : 0;
     res.json({ count });
   }));
+
   app.delete('/tasks/:id', access, wrap(async (req, res) => {
     if (!mongoose.isValidObjectId(req.params.id)) fail('Ungültiger Eintrag.');
     if (req.body?.confirm !== true) fail('Bitte das Löschen bestätigen.');
@@ -27,13 +31,32 @@ module.exports = function registerTaskRoutes({ app, Task, User, requireAccess, m
     if (!removed) fail('Der Eintrag wurde nicht gefunden.', 404);
     res.json({ ok: true, id: String(removed._id) });
   }));
+
   async function fields(body, current) {
     if (!body || typeof body !== 'object' || Array.isArray(body)) fail('Ungültiger Eintrag.');
     const kind = body.kind === 'note' ? 'note' : current?.kind === 'note' ? 'note' : 'task';
     const title = typeof body.title === 'string' ? body.title.trim() : '';
     if (!title || title.length > 160) fail('Bitte eine Überschrift mit höchstens 160 Zeichen eingeben.');
     if (typeof body.description !== 'string' || body.description.length > 4000) fail('Der Text darf höchstens 4000 Zeichen enthalten.');
-    if (kind === 'note') return { kind, title, description: body.description.trim(), dueDate: '', assignedTo: '', assignedName: '' };
+
+    if (kind === 'note') {
+      if (!Array.isArray(body.items) || body.items.length > 100) fail('Eine Notiz darf höchstens 100 Stichpunkte enthalten.');
+      const currentItems = Array.isArray(current?.items) ? current.items : [];
+      const items = body.items.map(item => {
+        const text = typeof item?.text === 'string' ? item.text.trim() : '';
+        if (!text || text.length > 500) fail('Jeder Stichpunkt benötigt Text mit höchstens 500 Zeichen.');
+        const existing = item?._id ? currentItems.find(row => String(row._id) === String(item._id)) : null;
+        return {
+          ...(existing ? { _id: existing._id } : {}),
+          text,
+          completed: existing?.completed === true,
+          completedBy: existing?.completedBy || '',
+          completedAt: existing?.completedAt || null,
+        };
+      });
+      return { kind, title, description: body.description.trim(), items, dueDate: '', assignedTo: '', assignedName: '' };
+    }
+
     if (typeof body.dueDate !== 'string' || !validDate(body.dueDate)) fail('Bitte ein gültiges Fälligkeitsdatum wählen.');
     if (typeof body.assignedTo !== 'string') fail('Bitte eine zuständige Person auswählen.');
     let assignedName = '';
@@ -44,21 +67,51 @@ module.exports = function registerTaskRoutes({ app, Task, User, requireAccess, m
       else if (current && current.assignedTo === body.assignedTo) assignedName = current.assignedName;
       else fail('Die ausgewählte Person hat keinen Zugriff auf Aufgaben.');
     }
-    return { kind, title, description: body.description.trim(), dueDate: body.dueDate, assignedTo: body.assignedTo, assignedName };
+    return { kind, title, description: body.description.trim(), items: [], dueDate: body.dueDate, assignedTo: body.assignedTo, assignedName };
   }
+
   app.post('/tasks', access, wrap(async (req, res) => {
     const data = await fields(req.body);
     res.status(201).json(await Task.create({ ...data, createdBy: req.auth.username, updatedBy: req.auth.username }));
   }));
+
+  app.patch('/tasks/:id/items/:itemId', access, wrap(async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.id) || !mongoose.isValidObjectId(req.params.itemId)) fail('Ungültiger Stichpunkt.');
+    if (typeof req.body?.completed !== 'boolean') fail('Ungültiger Status.');
+    const current = await Task.findById(req.params.id).lean();
+    if (!current || current.kind !== 'note') fail('Die Notiz wurde nicht gefunden.', 404);
+    const items = (current.items || []).map(item => {
+      if (String(item._id) !== req.params.itemId) return item;
+      return {
+        ...item,
+        completed: req.body.completed,
+        completedBy: req.body.completed ? req.auth.username : '',
+        completedAt: req.body.completed ? new Date() : null,
+      };
+    });
+    if (!items.some(item => String(item._id) === req.params.itemId)) fail('Der Stichpunkt wurde nicht gefunden.', 404);
+    const note = await Task.findOneAndUpdate(
+      { _id: current._id, __v: current.__v },
+      { $set: { items, updatedBy: req.auth.username }, $inc: { __v: 1 } },
+      { new: true, runValidators: true }
+    );
+    if (!note) fail('Die Notiz wurde gerade geändert. Bitte aktualisieren und erneut versuchen.', 409);
+    res.json(note);
+  }));
+
   app.patch('/tasks/:id', access, wrap(async (req, res) => {
     if (!mongoose.isValidObjectId(req.params.id)) fail('Ungültiger Eintrag.');
     const current = await Task.findById(req.params.id).lean();
     if (!current) fail('Der Eintrag wurde nicht gefunden.', 404);
     let data;
-    if (Object.keys(req.body || {}).length === 1 && typeof req.body.completed === 'boolean') {
+    if (Object.keys(req.body || {}).length === 1 && typeof req.body.completed === 'boolean' && current.kind !== 'note') {
       data = { completed: req.body.completed, completedBy: req.body.completed ? req.auth.username : '', completedAt: req.body.completed ? new Date() : null };
     } else data = await fields(req.body, current);
-    const task = await Task.findOneAndUpdate({ _id: current._id, __v: current.__v }, { $set: { ...data, updatedBy: req.auth.username }, $inc: { __v: 1 } }, { new: true, runValidators: true });
+    const task = await Task.findOneAndUpdate(
+      { _id: current._id, __v: current.__v },
+      { $set: { ...data, updatedBy: req.auth.username }, $inc: { __v: 1 } },
+      { new: true, runValidators: true }
+    );
     if (!task) fail('Der Eintrag wurde gerade geändert. Bitte aktualisieren und erneut versuchen.', 409);
     res.json(task);
   }));
