@@ -1,5 +1,5 @@
 const { settings, profile, game, validDate, captains } = require('./squadUtils');
-const { teamUrl, fetchGames } = require('./fussballSource');
+const { teamUrl, fetchGames, fetchOpponentAnalysis } = require('./fussballSource');
 module.exports = function registerSquadRoutes({ app, Squad, Player, Training, requireAccess, requireAdmin }) {
   const access = requireAccess('squads');
   const wrap = fn => async (req, res) => { try { await fn(req, res); } catch (e) { res.status((e.name === 'VersionError' || e.code === 11000) ? 409 : e.status || 500).json({ error: (e.name === 'VersionError' || e.code === 11000) ? 'Der Spielkader wurde inzwischen geändert. Bitte neu laden.' : e.status ? e.message : 'Spielkader konnte nicht gespeichert oder geladen werden.' }); } };
@@ -33,6 +33,13 @@ module.exports = function registerSquadRoutes({ app, Squad, Player, Training, re
     res.set('Cache-Control', 'no-store');
     try { res.json(await fetchGames((await read()).fussballTeamUrl)); }
     catch (error) { fail(error.status ? error.message : 'Der Spielabruf ist gerade nicht möglich. Bitte später erneut versuchen.', 502); }
+  }));
+  app.get('/squads/opponent-analysis', access, wrap(async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    const source = teamUrl(String(req.query?.url || ''));
+    if (!source) fail('Für diesen Gegner ist kein FUSSBALL.DE-Mannschaftslink verfügbar.');
+    try { res.json(await fetchOpponentAnalysis(source)); }
+    catch (error) { fail(error.status ? error.message : 'Die Gegneranalyse ist gerade nicht möglich. Bitte später erneut versuchen.', 502); }
   }));
   app.put('/squads/settings', requireAdmin, wrap(async (req, res) => {
     const doc = await read(); checkVersion(req, doc); Object.assign(doc, settings(req.body), captains(req.body, (await candidates(doc)).filter(p => !p.inactive).map(p => p.id))); await doc.save(); res.json(await output(doc));

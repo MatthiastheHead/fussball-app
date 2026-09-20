@@ -9,6 +9,7 @@ export default function SquadPanel({ request, onBack, username }) {
   const [data, setData] = useState(null), [draft, setDraft] = useState(null), [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [stats, setStats] = useState([]), [selected, setSelected] = useState('');
+  const [opponentAnalysis, setOpponentAnalysis] = useState(null), [analysisLoading, setAnalysisLoading] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   async function call(path, body) {
     const res = await request(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : { cache: 'no-store' });
@@ -21,7 +22,7 @@ export default function SquadPanel({ request, onBack, username }) {
   function open(game, fixture) { if (!leave()) return; const now = new Date(), from = new Date(); from.setDate(from.getDate() - 56);
     if (!game && fixture?.date) { const end = fixture.date < dateInput(now) ? fixture.date : dateInput(now); from.setTime(new Date(`${end}T12:00:00`).getTime()); from.setDate(from.getDate() - 56); }
     setDraft(game ? { ...structuredClone(game), availableIds: game.availableIds || game.lineup.map(p => p.personId), viceCaptainIds: game.viceCaptainIds || [] } : { opponent: '', location: '', date: dateInput(now), time: '10:00', from: dateInput(from), to: fixture?.date && fixture.date < dateInput(now) ? fixture.date : dateInput(now), fieldPlayers: data.fieldPlayers, benchSize: data.benchSize, formation: data.formation, lineup: [], captainId: '', viceCaptainIds: [], availableIds: [], ...(fixture || {}) });
-    setDetailsOpen(!game); setDirty(!game && !!fixture); setStats([]); setSelected(''); setError(''); setNotice(!game && fixture ? 'Termin als Entwurf übernommen. Bitte Spielort ergänzen, Daten prüfen und speichern.' : '');
+    setDetailsOpen(!game); setDirty(!game && !!fixture); setStats([]); setSelected(''); setOpponentAnalysis(null); setError(''); setNotice(!game && fixture ? (fixture.location ? 'Termin und Spielort als Entwurf übernommen. Bitte kurz prüfen und speichern.' : 'Termin als Entwurf übernommen. Spielort konnte nicht sicher gelesen werden, bitte ergänzen.') : '');
   }
   function leadersFor(lineup) {
     const captainId = draft.captainId || data.captainId;
@@ -43,6 +44,15 @@ export default function SquadPanel({ request, onBack, username }) {
     if (!present && selected === personId) setSelected('');
   }
   function change(values) { setDraft(d => ({ ...d, ...values })); setDirty(true); }
+  async function loadOpponentAnalysis() {
+    if (!draft?.opponentTeamUrl || analysisLoading) return;
+    setAnalysisLoading(true); setError('');
+    try {
+      const result = await call(`squads/opponent-analysis?url=${encodeURIComponent(draft.opponentTeamUrl)}`);
+      setOpponentAnalysis(result);
+    } catch (e) { setError(e.message); }
+    finally { setAnalysisLoading(false); }
+  }
   const count = role => draft.lineup.filter(p => p.role === role).length;
   function add(p, role) {
     if (!draft.availableIds.includes(p.id)) { setError('Bitte die Spielerin zuerst als verfügbar markieren.'); return; }
@@ -80,6 +90,21 @@ export default function SquadPanel({ request, onBack, username }) {
 
       </form></details>
       <div className="task-toolbar squad-save-bar"><button type="submit" form="squad-game-form" className="btn-save-players" disabled={busy} onClick={() => { const form = document.getElementById('squad-game-form'); if (form && !form.checkValidity()) setDetailsOpen(true); }}>{busy ? 'Bitte warten …' : dirty ? 'Änderungen speichern *' : 'Spiel speichern'}</button><button className="btn-edit" disabled={busy || dirty || !draft._id} onClick={() => run(async () => { const { createSquadPdf } = await import('./squadPdf.js'); createSquadPdf(draft, { generatedBy: username, generatedAt: new Date().toISOString() }).save(`Spielkader-${draft.date}.pdf`); })}>Als PDF exportieren</button>{(dirty || !draft._id) && <small>Vor dem Export bitte speichern.</small>}</div>
+      {draft.opponentTeamUrl && <details className="squad-disclosure opponent-analysis" open>
+        <summary>Gegneranalyse · {draft.opponent}</summary>
+        <div className="task-toolbar"><button type="button" className="btn-edit" disabled={analysisLoading || busy} onClick={loadOpponentAnalysis}>{analysisLoading ? 'Analyse läuft …' : opponentAnalysis ? 'Analyse aktualisieren' : 'Gegner analysieren'}</button></div>
+        {!opponentAnalysis && <p className="squad-help">Form aus den letzten Spielen, Saisonbilanz und Vorjahresplatzierung werden direkt von FUSSBALL.DE ausgewertet, soweit dort lesbare Daten vorliegen.</p>}
+        {opponentAnalysis && <>
+          <div className="opponent-scale"><div className="opponent-scale-fill" style={{ width: `${opponentAnalysis.form?.score ?? 0}%` }} /></div>
+          <div className="opponent-analysis-grid">
+            <article><small>Aktuelle Form</small><strong>{opponentAnalysis.form?.label || 'Keine Daten'}</strong><span>{opponentAnalysis.form?.score == null ? 'Keine Wertung' : `${opponentAnalysis.form.score}/100`}</span></article>
+            <article><small>Letzte Spiele</small><strong>{opponentAnalysis.form?.wins || 0} S · {opponentAnalysis.form?.draws || 0} U · {opponentAnalysis.form?.losses || 0} N</strong><span>{opponentAnalysis.form?.goalsFor || 0}:{opponentAnalysis.form?.goalsAgainst || 0} Tore</span></article>
+            <article><small>Saison bisher</small><strong>{opponentAnalysis.season?.wins || 0} S · {opponentAnalysis.season?.draws || 0} U · {opponentAnalysis.season?.losses || 0} N</strong><span>{opponentAnalysis.season?.played || 0} ausgewertete Spiele</span></article>
+            <article><small>Letzte Saison</small><strong>{opponentAnalysis.previousSeason?.position ? `${opponentAnalysis.previousSeason.position}. Platz` : 'Keine Platzierung gefunden'}</strong><span>{opponentAnalysis.previousSeason?.season || ''}</span></article>
+          </div>
+          {!!opponentAnalysis.lastGames?.length && <div className="opponent-last-games">{opponentAnalysis.lastGames.map(game => <span key={game.id} className={`opponent-result result-${game.result}`} title={`${game.date} · ${game.opponent}`}>{game.result} {game.goalsFor}:{game.goalsAgainst}</span>)}</div>}
+        </>}
+      </details>}
       <details className="squad-disclosure squad-suggestion"><summary>Aufstellung vorschlagen lassen</summary><p>Vorschlag: 60 % Anwesenheit und 40 % Sterne-Durchschnitt, passend zu den hinterlegten Positionen. Ohne Sterne zählt die Anwesenheit. Gastspielerinnen und Spielerinnen ohne Trainingsdaten ergänzt du von Hand.</p><button className="btn-edit" disabled={busy || !draft.from || !draft.to || draft.from > draft.to || draft.to > draft.date} onClick={() => { if (draft.lineup.length && !window.confirm('Aktuelle Aufstellung durch einen neuen Vorschlag ersetzen?')) return; run(async () => { const values = await call(`squads/statistics?from=${encodeURIComponent(draft.from)}&to=${encodeURIComponent(draft.to)}`); setStats(values); const lineup = suggest(data.candidates.filter(p => draft.availableIds.includes(p.id)), values, draft.formation, draft.benchSize); change({ lineup, ...leadership(lineup, data.captainId, data.viceCaptainIds) }); setSelected(''); setNotice('Vorschlag erstellt. Freie Plätze kannst du manuell besetzen. Bitte anschließend speichern.'); }); }}>Vorschlag generieren</button></details>
       <div className="squad-layout"><section><h2>Aufstellung · {count('field') + count('keeper')}/{draft.fieldPlayers + 1}</h2><SquadPitch key={draft._id || 'new'} draft={draft} candidates={data.candidates} busy={busy} onChange={lineup => change({ lineup })} onError={setError} />
         <details className="squad-disclosure"><summary>Positionen und Kader bearbeiten</summary>
