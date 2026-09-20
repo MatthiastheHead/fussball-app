@@ -117,16 +117,17 @@ export default function SquadPanel({ request, onBack, username }) {
             <div className="opponent-danger-head"><strong>{(() => {
               const score = opponentAnalysis.opponent?.form?.score;
               if (score == null) return 'Nicht bewertet';
-              if (score >= 80) return 'Sehr gefährlich';
-              if (score >= 65) return 'Gefährlich';
-              if (score >= 45) return 'Ausgeglichen';
-              if (score >= 25) return 'Eher harmlos';
-              return 'Harmlos';
+              if (score >= 82) return 'Topform';
+              if (score >= 68) return 'Sehr gute Form';
+              if (score >= 54) return 'Gute Form';
+              if (score >= 40) return 'Ordentliche Form';
+              if (score >= 25) return 'Ausbaufähige Form';
+              return 'Schwierige Form';
             })()}</strong><span>{opponentAnalysis.opponent?.form?.score == null ? 'Keine ausreichenden Daten' : `${opponentAnalysis.opponent?.form.score}/100`}</span></div>
-            <div className="opponent-bars" aria-label="Gefährlichkeit des Gegners">
+            <div className="opponent-bars" aria-label="Aktuelle Form des Gegners">
               {[20,40,60,80,100].map(limit => <span key={limit} className={(opponentAnalysis.opponent?.form?.score ?? -1) >= limit - 19 ? 'filled' : ''} />)}
             </div>
-            <div className="opponent-bar-labels"><span>Harmlos</span><span>Ausgeglichen</span><span>Sehr gefährlich</span></div>
+            <div className="opponent-bar-labels"><span>Schwierige Form</span><span>Gute Form</span><span>Topform</span></div>
           </div>
           <div className="form-comparison">
             <h3>Formvergleich</h3>
@@ -141,10 +142,11 @@ export default function SquadPanel({ request, onBack, username }) {
               <strong>{opponentAnalysis.opponent?.form?.score == null ? '–' : `${opponentAnalysis.opponent.form.score}`}</strong>
             </div>
             <p className="form-comparison-label">{opponentAnalysis.comparison?.label}</p>
+            {opponentAnalysis.own?.form?.played > 0 && <p className="squad-help">Unsere Form: {opponentAnalysis.own.form.wins} S · {opponentAnalysis.own.form.draws} U · {opponentAnalysis.own.form.losses} N · {opponentAnalysis.own.form.goalsFor}:{opponentAnalysis.own.form.goalsAgainst} Tore · {opponentAnalysis.own.form.label}</p>}
           </div>
           <div className="opponent-analysis-grid">
-            <article><small>Aktuelle Form</small><strong>{opponentAnalysis.opponent?.form?.label || 'Keine Daten'}</strong><span>{opponentAnalysis.opponent?.form?.score == null ? 'Keine Wertung' : `${opponentAnalysis.opponent?.form.score}/100`}</span></article>
-            <article><small>Letzte Spiele</small><strong>{opponentAnalysis.opponent?.form?.wins || 0} S · {opponentAnalysis.opponent?.form?.draws || 0} U · {opponentAnalysis.opponent?.form?.losses || 0} N</strong><span>{opponentAnalysis.opponent?.form?.goalsFor || 0}:{opponentAnalysis.opponent?.form?.goalsAgainst || 0} Tore</span></article>
+            <article><small>Aktuelle Form Gegner</small><strong>{opponentAnalysis.opponent?.form?.label || 'Keine Daten'}</strong><span>{opponentAnalysis.opponent?.form?.score == null ? 'Keine Wertung' : `${opponentAnalysis.opponent?.form.score}/100`}</span></article>
+            <article><small>Letzte Spiele Gegner</small><strong>{opponentAnalysis.opponent?.form?.wins || 0} S · {opponentAnalysis.opponent?.form?.draws || 0} U · {opponentAnalysis.opponent?.form?.losses || 0} N</strong><span>{opponentAnalysis.opponent?.form?.goalsFor || 0}:{opponentAnalysis.opponent?.form?.goalsAgainst || 0} Tore · Diff. {opponentAnalysis.opponent?.form?.goalDifference > 0 ? '+' : ''}{opponentAnalysis.opponent?.form?.goalDifference ?? 0}</span></article>
             <article><small>Saison bisher</small><strong>{opponentAnalysis.opponent?.season?.wins || 0} S · {opponentAnalysis.opponent?.season?.draws || 0} U · {opponentAnalysis.opponent?.season?.losses || 0} N</strong><span>{opponentAnalysis.opponent?.season?.played || 0} ausgewertete Spiele</span></article>
             <article><small>Letzte Saison</small><strong>{opponentAnalysis.opponent?.previousSeason?.position ? `${opponentAnalysis.opponent?.previousSeason.position}. Platz` : 'Keine Platzierung gefunden'}</strong><span>{opponentAnalysis.opponent?.previousSeason?.season || ''}</span></article>
           </div>
