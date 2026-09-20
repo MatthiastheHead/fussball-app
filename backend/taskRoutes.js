@@ -6,7 +6,7 @@ module.exports = function registerTaskRoutes({ app, Task, User, requireAccess, m
   const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
   const wrap = handler => async (req, res) => {
     try { await handler(req, res); }
-    catch (error) { res.status(error.status || 500).json({ error: error.status ? error.message : 'Die Aufgabe konnte nicht verarbeitet werden. Bitte erneut versuchen.' }); }
+    catch (error) { res.status(error.status || 500).json({ error: error.status ? error.message : 'Der Eintrag konnte nicht verarbeitet werden. Bitte erneut versuchen.' }); }
   };
   app.get('/tasks/assignees', access, wrap(async (_req, res) => {
     const users = await User.find({}).select('_id name isAdmin permissions').lean();
@@ -17,21 +17,23 @@ module.exports = function registerTaskRoutes({ app, Task, User, requireAccess, m
   }));
   app.get('/tasks/my-open-count', access, wrap(async (req, res) => {
     const user = await User.findOne({ name: req.auth.username }).select('_id').lean();
-    const count = user ? await Task.countDocuments({ assignedTo: String(user._id), completed: false }) : 0;
+    const count = user ? await Task.countDocuments({ kind: { $ne: 'note' }, assignedTo: String(user._id), completed: false }) : 0;
     res.json({ count });
   }));
   app.delete('/tasks/:id', access, wrap(async (req, res) => {
-    if (!mongoose.isValidObjectId(req.params.id)) fail('Ungültiges To-do.');
+    if (!mongoose.isValidObjectId(req.params.id)) fail('Ungültiger Eintrag.');
     if (req.body?.confirm !== true) fail('Bitte das Löschen bestätigen.');
     const removed = await Task.findByIdAndDelete(req.params.id);
-    if (!removed) fail('Das To-do wurde nicht gefunden.', 404);
+    if (!removed) fail('Der Eintrag wurde nicht gefunden.', 404);
     res.json({ ok: true, id: String(removed._id) });
   }));
   async function fields(body, current) {
-    if (!body || typeof body !== 'object' || Array.isArray(body)) fail('Ungültige Aufgabe.');
+    if (!body || typeof body !== 'object' || Array.isArray(body)) fail('Ungültiger Eintrag.');
+    const kind = body.kind === 'note' ? 'note' : current?.kind === 'note' ? 'note' : 'task';
     const title = typeof body.title === 'string' ? body.title.trim() : '';
-    if (!title || title.length > 160) fail('Bitte einen Titel mit höchstens 160 Zeichen eingeben.');
-    if (typeof body.description !== 'string' || body.description.length > 4000) fail('Die Beschreibung darf höchstens 4000 Zeichen enthalten.');
+    if (!title || title.length > 160) fail('Bitte eine Überschrift mit höchstens 160 Zeichen eingeben.');
+    if (typeof body.description !== 'string' || body.description.length > 4000) fail('Der Text darf höchstens 4000 Zeichen enthalten.');
+    if (kind === 'note') return { kind, title, description: body.description.trim(), dueDate: '', assignedTo: '', assignedName: '' };
     if (typeof body.dueDate !== 'string' || !validDate(body.dueDate)) fail('Bitte ein gültiges Fälligkeitsdatum wählen.');
     if (typeof body.assignedTo !== 'string') fail('Bitte eine zuständige Person auswählen.');
     let assignedName = '';
@@ -42,23 +44,22 @@ module.exports = function registerTaskRoutes({ app, Task, User, requireAccess, m
       else if (current && current.assignedTo === body.assignedTo) assignedName = current.assignedName;
       else fail('Die ausgewählte Person hat keinen Zugriff auf Aufgaben.');
     }
-    return { title, description: body.description.trim(), dueDate: body.dueDate, assignedTo: body.assignedTo, assignedName };
+    return { kind, title, description: body.description.trim(), dueDate: body.dueDate, assignedTo: body.assignedTo, assignedName };
   }
   app.post('/tasks', access, wrap(async (req, res) => {
     const data = await fields(req.body);
     res.status(201).json(await Task.create({ ...data, createdBy: req.auth.username, updatedBy: req.auth.username }));
   }));
   app.patch('/tasks/:id', access, wrap(async (req, res) => {
-    if (!mongoose.isValidObjectId(req.params.id)) fail('Ungültige Aufgabe.');
+    if (!mongoose.isValidObjectId(req.params.id)) fail('Ungültiger Eintrag.');
     const current = await Task.findById(req.params.id).lean();
-    if (!current) fail('Die Aufgabe wurde nicht gefunden.', 404);
+    if (!current) fail('Der Eintrag wurde nicht gefunden.', 404);
     let data;
     if (Object.keys(req.body || {}).length === 1 && typeof req.body.completed === 'boolean') {
       data = { completed: req.body.completed, completedBy: req.body.completed ? req.auth.username : '', completedAt: req.body.completed ? new Date() : null };
     } else data = await fields(req.body, current);
-    // Optimistic concurrency prevents silently overwriting another trainer's change.
     const task = await Task.findOneAndUpdate({ _id: current._id, __v: current.__v }, { $set: { ...data, updatedBy: req.auth.username }, $inc: { __v: 1 } }, { new: true, runValidators: true });
-    if (!task) fail('Die Aufgabe wurde gerade geändert. Bitte aktualisieren und erneut versuchen.', 409);
+    if (!task) fail('Der Eintrag wurde gerade geändert. Bitte aktualisieren und erneut versuchen.', 409);
     res.json(task);
   }));
 };
