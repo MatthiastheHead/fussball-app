@@ -28,8 +28,9 @@ function captains(input, allowedIds) {
   return { captainId, viceCaptainIds: viceCaptainIds.filter(Boolean) };
 }
 function game(input, candidates) {
-  const fussballGameId = input.fussballGameId || '', fussballTeamId = input.fussballTeamId || '';
+  const fussballGameId = input.fussballGameId || '', fussballTeamId = input.fussballTeamId || '', opponentTeamUrl = String(input.opponentTeamUrl || '').trim();
   if (Boolean(fussballGameId) !== Boolean(fussballTeamId) || [fussballGameId, fussballTeamId].some(id => id && (typeof id !== 'string' || !/^[A-Z0-9]{32}$/.test(id)))) fail('Ungültige FUSSBALL.DE-Spielzuordnung.');
+  if (opponentTeamUrl && !/^https:\/\/www\.fussball\.de\/mannschaft\/[a-z0-9-]+\/-\/saison\/\d{4}\/team-id\/[A-Z0-9]{32}\/?$/.test(opponentTeamUrl)) fail('Ungültiger Gegner-Link.');
   const config = settings(input);
   if (!validDate(input.date) || !validDate(input.from) || !validDate(input.to) || input.from > input.to || input.to > input.date) fail('Bitte einen gültigen Spieltermin und Auswertungszeitraum bis zum Spieltag wählen.');
   const opponent = String(input.opponent || '').trim(), location = String(input.location || '').trim();
@@ -50,6 +51,6 @@ function game(input, candidates) {
   });
   if (field > config.fieldPlayers || keepers > 1 || bench > config.benchSize) fail('Zu viele Feldspielerinnen, Torhüterinnen oder Ersatzspielerinnen.');
   const leaders = captains(input, [...seen]);
-  return { ...config, fussballGameId, fussballTeamId, opponent, location, date: input.date, time: input.time, from: input.from, to: input.to, lineup, availableIds, ...leaders };
+  return { ...config, fussballGameId, fussballTeamId, opponentTeamUrl, opponent, location, date: input.date, time: input.time, from: input.from, to: input.to, lineup, availableIds, ...leaders };
 }
 module.exports = { POSITIONS, validDate, settings, profile, game, captains };
