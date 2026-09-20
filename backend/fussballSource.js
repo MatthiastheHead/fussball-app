@@ -26,12 +26,14 @@ const absoluteTeamUrl = href => {
 };
 
 function cleanVenue(value) {
-  return plain(value)
+  const venue = plain(value)
     .replace(/^\d{2}\.\d{2}\.\d{4}\s*(?:-|·)?\s*(?:[0-2]\d:[0-5]\d\s*Uhr?)?\s*/i, '')
     .replace(/^(?:[0-2]\d:[0-5]\d\s*Uhr?)\s*(?:-|·)?\s*/i, '')
     .replace(/\s+(?:\d{2}\.\d{2}\.\d{4})(?:\s*-\s*[0-2]\d:[0-5]\d\s*Uhr?)?.*$/i, '')
     .trim()
     .slice(0, 200);
+  if (/^(?:spielstätten?|spielstaetten?|spielort|adresse)$/i.test(venue)) return '';
+  return venue;
 }
 
 function venueFromBlock(block) {
