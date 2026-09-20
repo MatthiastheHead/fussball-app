@@ -111,30 +111,44 @@ export default function SquadPanel({ request, onBack, username }) {
       {draft.opponentTeamUrl && <details className="squad-disclosure opponent-analysis" open>
         <summary>Gegneranalyse · {draft.opponent}</summary>
         <div className="task-toolbar"><button type="button" className="btn-edit" disabled={analysisLoading || busy} onClick={loadOpponentAnalysis}>{analysisLoading ? 'Analyse läuft …' : opponentAnalysis ? 'Analyse aktualisieren' : 'Gegner analysieren'}</button></div>
-        {!opponentAnalysis && <p className="squad-help">Form aus den letzten Spielen, Saisonbilanz und Vorjahresplatzierung werden direkt von FUSSBALL.DE ausgewertet, soweit dort lesbare Daten vorliegen.</p>}
+        {!opponentAnalysis && <p className="squad-help">Die letzten Spiele beider Mannschaften werden miteinander verglichen. Saisonbilanz und Vorjahresplatzierung des Gegners werden zusätzlich berücksichtigt, soweit FUSSBALL.DE lesbare Daten liefert.</p>}
         {opponentAnalysis && <>
           <div className="opponent-danger">
             <div className="opponent-danger-head"><strong>{(() => {
-              const score = opponentAnalysis.form?.score;
+              const score = opponentAnalysis.opponent?.form?.score;
               if (score == null) return 'Nicht bewertet';
               if (score >= 80) return 'Sehr gefährlich';
               if (score >= 65) return 'Gefährlich';
               if (score >= 45) return 'Ausgeglichen';
               if (score >= 25) return 'Eher harmlos';
               return 'Harmlos';
-            })()}</strong><span>{opponentAnalysis.form?.score == null ? 'Keine ausreichenden Daten' : `${opponentAnalysis.form.score}/100`}</span></div>
+            })()}</strong><span>{opponentAnalysis.opponent?.form?.score == null ? 'Keine ausreichenden Daten' : `${opponentAnalysis.opponent?.form.score}/100`}</span></div>
             <div className="opponent-bars" aria-label="Gefährlichkeit des Gegners">
-              {[20,40,60,80,100].map(limit => <span key={limit} className={(opponentAnalysis.form?.score ?? -1) >= limit - 19 ? 'filled' : ''} />)}
+              {[20,40,60,80,100].map(limit => <span key={limit} className={(opponentAnalysis.opponent?.form?.score ?? -1) >= limit - 19 ? 'filled' : ''} />)}
             </div>
             <div className="opponent-bar-labels"><span>Harmlos</span><span>Ausgeglichen</span><span>Sehr gefährlich</span></div>
           </div>
-          <div className="opponent-analysis-grid">
-            <article><small>Aktuelle Form</small><strong>{opponentAnalysis.form?.label || 'Keine Daten'}</strong><span>{opponentAnalysis.form?.score == null ? 'Keine Wertung' : `${opponentAnalysis.form.score}/100`}</span></article>
-            <article><small>Letzte Spiele</small><strong>{opponentAnalysis.form?.wins || 0} S · {opponentAnalysis.form?.draws || 0} U · {opponentAnalysis.form?.losses || 0} N</strong><span>{opponentAnalysis.form?.goalsFor || 0}:{opponentAnalysis.form?.goalsAgainst || 0} Tore</span></article>
-            <article><small>Saison bisher</small><strong>{opponentAnalysis.season?.wins || 0} S · {opponentAnalysis.season?.draws || 0} U · {opponentAnalysis.season?.losses || 0} N</strong><span>{opponentAnalysis.season?.played || 0} ausgewertete Spiele</span></article>
-            <article><small>Letzte Saison</small><strong>{opponentAnalysis.previousSeason?.position ? `${opponentAnalysis.previousSeason.position}. Platz` : 'Keine Platzierung gefunden'}</strong><span>{opponentAnalysis.previousSeason?.season || ''}</span></article>
+          <div className="form-comparison">
+            <h3>Formvergleich</h3>
+            <div className="form-team-row">
+              <span>VfB Werther</span>
+              <div className="form-track"><div className="form-fill own" style={{ width: `${opponentAnalysis.own?.form?.score ?? 0}%` }} /></div>
+              <strong>{opponentAnalysis.own?.form?.score == null ? '–' : `${opponentAnalysis.own.form.score}`}</strong>
+            </div>
+            <div className="form-team-row">
+              <span>{draft.opponent}</span>
+              <div className="form-track"><div className="form-fill opponent" style={{ width: `${opponentAnalysis.opponent?.form?.score ?? 0}%` }} /></div>
+              <strong>{opponentAnalysis.opponent?.form?.score == null ? '–' : `${opponentAnalysis.opponent.form.score}`}</strong>
+            </div>
+            <p className="form-comparison-label">{opponentAnalysis.comparison?.label}</p>
           </div>
-          {!!opponentAnalysis.lastGames?.length && <div className="opponent-last-games">{opponentAnalysis.lastGames.map(game => <span key={game.id} className={`opponent-result result-${game.result}`} title={`${game.date} · ${game.opponent}`}>{game.result} {game.goalsFor}:{game.goalsAgainst}</span>)}</div>}
+          <div className="opponent-analysis-grid">
+            <article><small>Aktuelle Form</small><strong>{opponentAnalysis.opponent?.form?.label || 'Keine Daten'}</strong><span>{opponentAnalysis.opponent?.form?.score == null ? 'Keine Wertung' : `${opponentAnalysis.opponent?.form.score}/100`}</span></article>
+            <article><small>Letzte Spiele</small><strong>{opponentAnalysis.opponent?.form?.wins || 0} S · {opponentAnalysis.opponent?.form?.draws || 0} U · {opponentAnalysis.opponent?.form?.losses || 0} N</strong><span>{opponentAnalysis.opponent?.form?.goalsFor || 0}:{opponentAnalysis.opponent?.form?.goalsAgainst || 0} Tore</span></article>
+            <article><small>Saison bisher</small><strong>{opponentAnalysis.opponent?.season?.wins || 0} S · {opponentAnalysis.opponent?.season?.draws || 0} U · {opponentAnalysis.opponent?.season?.losses || 0} N</strong><span>{opponentAnalysis.opponent?.season?.played || 0} ausgewertete Spiele</span></article>
+            <article><small>Letzte Saison</small><strong>{opponentAnalysis.opponent?.previousSeason?.position ? `${opponentAnalysis.opponent?.previousSeason.position}. Platz` : 'Keine Platzierung gefunden'}</strong><span>{opponentAnalysis.opponent?.previousSeason?.season || ''}</span></article>
+          </div>
+          {!!opponentAnalysis.opponent?.lastGames?.length && <div className="opponent-last-games">{opponentAnalysis.opponent?.lastGames.map(game => <span key={game.id} className={`opponent-result result-${game.result}`} title={`${game.date} · ${game.opponent}`}>{game.result} {game.goalsFor}:{game.goalsAgainst}</span>)}</div>}
         </>}
       </details>}
       <details className="squad-disclosure squad-suggestion"><summary>Aufstellung vorschlagen lassen</summary><p>Vorschlag: 60 % Anwesenheit und 40 % Sterne-Durchschnitt, passend zu den hinterlegten Positionen. Ohne Sterne zählt die Anwesenheit. Gastspielerinnen und Spielerinnen ohne Trainingsdaten ergänzt du von Hand.</p><button className="btn-edit" disabled={busy || !draft.from || !draft.to || draft.from > draft.to || draft.to > draft.date} onClick={() => { if (draft.lineup.length && !window.confirm('Aktuelle Aufstellung durch einen neuen Vorschlag ersetzen?')) return; run(async () => { const values = await call(`squads/statistics?from=${encodeURIComponent(draft.from)}&to=${encodeURIComponent(draft.to)}`); setStats(values); const lineup = suggest(data.candidates.filter(p => draft.availableIds.includes(p.id)), values, draft.formation, draft.benchSize); change({ lineup, ...leadership(lineup, data.captainId, data.viceCaptainIds) }); setSelected(''); setNotice('Vorschlag erstellt. Freie Plätze kannst du manuell besetzen. Bitte anschließend speichern.'); }); }}>Vorschlag generieren</button></details>
