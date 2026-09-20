@@ -72,7 +72,24 @@ export default function SquadPanel({ request, onBack, username }) {
     <div className="task-toolbar"><button className="btn-save-players" disabled={busy || !data} onClick={() => open(null)}>＋ Spiel anlegen</button><button className="btn-edit" disabled={busy} onClick={() => { if (leave()) run(async () => { setData(await call('squads')); setDraft(null); setDirty(false); }); }}>Neu laden</button></div>
     {!data && <p>Lädt …</p>}
     {data && <details className="squad-disclosure"><summary>Spieltermine importieren</summary><SquadFixturePicker request={request} source={data.fussballTeamUrl} games={data.games} disabled={busy} onSelect={(game, fixture) => open(game, fixture)} /></details>}
-    {data && <><div className="squad-games">{[...data.games].sort((a, b) => b.date.localeCompare(a.date)).map(g => <button key={g._id} disabled={busy} className={`squad-game ${draft?._id === g._id ? 'active' : ''}`} onClick={() => open(g)}><strong>{g.opponent}</strong><span>{new Date(g.date + 'T12:00:00').toLocaleDateString('de-DE')} · {g.time}</span><small>{g.lineup.length} im Kader · {g.fieldPlayers}+1</small></button>)}{!data.games.length && <p>Noch kein Spiel angelegt.</p>}</div>
+    {data && <><div className="squad-games">{[...data.games].sort((a, b) => b.date.localeCompare(a.date)).map(g => <article key={g._id} className={`squad-game-card ${draft?._id === g._id ? 'active' : ''}`}>
+      <button type="button" disabled={busy} className="squad-game-main" onClick={() => open(g)}>
+        <span className={`game-home-badge ${g.home ? 'home' : 'away'}`}>{g.home ? 'HEIMSPIEL' : 'AUSWÄRTS'}</span>
+        <strong>{g.opponent}</strong>
+        <span>{new Date(g.date + 'T12:00:00').toLocaleDateString('de-DE')} · {g.time}</span>
+        <small>{g.lineup.length} im Kader · {g.fieldPlayers}+1</small>
+      </button>
+      {g.location && <a className="game-location-link" href={`https://maps.apple.com/?q=${encodeURIComponent(g.location)}`} target="_blank" rel="noopener noreferrer" title="Spielort in Karten öffnen">📍 {g.location}</a>}
+      <button type="button" className="game-delete-button" disabled={busy} onClick={() => {
+        if (!window.confirm(`Spiel gegen ${g.opponent} wirklich löschen?`)) return;
+        run(async () => {
+          const result = await call(`squads/games/${g._id}/delete`, { version: data.version });
+          setData(result);
+          if (draft?._id === g._id) { setDraft(null); setDirty(false); setOpponentAnalysis(null); }
+          setNotice('Spiel gelöscht.');
+        });
+      }}>Löschen</button>
+    </article>)}{!data.games.length && <p>Noch kein Spiel angelegt.</p>}</div>
     {draft && <section className="squad-editor">
       <div className="squad-editor-title"><h2>{draft.opponent || 'Neues Spiel'}</h2><span>{draft.fieldPlayers}+1 · {draft.lineup.length} im Kader</span></div>
       <details className="squad-disclosure" open={detailsOpen} onToggle={e => setDetailsOpen(e.currentTarget.open)}><summary>Spielangaben und Spielmodus</summary>
@@ -95,7 +112,21 @@ export default function SquadPanel({ request, onBack, username }) {
         <div className="task-toolbar"><button type="button" className="btn-edit" disabled={analysisLoading || busy} onClick={loadOpponentAnalysis}>{analysisLoading ? 'Analyse läuft …' : opponentAnalysis ? 'Analyse aktualisieren' : 'Gegner analysieren'}</button></div>
         {!opponentAnalysis && <p className="squad-help">Form aus den letzten Spielen, Saisonbilanz und Vorjahresplatzierung werden direkt von FUSSBALL.DE ausgewertet, soweit dort lesbare Daten vorliegen.</p>}
         {opponentAnalysis && <>
-          <div className="opponent-scale"><div className="opponent-scale-fill" style={{ width: `${opponentAnalysis.form?.score ?? 0}%` }} /></div>
+          <div className="opponent-danger">
+            <div className="opponent-danger-head"><strong>{(() => {
+              const score = opponentAnalysis.form?.score;
+              if (score == null) return 'Nicht bewertet';
+              if (score >= 80) return 'Sehr gefährlich';
+              if (score >= 65) return 'Gefährlich';
+              if (score >= 45) return 'Ausgeglichen';
+              if (score >= 25) return 'Eher harmlos';
+              return 'Harmlos';
+            })()}</strong><span>{opponentAnalysis.form?.score == null ? 'Keine ausreichenden Daten' : `${opponentAnalysis.form.score}/100`}</span></div>
+            <div className="opponent-bars" aria-label="Gefährlichkeit des Gegners">
+              {[20,40,60,80,100].map(limit => <span key={limit} className={(opponentAnalysis.form?.score ?? -1) >= limit - 19 ? 'filled' : ''} />)}
+            </div>
+            <div className="opponent-bar-labels"><span>Harmlos</span><span>Ausgeglichen</span><span>Sehr gefährlich</span></div>
+          </div>
           <div className="opponent-analysis-grid">
             <article><small>Aktuelle Form</small><strong>{opponentAnalysis.form?.label || 'Keine Daten'}</strong><span>{opponentAnalysis.form?.score == null ? 'Keine Wertung' : `${opponentAnalysis.form.score}/100`}</span></article>
             <article><small>Letzte Spiele</small><strong>{opponentAnalysis.form?.wins || 0} S · {opponentAnalysis.form?.draws || 0} U · {opponentAnalysis.form?.losses || 0} N</strong><span>{opponentAnalysis.form?.goalsFor || 0}:{opponentAnalysis.form?.goalsAgainst || 0} Tore</span></article>
