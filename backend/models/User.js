@@ -15,6 +15,7 @@ const userSchema = new mongoose.Schema({
   permissions: {
     squads: { type: Boolean, default: true },
     tasks: { type: Boolean, default: true },
+    notes: { type: Boolean, default: true },
     training: { type: Boolean, default: true },
     checklists: { type: Boolean, default: true },
     teamGenerator: { type: Boolean, default: true },

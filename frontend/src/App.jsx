@@ -1,4 +1,4 @@
-// Version 11.0: Notizen mit Zusage und Absage je Stichpunkt.
+// Version 11.1: Notizen mit eigenem Zugriff und Erledigt-Status.
 
 import React, { useState, useEffect } from 'react';
 import SquadBrand from './SquadBrand.jsx';
@@ -326,7 +326,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '11.0';
+  const version = '11.1';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canDeleteCash = sessionUser?.cashPermissions?.canDelete === true;
@@ -2068,7 +2068,7 @@ export default function App() {
       onBack={() => { setShowTasks(false); setShowStartMenu(true); }} />;
   }
 
-  if (showNotes && canAccess('tasks')) {
+  if (showNotes && canAccess('notes')) {
     return <NotesPanel key={authToken} request={authenticatedRequest}
       onBack={() => { setShowNotes(false); setShowStartMenu(true); }} />;
   }
@@ -2095,7 +2095,7 @@ export default function App() {
         {canAccess('squads') && <button className="main-func-btn" disabled={busy} onClick={() => { setShowSquads(true); setShowStartMenu(false); }}>⚽ Spielkader</button>}
         {canAccess('tasks') && <TaskMenuButton key={authToken} request={authenticatedRequest}
           disabled={busy} onClick={() => { setShowTasks(true); setShowStartMenu(false); }} />}
-        {canAccess('tasks') && <button
+        {canAccess('notes') && <button
           className="main-func-btn"
           disabled={busy}
           onClick={() => { setShowNotes(true); setShowStartMenu(false); }}
@@ -3366,6 +3366,7 @@ export default function App() {
                       ['training', 'Trainingsteilnahme'],
                       ['checklists', 'Checklisten'],
                       ['tasks', 'To-dos'],
+                      ['notes', 'Notizen'],
                       ['teamGenerator', 'Teamgenerator'],
                       ['teamCash', 'Mannschaftskasse'],
                       ['squads', 'Spielkader'],

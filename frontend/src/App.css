@@ -3045,3 +3045,10 @@ footer a {
   .note-response-item { align-items: flex-start; }
   .note-response-actions { padding-top: .05rem; }
 }
+
+
+.note-response-done.active { background: #4f6f96; border-color: #4f6f96; }
+.note-status-done .note-response-text { text-decoration: line-through; opacity: .62; }
+.note-card-completed { opacity: .78; }
+.note-card-completed .task-card-heading h2 { text-decoration: line-through; }
+.note-whole-check { margin-right: auto; }
