@@ -22,7 +22,7 @@ export default function TasksPanel({ request, username, onBack }) {
   }
   async function load() {
     setLoading(true); setError('');
-    try { const [rows, people] = await Promise.all([json('tasks'), json('tasks/assignees')]); setTasks(rows); setUsers(people); }
+    try { const [rows, people] = await Promise.all([json('tasks'), json('tasks/assignees')]); setTasks(rows.filter(row => row.kind !== 'note')); setUsers(people); }
     catch (err) { setError(err.message); }
     finally { setLoading(false); }
   }
