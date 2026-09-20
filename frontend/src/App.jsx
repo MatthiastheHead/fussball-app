@@ -1,4 +1,4 @@
-// Version 10.2: Platztausch zwischen Feld und Bank, übersichtliche Kaderverwaltung.
+// Version 11.0: Notizen mit Zusage und Absage je Stichpunkt.
 
 import React, { useState, useEffect } from 'react';
 import SquadBrand from './SquadBrand.jsx';
@@ -326,7 +326,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '10.4';
+  const version = '11.0';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canDeleteCash = sessionUser?.cashPermissions?.canDelete === true;

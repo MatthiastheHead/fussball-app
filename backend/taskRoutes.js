@@ -49,6 +49,9 @@ module.exports = function registerTaskRoutes({ app, Task, User, requireAccess, m
         return {
           ...(existing ? { _id: existing._id } : {}),
           text,
+          status: existing?.status || (existing?.completed === true ? 'accepted' : 'open'),
+          statusBy: existing?.statusBy || existing?.completedBy || '',
+          statusAt: existing?.statusAt || existing?.completedAt || null,
           completed: existing?.completed === true,
           completedBy: existing?.completedBy || '',
           completedAt: existing?.completedAt || null,
@@ -77,19 +80,25 @@ module.exports = function registerTaskRoutes({ app, Task, User, requireAccess, m
 
   app.patch('/tasks/:id/items/:itemId', access, wrap(async (req, res) => {
     if (!mongoose.isValidObjectId(req.params.id) || !mongoose.isValidObjectId(req.params.itemId)) fail('Ungültiger Stichpunkt.');
-    if (typeof req.body?.completed !== 'boolean') fail('Ungültiger Status.');
+    const status = req.body?.status;
+    if (!['open', 'accepted', 'declined'].includes(status)) fail('Ungültiger Status.');
     const current = await Task.findById(req.params.id).lean();
     if (!current || current.kind !== 'note') fail('Die Notiz wurde nicht gefunden.', 404);
+    let found = false;
     const items = (current.items || []).map(item => {
       if (String(item._id) !== req.params.itemId) return item;
+      found = true;
       return {
         ...item,
-        completed: req.body.completed,
-        completedBy: req.body.completed ? req.auth.username : '',
-        completedAt: req.body.completed ? new Date() : null,
+        status,
+        statusBy: status === 'open' ? '' : req.auth.username,
+        statusAt: status === 'open' ? null : new Date(),
+        completed: false,
+        completedBy: '',
+        completedAt: null,
       };
     });
-    if (!items.some(item => String(item._id) === req.params.itemId)) fail('Der Stichpunkt wurde nicht gefunden.', 404);
+    if (!found) fail('Der Stichpunkt wurde nicht gefunden.', 404);
     const note = await Task.findOneAndUpdate(
       { _id: current._id, __v: current.__v },
       { $set: { items, updatedBy: req.auth.username }, $inc: { __v: 1 } },

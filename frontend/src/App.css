@@ -3029,3 +3029,19 @@ footer a {
   .note-item-editor { grid-template-columns: 1fr; }
   .note-item-editor .cash-delete-button { width: 100%; }
 }
+
+
+/* Notiz Zusage und Absage */
+.note-response-item { display: flex; align-items: center; justify-content: space-between; gap: .8rem; }
+.note-response-text { flex: 1; min-width: 0; }
+.note-response-actions { display: flex; gap: .45rem; flex: 0 0 auto; }
+.note-response-button { width: 42px; height: 38px; border-radius: 10px; border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.06); cursor: pointer; font-size: 1.05rem; }
+.note-response-button:disabled { cursor: default; opacity: .55; }
+.note-response-yes.active { background: #16803b; border-color: #16803b; }
+.note-response-no.active { background: #b4232c; border-color: #b4232c; }
+.note-status-declined .note-response-text { color: #d86a72; text-decoration: line-through; opacity: .75; }
+.note-status-accepted .note-response-text { color: #7fd399; }
+@media (max-width: 640px) {
+  .note-response-item { align-items: flex-start; }
+  .note-response-actions { padding-top: .05rem; }
+}
