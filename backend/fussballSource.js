@@ -25,18 +25,27 @@ const absoluteTeamUrl = href => {
   return '';
 };
 
+function cleanVenue(value) {
+  return plain(value)
+    .replace(/^\d{2}\.\d{2}\.\d{4}\s*(?:-|·)?\s*(?:[0-2]\d:[0-5]\d\s*Uhr?)?\s*/i, '')
+    .replace(/^(?:[0-2]\d:[0-5]\d\s*Uhr?)\s*(?:-|·)?\s*/i, '')
+    .replace(/\s+(?:\d{2}\.\d{2}\.\d{4})(?:\s*-\s*[0-2]\d:[0-5]\d\s*Uhr?)?.*$/i, '')
+    .trim()
+    .slice(0, 200);
+}
+
 function venueFromBlock(block) {
   const patterns = [
     /<(?:td|div|span)\b[^>]*class="[^"]*(?:venue|location|spielstaette|spielstätte|address)[^"]*"[^>]*>([\s\S]*?)<\/(?:td|div|span)>/i,
     /(?:Spielstätte|Spielstaette|Spielort)\s*:?\s*<[^>]*>([\s\S]*?)<\//i,
   ];
   for (const pattern of patterns) {
-    const value = plain(block.match(pattern)?.[1] || '');
+    const value = cleanVenue(block.match(pattern)?.[1] || '');
     if (value && value.length <= 200) return value;
   }
   const text = plain(block);
   const match = text.match(/(?:Spielstätte|Spielort)\s*:?\s*(.{3,180}?)(?=\s+(?:Info|Zum Spiel|$))/i);
-  return match ? match[1].trim().slice(0, 200) : '';
+  return match ? cleanVenue(match[1]) : '';
 }
 
 function parseVenue(html) {
@@ -46,7 +55,7 @@ function parseVenue(html) {
   const section = text.slice(index, index + 2200);
   const match = section.match(/(?:Von\s*-\s*Bis\s*)?(.{3,90}?)\s*,\s*(.{3,130}?\b\d{5}\b\s+.{2,80}?)\s+Adresse/i);
   if (!match) return '';
-  return `${match[1].trim()}, ${match[2].trim()}`.replace(/\s+/g, ' ').slice(0, 200);
+  return cleanVenue(`${match[1].trim()}, ${match[2].trim()}`);
 }
 
 function parseGames(html, source) {
