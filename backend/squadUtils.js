@@ -7,7 +7,9 @@ function settings(input) {
   const formation = String(input.formation || '');
   const rows = formation.split('-').map(Number);
   if (!/^\d(?:-\d){1,3}$/.test(formation) || rows.some(n => n < 1 || n > 5) || rows.reduce((a, b) => a + b, 0) !== fieldPlayers) fail('Die Formation muss zur Zahl der Feldspielerinnen passen, z. B. 3-3-2 bei 8+1.');
-  return { fieldPlayers, benchSize, formation };
+  const homeVenue = String(input.homeVenue || '').trim();
+  if (homeVenue.length > 200) fail('Der Heimspielort darf höchstens 200 Zeichen lang sein.');
+  return { fieldPlayers, benchSize, formation, homeVenue };
 }
 function profile(input) {
   const name = String(input.name || '').trim();
@@ -31,7 +33,7 @@ function game(input, candidates) {
   const fussballGameId = input.fussballGameId || '', fussballTeamId = input.fussballTeamId || '', opponentTeamUrl = String(input.opponentTeamUrl || '').trim();
   if (Boolean(fussballGameId) !== Boolean(fussballTeamId) || [fussballGameId, fussballTeamId].some(id => id && (typeof id !== 'string' || !/^[A-Z0-9]{32}$/.test(id)))) fail('Ungültige FUSSBALL.DE-Spielzuordnung.');
   if (opponentTeamUrl && !/^https:\/\/www\.fussball\.de\/mannschaft\/[a-z0-9-]+\/-\/saison\/\d{4}\/team-id\/[A-Z0-9]{32}\/?$/.test(opponentTeamUrl)) fail('Ungültiger Gegner-Link.');
-  const config = settings(input);
+  const { homeVenue: _homeVenue, ...config } = settings(input);
   if (!validDate(input.date) || !validDate(input.from) || !validDate(input.to) || input.from > input.to || input.to > input.date) fail('Bitte einen gültigen Spieltermin und Auswertungszeitraum bis zum Spieltag wählen.');
   const opponent = String(input.opponent || '').trim(), location = String(input.location || '').trim();
   if (!opponent || opponent.length > 100 || location.length > 200 || !/^([01]\d|2[0-3]):[0-5]\d$/.test(input.time || '')) fail('Bitte Gegner, Uhrzeit und Spielort prüfen.');
