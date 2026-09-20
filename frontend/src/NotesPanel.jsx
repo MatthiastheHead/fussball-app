@@ -61,7 +61,7 @@ export default function NotesPanel({ request, onBack }) {
     <header>
       <SquadModuleBrand />
       <h1>🗒️ Notizen</h1>
-      <p>Notizen festhalten und einzelne Stichpunkte direkt abhaken.</p>
+      <p>Notizen festhalten und Zusagen oder Absagen direkt an den Stichpunkten markieren.</p>
     </header>
 
     <div className="task-toolbar">
@@ -118,35 +118,51 @@ export default function NotesPanel({ request, onBack }) {
 
     {loading ? <p role="status">Notizen werden geladen…</p> : !notes.length ? <p>Noch keine Notizen vorhanden.</p> :
       <ul className="task-list">{notes.map(note => {
-        const done = (note.items || []).filter(item => item.completed).length;
+        const accepted = (note.items || []).filter(item => item.status === 'accepted').length;
+        const declined = (note.items || []).filter(item => item.status === 'declined').length;
+        const open = (note.items || []).length - accepted - declined;
         const total = (note.items || []).length;
         return <li key={note._id} className="task-card note-card">
           <div className="task-card-heading">
             <h2>{note.title}</h2>
-            {total > 0 && <span>{done}/{total} abgehakt</span>}
+            {total > 0 && <span>{accepted} zugesagt · {declined} abgesagt · {open} offen</span>}
           </div>
 
           {note.description && <p className="task-description">{note.description}</p>}
 
           {total > 0 && <ul className="note-checklist">
-            {note.items.map(item => <li key={item._id} className={item.completed ? 'note-item-completed' : ''}>
-              <label className="task-check">
-                <input
-                  type="checkbox"
-                  checked={item.completed}
-                  disabled={busy || !!draft}
-                  onChange={event => {
-                    const completed = event.target.checked;
-                    run(async () => {
-                      const saved = await json(`tasks/${note._id}/items/${item._id}`, 'PATCH', { completed });
-                      update(saved);
-                      setNotice(completed ? 'Stichpunkt abgehakt.' : 'Stichpunkt wieder geöffnet.');
-                    });
-                  }}
-                />
-                <span>{item.text}</span>
-              </label>
-            </li>)}
+            {note.items.map(item => {
+              const status = item.status || (item.completed ? 'accepted' : 'open');
+              return <li key={item._id} className={`note-response-item note-status-${status}`}>
+                <span className="note-response-text">{item.text}</span>
+                <div className="note-response-actions" aria-label={`Status für ${item.text}`}>
+                  <button
+                    type="button"
+                    className={`note-response-button note-response-yes${status === 'accepted' ? ' active' : ''}`}
+                    aria-pressed={status === 'accepted'}
+                    title="Zugesagt"
+                    disabled={busy || !!draft}
+                    onClick={() => run(async () => {
+                      const nextStatus = status === 'accepted' ? 'open' : 'accepted';
+                      update(await json(`tasks/${note._id}/items/${item._id}`, 'PATCH', { status: nextStatus }));
+                      setNotice(nextStatus === 'accepted' ? 'Zusage gespeichert.' : 'Status wieder offen.');
+                    })}
+                  >👍</button>
+                  <button
+                    type="button"
+                    className={`note-response-button note-response-no${status === 'declined' ? ' active' : ''}`}
+                    aria-pressed={status === 'declined'}
+                    title="Abgesagt"
+                    disabled={busy || !!draft}
+                    onClick={() => run(async () => {
+                      const nextStatus = status === 'declined' ? 'open' : 'declined';
+                      update(await json(`tasks/${note._id}/items/${item._id}`, 'PATCH', { status: nextStatus }));
+                      setNotice(nextStatus === 'declined' ? 'Absage gespeichert.' : 'Status wieder offen.');
+                    })}
+                  >👎</button>
+                </div>
+              </li>;
+            })}
           </ul>}
 
           <div className="task-toolbar">
