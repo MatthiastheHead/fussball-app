@@ -14,7 +14,7 @@ export default function SquadFixturePicker({ request, source, games, disabled, o
     {error && <p role="alert" className="login-error">{error}</p>}
     {result && <><p className="squad-help">Abgerufen: {new Date(result.fetchedAt).toLocaleString('de-DE')}. Auch vorläufige Termine sind möglich.</p><div className="squad-games">{result.games.map(f => {
       const existing = games.find(g => g.fussballGameId === f.fussballGameId && g.fussballTeamId === f.fussballTeamId);
-      return <button className="squad-game" key={f.fussballGameId} disabled={disabled || loading} onClick={() => onSelect(existing, f)}><strong>{f.opponent}</strong><span>{f.date.split('-').reverse().join('.')} · {f.time}</span><small>{f.home ? 'Heimspiel' : 'Auswärtsspiel'}{f.location ? ` · ${f.location}` : ''}</small><span>{existing ? 'Angelegtes Spiel öffnen' : 'Als Entwurf übernehmen'}</span></button>;
+      return <button className="squad-game" key={f.fussballGameId} disabled={disabled || loading} onClick={() => onSelect(existing, f)}><strong>{f.opponent}</strong><span>{f.date.split('-').reverse().join('.')} · {f.time}</span><small><strong className={f.home ? 'fixture-home' : 'fixture-away'}>{f.home ? 'HEIMSPIEL' : 'AUSWÄRTS'}</strong>{f.location ? ` · ${f.location}` : ''}</small><span>{existing ? 'Angelegtes Spiel öffnen' : 'Als Entwurf übernehmen'}</span></button>;
     })}</div></>}
   </section>;
 }

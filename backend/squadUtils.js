@@ -51,6 +51,6 @@ function game(input, candidates) {
   });
   if (field > config.fieldPlayers || keepers > 1 || bench > config.benchSize) fail('Zu viele Feldspielerinnen, Torhüterinnen oder Ersatzspielerinnen.');
   const leaders = captains(input, [...seen]);
-  return { ...config, fussballGameId, fussballTeamId, opponentTeamUrl, opponent, location, date: input.date, time: input.time, from: input.from, to: input.to, lineup, availableIds, ...leaders };
+  return { ...config, fussballGameId, fussballTeamId, opponentTeamUrl, home: input.home === true, opponent, location, date: input.date, time: input.time, from: input.from, to: input.to, lineup, availableIds, ...leaders };
 }
 module.exports = { POSITIONS, validDate, settings, profile, game, captains };

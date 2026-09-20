@@ -9,7 +9,7 @@ const profile = new Schema({
   number: { type: String, default: '', maxlength: 2 }, club: { type: String, default: '', maxlength: 100 }, note: { type: String, default: '', maxlength: 1000 }, inactive: { type: Boolean, default: false },
 });
 const game = new Schema({
-  fussballGameId: { type: String, default: '' }, fussballTeamId: { type: String, default: '' }, opponentTeamUrl: { type: String, default: '', maxlength: 600 },
+  fussballGameId: { type: String, default: '' }, fussballTeamId: { type: String, default: '' }, opponentTeamUrl: { type: String, default: '', maxlength: 600 }, home: { type: Boolean, default: false },
   ...config, opponent: { type: String, required: true, maxlength: 100 }, location: { type: String, default: '', maxlength: 200 },
   date: { type: String, required: true, validate: validDate }, time: { type: String, required: true }, from: { type: String, required: true, validate: validDate }, to: { type: String, required: true, validate: validDate },
   captainId: { type: String, default: '' }, viceCaptainIds: { type: [String], default: [] },
