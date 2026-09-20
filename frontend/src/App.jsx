@@ -11,6 +11,7 @@ import CashTransactionEditor from './CashTransactionEditor.jsx';
 import CashReceipts from './CashReceipts.jsx';
 import { uploadCashReceipt, validateCashFiles } from './cashReceiptUpload.js';
 import TasksPanel from './TasksPanel.jsx';
+import NotesPanel from './NotesPanel.jsx';
 import TaskMenuButton from './TaskMenuButton.jsx';
 import './App.css';
 import './SquadBrand.css';
@@ -286,6 +287,7 @@ export default function App() {
   const [showChecklists, setShowChecklists] = useState(false);
   const [showSquads, setShowSquads] = useState(false);
   const [showTasks, setShowTasks] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
   const [newChecklistTitle, setNewChecklistTitle] = useState('');
   const [expandedChecklist, setExpandedChecklist] = useState(null);
   const [teamCash, setTeamCash] = useState({
@@ -324,7 +326,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '10.2';
+  const version = '10.4';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canDeleteCash = sessionUser?.cashPermissions?.canDelete === true;
@@ -2051,7 +2053,7 @@ export default function App() {
             </>
           )}
         </div>
-        <p className="squad-description">Training, Teamorganisation, Aufgaben und Kasse an einem Ort.</p>
+        <p className="squad-description">Training, Teamorganisation, Aufgaben, Notizen und Kasse an einem Ort.</p>
         <div className="login-version">Version {version}</div>
       </div>
     );
@@ -2064,6 +2066,11 @@ export default function App() {
   if (showTasks && canAccess('tasks')) {
     return <TasksPanel key={authToken} request={authenticatedRequest} username={loggedInUser}
       onBack={() => { setShowTasks(false); setShowStartMenu(true); }} />;
+  }
+
+  if (showNotes && canAccess('tasks')) {
+    return <NotesPanel key={authToken} request={authenticatedRequest}
+      onBack={() => { setShowNotes(false); setShowStartMenu(true); }} />;
   }
 
   if (showStartMenu) {
@@ -2088,6 +2095,13 @@ export default function App() {
         {canAccess('squads') && <button className="main-func-btn" disabled={busy} onClick={() => { setShowSquads(true); setShowStartMenu(false); }}>⚽ Spielkader</button>}
         {canAccess('tasks') && <TaskMenuButton key={authToken} request={authenticatedRequest}
           disabled={busy} onClick={() => { setShowTasks(true); setShowStartMenu(false); }} />}
+        {canAccess('tasks') && <button
+          className="main-func-btn"
+          disabled={busy}
+          onClick={() => { setShowNotes(true); setShowStartMenu(false); }}
+        >
+          🗒️ Notizen
+        </button>}
         {canAccess('checklists') && <button
           className="main-func-btn"
           style={{ margin: '0.9em auto 0 auto', fontSize: '1.13rem', minWidth: 260 }}
