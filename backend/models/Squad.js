@@ -17,5 +17,5 @@ const game = new Schema({
   lineup: [new Schema({ personId: { type: String, required: true }, name: { type: String, required: true }, guest: Boolean, role: { type: String, enum: ['field', 'keeper', 'bench'], required: true }, position: { type: String, enum: ['', ...POSITIONS] }, x: { type: Number, min: 5, max: 95 }, y: { type: Number, min: 5, max: 95 } }, { _id: false })],
   createdBy: String, createdAt: Date, updatedBy: String, updatedAt: Date,
 });
-const schema = new Schema({ key: { type: String, unique: true, default: 'squads', enum: ['squads'] }, fussballTeamUrl: { type: String, default: require('../fussballSource').DEFAULT_TEAM_URL }, ...config, captainId: { type: String, default: '' }, viceCaptainIds: { type: [String], default: [] }, profiles: [profile], games: [game] }, { optimisticConcurrency: true });
+const schema = new Schema({ key: { type: String, unique: true, default: 'squads', enum: ['squads'] }, fussballTeamUrl: { type: String, default: require('../fussballSource').DEFAULT_TEAM_URL }, homeVenue: { type: String, default: '', maxlength: 200 }, ...config, captainId: { type: String, default: '' }, viceCaptainIds: { type: [String], default: [] }, profiles: [profile], games: [game] }, { optimisticConcurrency: true });
 module.exports = mongoose.model('Squad', schema);
