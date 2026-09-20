@@ -67,7 +67,8 @@ function parseGames(html, source) {
     const header = plain(block.split('</tr>')[0]);
     const dateMatch = header.match(/(\d{2})\.(\d{2})\.(\d{4})\s*-\s*([0-2]\d:[0-5]\d)\s*Uhr/);
     const clubs = [...block.matchAll(/<a\b[^>]*href="([^"]*\/mannschaft\/[^"\s]+)"[^>]*>[\s\S]*?<div\b[^>]*class="club-name"[^>]*>([\s\S]*?)<\/div>/gi)].slice(0, 2);
-    const gameId = block.match(/href="https:\/\/www\.fussball\.de\/spiel\/[^"\s]*\/-\/spiel\/([A-Z0-9]{32})"/i)?.[1];
+    const gameLink = block.match(/href="(https:\/\/www\.fussball\.de\/spiel\/[^"\s]*\/-\/spiel\/([A-Z0-9]{32}))"/i);
+    const gameId = gameLink?.[2];
     if (!dateMatch || clubs.length !== 2 || !gameId || seen.has(gameId)) continue;
     const own = clubs.findIndex(c => c[1].includes(`/team-id/${teamId}`));
     if (own < 0) continue;
@@ -84,6 +85,7 @@ function parseGames(html, source) {
       home: own === 0,
       opponentTeamUrl: absoluteTeamUrl(clubs[1 - own][1]),
       homeTeamUrl: absoluteTeamUrl(clubs[0][1]),
+      gameUrl: gameLink?.[1] || '',
       fussballGameId: gameId,
       fussballTeamId: teamId,
     });
@@ -118,7 +120,7 @@ async function getHtml(url, fetcher) {
   const response = await fetcher(url, {
     redirect: 'error',
     signal: AbortSignal.timeout(15000),
-    headers: { Accept: 'text/html', 'User-Agent': 'SquadHQ/12.0 (schedule and opponent reader)' },
+    headers: { Accept: 'text/html', 'User-Agent': 'SquadHQ/12.3 (schedule and opponent reader)' },
   });
   return readText(response);
 }
@@ -138,6 +140,13 @@ async function fetchGames(source, fetcher = fetch) {
   const games = parseGames(html, url);
   const venueCache = new Map();
   for (const game of games) {
+    if (game.location) continue;
+    if (game.gameUrl) {
+      try {
+        const gameHtml = await getHtml(game.gameUrl, fetcher);
+        game.location = venueFromBlock(gameHtml) || parseVenue(gameHtml);
+      } catch {}
+    }
     if (game.location || !game.homeTeamUrl) continue;
     if (!venueCache.has(game.homeTeamUrl)) {
       try { venueCache.set(game.homeTeamUrl, parseVenue(await getHtml(game.homeTeamUrl, fetcher))); }

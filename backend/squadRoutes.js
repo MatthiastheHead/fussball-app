@@ -44,10 +44,30 @@ module.exports = function registerSquadRoutes({ app, Squad, Player, Training, re
   }));
   app.get('/squads/opponent-analysis', access, wrap(async (req, res) => {
     res.set('Cache-Control', 'no-store');
-    const source = teamUrl(String(req.query?.url || ''));
-    if (!source) fail('Für diesen Gegner ist kein FUSSBALL.DE-Mannschaftslink verfügbar.');
-    try { res.json(await fetchOpponentAnalysis(source)); }
-    catch (error) { fail(error.status ? error.message : 'Die Gegneranalyse ist gerade nicht möglich. Bitte später erneut versuchen.', 502); }
+    const opponentSource = teamUrl(String(req.query?.url || ''));
+    if (!opponentSource) fail('Für diesen Gegner ist kein FUSSBALL.DE-Mannschaftslink verfügbar.');
+    try {
+      const doc = await read();
+      const ownSource = teamUrl(doc.fussballTeamUrl);
+      const [opponent, own] = await Promise.all([
+        fetchOpponentAnalysis(opponentSource),
+        fetchOpponentAnalysis(ownSource),
+      ]);
+      const opponentScore = opponent.form?.score;
+      const ownScore = own.form?.score;
+      let comparison = { difference: null, label: 'Für einen Formvergleich fehlen noch ausreichende Ergebnisse.' };
+      if (Number.isFinite(opponentScore) && Number.isFinite(ownScore)) {
+        const difference = opponentScore - ownScore;
+        const label = difference >= 20 ? 'Gegner aktuell deutlich stärker in Form'
+          : difference >= 8 ? 'Gegner aktuell etwas stärker in Form'
+          : difference <= -20 ? 'Wir sind aktuell deutlich stärker in Form'
+          : difference <= -8 ? 'Wir sind aktuell etwas stärker in Form'
+          : 'Form aktuell nahezu ausgeglichen';
+        comparison = { difference, label };
+      }
+      res.json({ opponent, own, comparison });
+    }
+    catch (error) { fail(error.status ? error.message : 'Die Spielanalyse ist gerade nicht möglich. Bitte später erneut versuchen.', 502); }
   }));
   app.put('/squads/settings', requireAdmin, wrap(async (req, res) => {
     const doc = await read(); checkVersion(req, doc); Object.assign(doc, settings(req.body), captains(req.body, (await candidates(doc)).filter(p => !p.inactive).map(p => p.id))); await doc.save(); res.json(await output(doc));
