@@ -33,6 +33,7 @@ function cleanVenue(value) {
     .trim()
     .slice(0, 200);
   if (/^(?:spielstätten?|spielstaetten?|spielort|adresse)$/i.test(venue)) return '';
+  if (/keine\s+postleitzahlen\s+gefunden|bitte\s+überprüfe\s+deine\s+angabe|^umgebung\s*:/i.test(venue)) return '';
   return venue;
 }
 
@@ -120,7 +121,7 @@ async function getHtml(url, fetcher) {
   const response = await fetcher(url, {
     redirect: 'error',
     signal: AbortSignal.timeout(15000),
-    headers: { Accept: 'text/html', 'User-Agent': 'SquadHQ/12.3 (schedule and opponent reader)' },
+    headers: { Accept: 'text/html', 'User-Agent': 'SquadHQ/12.4 (schedule and opponent reader)' },
   });
   return readText(response);
 }
@@ -240,9 +241,15 @@ function formSummary(games) {
     else if (game.goalsFor === game.goalsAgainst) draws++;
     else losses++;
   }
-  const score = games.length ? Math.round((wins * 3 + draws) / (games.length * 3) * 100) : null;
-  const label = score === null ? 'Keine Daten' : score >= 80 ? 'Sehr stark' : score >= 65 ? 'Stark' : score >= 45 ? 'Solide' : score >= 25 ? 'Durchwachsen' : 'Schwach';
-  return { played: games.length, wins, draws, losses, goalsFor, goalsAgainst, score, label };
+  if (!games.length) return { played: 0, wins, draws, losses, goalsFor, goalsAgainst, goalDifference: 0, pointsRate: null, score: null, label: 'Keine Daten' };
+  const pointsRate = (wins * 3 + draws) / (games.length * 3) * 100;
+  const goalDifference = goalsFor - goalsAgainst;
+  const goalDifferencePerGame = goalDifference / games.length;
+  const goalBalance = Math.max(0, Math.min(100, 50 + goalDifferencePerGame * 18));
+  const attackingBonus = Math.max(0, Math.min(10, ((goalsFor / games.length) - 1.5) * 4));
+  const score = Math.round(Math.max(0, Math.min(100, pointsRate * 0.7 + goalBalance * 0.3 + attackingBonus)));
+  const label = score >= 82 ? 'Topform' : score >= 68 ? 'Sehr gute Form' : score >= 54 ? 'Gute Form' : score >= 40 ? 'Ordentliche Form' : score >= 25 ? 'Ausbaufähige Form' : 'Schwierige Form';
+  return { played: games.length, wins, draws, losses, goalsFor, goalsAgainst, goalDifference, pointsRate: Math.round(pointsRate), score, label };
 }
 
 async function fetchOpponentAnalysis(source, fetcher = fetch) {

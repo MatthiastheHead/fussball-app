@@ -12,7 +12,16 @@ module.exports = function registerSquadRoutes({ app, Squad, Player, Training, re
       return { ...(info?.toObject() || {}), id: `p:${p._id}`, playerId: String(p._id), name: p.name, guest: info?.guest === true, inactive: p.inactive === true };
     }), ...doc.profiles.filter(p => !p.playerId).map(p => ({ ...p.toObject(), id: `g:${p._id}`, guest: true, legacyGuest: true }))];
   }
-  async function output(doc) { return { version: doc.__v || 0, fussballTeamUrl: doc.fussballTeamUrl, homeVenue: doc.homeVenue || '', fieldPlayers: doc.fieldPlayers, benchSize: doc.benchSize, formation: doc.formation, captainId: doc.captainId, viceCaptainIds: doc.viceCaptainIds, candidates: await candidates(doc), games: doc.games }; }
+  async function output(doc) {
+    const homeVenue = String(doc.homeVenue || '').trim().toLowerCase();
+    const games = doc.games.map(row => {
+      const item = row.toObject ? row.toObject() : row;
+      const location = String(item.location || '').trim().toLowerCase();
+      const inferredHome = item.home === true || (!!homeVenue && !!location && (location === homeVenue || location.includes(homeVenue) || homeVenue.includes(location)));
+      return { ...item, home: inferredHome };
+    });
+    return { version: doc.__v || 0, fussballTeamUrl: doc.fussballTeamUrl, homeVenue: doc.homeVenue || '', fieldPlayers: doc.fieldPlayers, benchSize: doc.benchSize, formation: doc.formation, captainId: doc.captainId, viceCaptainIds: doc.viceCaptainIds, candidates: await candidates(doc), games };
+  }
   function checkVersion(req, doc) { if (req.body?.version !== (doc.__v || 0)) fail('Der Bereich wurde inzwischen geändert. Bitte neu laden.', 409); }
   function removePersonFromUpcomingGames(doc, personId) {
     const today = new Date().toISOString().slice(0, 10);
