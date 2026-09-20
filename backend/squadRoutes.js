@@ -108,6 +108,15 @@ module.exports = function registerSquadRoutes({ app, Squad, Player, Training, re
     await Player.deleteOne({ _id: playerId, isTrainer: { $ne: true } });
     res.json(await output(doc));
   }));
+  app.post('/squads/games/:id/delete', access, wrap(async (req, res) => {
+    const doc = await read(); checkVersion(req, doc);
+    const row = doc.games.id(req.params.id);
+    if (!row) fail('Spiel nicht gefunden.', 404);
+    row.deleteOne();
+    await doc.save();
+    res.json(await output(doc));
+  }));
+
   app.post('/squads/games', access, wrap(async (req, res) => {
     const doc = await read(); checkVersion(req, doc);
     const row = req.body.id ? doc.games.id(req.body.id) : null;
