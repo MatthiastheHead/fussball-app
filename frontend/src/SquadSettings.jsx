@@ -190,6 +190,8 @@ export default function SquadSettings({ request, onProfileSaved }) {
       <details className="squad-disclosure roster-settings-block">
         <summary>Spielvorgaben und Kapitäninnen</summary>
         <form className="squad-fields" onSubmit={e => { e.preventDefault(); run(async () => { setData(await call('squads/settings', 'PUT', { ...data, fieldPlayers: Number(data.fieldPlayers), benchSize: Number(data.benchSize) })); setNotice('Spielvorgaben gespeichert. Bestehende Spiele behalten ihre Aufstellung.'); }); }}>
+          <label className="squad-wide">Heimspielort<input maxLength={200} disabled={busy} value={data.homeVenue || ''} onChange={e => setData({ ...data, homeVenue: e.target.value })} placeholder="z. B. Sportplatz Werther, Straße, Ort" /></label>
+          <p className="squad-wide squad-help">Wird bei Heimspielen automatisch verwendet, wenn FUSSBALL.DE keinen eindeutigen Spielort liefert.</p>
           <SquadConfigFields value={data} disabled={busy} onChange={values => setData({ ...data, ...values })} />
           {[0, 1, 2].map(index => {
             const values = [data.captainId || '', ...(data.viceCaptainIds || [])];
