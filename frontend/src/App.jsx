@@ -1,4 +1,4 @@
-// Version 12.3: Auswärtsspielorte und eigener Formvergleich in der Spielanalyse.
+// Version 12.4: robuste Spielorte, historische Heimspiel Erkennung und ausgewogene Formbewertung.
 
 import React, { useState, useEffect } from 'react';
 import SquadBrand from './SquadBrand.jsx';
@@ -326,7 +326,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '12.3';
+  const version = '12.4';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canDeleteCash = sessionUser?.cashPermissions?.canDelete === true;
