@@ -4,6 +4,9 @@ const validDate = value => !value || (/^\d{4}-\d{2}-\d{2}$/.test(value) && !Numb
 
 const noteItemSchema = new mongoose.Schema({
   text: { type: String, required: true, trim: true, maxlength: 500 },
+  status: { type: String, enum: ['open', 'accepted', 'declined'], default: 'open' },
+  statusBy: { type: String, default: '' },
+  statusAt: { type: Date, default: null },
   completed: { type: Boolean, default: false },
   completedBy: { type: String, default: '' },
   completedAt: { type: Date, default: null },
