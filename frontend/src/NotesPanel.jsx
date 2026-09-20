@@ -26,8 +26,8 @@ export default function NotesPanel({ request, onBack }) {
   async function load() {
     setLoading(true); setError('');
     try {
-      const rows = await json('tasks');
-      setNotes(rows.filter(row => row.kind === 'note'));
+      const rows = await json('notes');
+      setNotes(rows);
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
   }
@@ -75,7 +75,7 @@ export default function NotesPanel({ request, onBack }) {
 
     {draft && <form className="task-form" onSubmit={event => { event.preventDefault(); run(async () => {
       const payload = { ...draft, items: draft.items.filter(item => item.text.trim()) };
-      const saved = await json(editing ? `tasks/${editing}` : 'tasks', editing ? 'PATCH' : 'POST', payload);
+      const saved = await json(editing ? `notes/${editing}` : 'notes', editing ? 'PATCH' : 'POST', payload);
       update(saved); setDraft(null); setEditing(null); setNotice('Notiz gespeichert.');
     }); }}>
       <h2>{editing ? 'Notiz bearbeiten' : 'Neue Notiz'}</h2>
@@ -120,12 +120,13 @@ export default function NotesPanel({ request, onBack }) {
       <ul className="task-list">{notes.map(note => {
         const accepted = (note.items || []).filter(item => item.status === 'accepted').length;
         const declined = (note.items || []).filter(item => item.status === 'declined').length;
-        const open = (note.items || []).length - accepted - declined;
+        const done = (note.items || []).filter(item => item.status === 'done').length;
+        const open = (note.items || []).length - accepted - declined - done;
         const total = (note.items || []).length;
-        return <li key={note._id} className="task-card note-card">
+        return <li key={note._id} className={`task-card note-card${note.completed ? ' note-card-completed' : ''}`}>
           <div className="task-card-heading">
             <h2>{note.title}</h2>
-            {total > 0 && <span>{accepted} zugesagt · {declined} abgesagt · {open} offen</span>}
+            {total > 0 && <span>{accepted} zugesagt · {declined} abgesagt · {done} erledigt · {open} offen</span>}
           </div>
 
           {note.description && <p className="task-description">{note.description}</p>}
@@ -144,7 +145,7 @@ export default function NotesPanel({ request, onBack }) {
                     disabled={busy || !!draft}
                     onClick={() => run(async () => {
                       const nextStatus = status === 'accepted' ? 'open' : 'accepted';
-                      update(await json(`tasks/${note._id}/items/${item._id}`, 'PATCH', { status: nextStatus }));
+                      update(await json(`notes/${note._id}/items/${item._id}`, 'PATCH', { status: nextStatus }));
                       setNotice(nextStatus === 'accepted' ? 'Zusage gespeichert.' : 'Status wieder offen.');
                     })}
                   >👍</button>
@@ -156,16 +157,43 @@ export default function NotesPanel({ request, onBack }) {
                     disabled={busy || !!draft}
                     onClick={() => run(async () => {
                       const nextStatus = status === 'declined' ? 'open' : 'declined';
-                      update(await json(`tasks/${note._id}/items/${item._id}`, 'PATCH', { status: nextStatus }));
+                      update(await json(`notes/${note._id}/items/${item._id}`, 'PATCH', { status: nextStatus }));
                       setNotice(nextStatus === 'declined' ? 'Absage gespeichert.' : 'Status wieder offen.');
                     })}
                   >👎</button>
+                  <button
+                    type="button"
+                    className={`note-response-button note-response-done${status === 'done' ? ' active' : ''}`}
+                    aria-pressed={status === 'done'}
+                    title="Erledigt"
+                    disabled={busy || !!draft}
+                    onClick={() => run(async () => {
+                      const nextStatus = status === 'done' ? 'open' : 'done';
+                      update(await json(`notes/${note._id}/items/${item._id}`, 'PATCH', { status: nextStatus }));
+                      setNotice(nextStatus === 'done' ? 'Stichpunkt erledigt.' : 'Status wieder offen.');
+                    })}
+                  >✓</button>
                 </div>
               </li>;
             })}
           </ul>}
 
           <div className="task-toolbar">
+            <label className="task-check note-whole-check">
+              <input
+                type="checkbox"
+                checked={note.completed === true}
+                disabled={busy || !!draft}
+                onChange={event => {
+                  const completed = event.target.checked;
+                  run(async () => {
+                    update(await json(`notes/${note._id}/status`, 'PATCH', { completed }));
+                    setNotice(completed ? 'Notiz erledigt.' : 'Notiz wieder geöffnet.');
+                  });
+                }}
+              />
+              {note.completed ? 'Notiz erledigt' : 'Notiz als erledigt markieren'}
+            </label>
             <button type="button" className="btn-edit" disabled={busy || !!draft} onClick={() => {
               setEditing(note._id);
               setDraft({
@@ -179,7 +207,7 @@ export default function NotesPanel({ request, onBack }) {
 
             <button type="button" className="cash-delete-button" disabled={busy || !!draft} onClick={() => run(async () => {
               if (!window.confirm(`Notiz „${note.title}“ wirklich löschen?`)) return;
-              await json(`tasks/${note._id}`, 'DELETE', { confirm: true });
+              await json(`notes/${note._id}`, 'DELETE', { confirm: true });
               setNotes(rows => rows.filter(row => row._id !== note._id));
               setNotice('Notiz gelöscht.');
             })}>Löschen</button>
