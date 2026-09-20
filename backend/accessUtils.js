@@ -1,4 +1,4 @@
-const ACCESS_KEYS = Object.freeze(['training', 'checklists', 'teamGenerator', 'teamCash', 'tasks', 'squads']);
+const ACCESS_KEYS = Object.freeze(['training', 'checklists', 'teamGenerator', 'teamCash', 'tasks', 'notes', 'squads']);
 
 const permissionsFor = user => Object.fromEntries(
   ACCESS_KEYS.map(key => [key, user?.permissions?.[key] !== false])
