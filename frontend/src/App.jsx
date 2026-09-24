@@ -1,4 +1,4 @@
-// Version 12.4: robuste Spielorte, historische Heimspiel Erkennung und ausgewogene Formbewertung.
+// Version 12.5: Gastspielerinnen direkt in den Spielkader übernehmen.
 
 import React, { useState, useEffect } from 'react';
 import SquadBrand from './SquadBrand.jsx';
@@ -326,7 +326,7 @@ export default function App() {
   const [showStartMenu, setShowStartMenu] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState(null);
-  const version = '12.4';
+  const version = '12.5';
   const isAdmin = !!sessionUser?.isAdmin;
   const isMainAdmin = !!sessionUser?.isMainAdmin;
   const canDeleteCash = sessionUser?.cashPermissions?.canDelete === true;
