@@ -12,8 +12,12 @@ export function score(stat) {
 }
 const family = position => position === 'TW' ? 'keeper' : ['LV', 'IV', 'RV', 'LWB', 'RWB'].includes(position) ? 'defense' : ['LA', 'RA', 'ST'].includes(position) ? 'attack' : 'midfield';
 export function suggest(people, stats, formation, benchSize) {
-  const pool = people.filter(p => !p.inactive && !p.guest && score(stats.find(s => s.id === p.id)) !== null)
-    .sort((a, b) => score(stats.find(s => s.id === b.id)) - score(stats.find(s => s.id === a.id)) || a.name.localeCompare(b.name, 'de'));
+  const value = person => {
+    const rated = score(stats.find(s => s.id === person.id));
+    return rated === null ? 50 : rated;
+  };
+  const pool = people.filter(p => !p.inactive)
+    .sort((a, b) => value(b) - value(a) || a.name.localeCompare(b.name, 'de'));
   const lineup = [];
   for (const slot of slots(formation)) {
     const suitable = p => {
@@ -24,9 +28,9 @@ export function suggest(people, stats, formation, benchSize) {
     const index = pool.findIndex(suitable);
     if (index < 0) continue;
     const [person] = pool.splice(index, 1);
-    lineup.push({ ...slot, personId: person.id, name: person.name, guest: false });
+    lineup.push({ ...slot, personId: person.id, name: person.name, guest: person.guest === true });
   }
-  return [...lineup, ...pool.slice(0, benchSize).map(p => ({ personId: p.id, name: p.name, guest: false, role: 'bench', position: p.mainPosition || '', x: 50, y: 50 }))];
+  return [...lineup, ...pool.slice(0, benchSize).map(p => ({ personId: p.id, name: p.name, guest: p.guest === true, role: 'bench', position: p.mainPosition || '', x: 50, y: 50 }))];
 }
 export function movePlayer(lineup, id, x, y) {
   return lineup.map(row => row.personId === id ? { ...row, x: Math.min(95, Math.max(5, x)), y: Math.min(95, Math.max(5, y)) } : row);

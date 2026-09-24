@@ -36,3 +36,17 @@ test('Kapitänin und Vizekapitäninnen rücken nur aus dem gewählten Kader nach
  assert.deepEqual(leadership([{personId:'v1'},{personId:'v2'}],'c',['v1','v2']),{captainId:'v1',viceCaptainIds:['v2']});
  assert.deepEqual(leadership([{personId:'c'},{personId:'v2'}],'c',['v1','v2']),{captainId:'c',viceCaptainIds:['v2']});
 });
+
+
+test('Gastspielerinnen werden im Vorschlag berücksichtigt', () => {
+  const people = [
+    { id: 'p:1', name: 'Stamm', mainPosition: 'IV', positions: [], guest: false, inactive: false },
+    { id: 'p:2', name: 'Gast', mainPosition: 'ST', positions: [], guest: true, inactive: false },
+    { id: 'p:3', name: 'Tor', mainPosition: 'TW', positions: [], guest: false, inactive: false },
+  ];
+  const stats = [{ id: 'p:1', total: 4, attendance: 1, average: 3 }, { id: 'p:3', total: 4, attendance: 1, average: 3 }];
+  const result = suggest(people, stats, '1-1', 1);
+  const guest = result.find(row => row.personId === 'p:2');
+  assert.ok(guest);
+  assert.equal(guest.guest, true);
+});
