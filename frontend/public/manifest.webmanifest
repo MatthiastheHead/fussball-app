@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "SquadHQ - Dein Team. Deine Organisation.",
+  "short_name": "SquadHQ",
+  "description": "Trainings, Checklisten, Spielkader und Mannschaftskasse organisieren.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#091827",
+  "theme_color": "#091827",
+  "lang": "de-DE",
+  "icons": [
+    {
+      "src": "/brand/squadhq-logo.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
