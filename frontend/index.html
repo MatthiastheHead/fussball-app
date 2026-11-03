@@ -6,11 +6,21 @@
     <meta name="theme-color" content="#091827" />
     <meta name="description" content="SquadHQ. Dein Team. Deine Organisation. Training, Aufgaben und Mannschaftskasse an einem Ort." />
     <link rel="icon" type="image/png" href="/brand/squadhq-logo.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/brand/squadhq-logo.png" />
     <title>SquadHQ</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("/sw.js").catch((error) => {
+            console.warn("SquadHQ service worker could not be registered", error);
+          });
+        });
+      }
+    </script>
   </body>
 </html>
